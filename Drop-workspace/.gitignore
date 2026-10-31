@@ -1,0 +1,30 @@
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# PHP / Laravel
+/vendor/
+/storage/*.key
+/bootstrap/cache/*.php
+
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+**/build/
+
+# Android / Gradle
+.gradle/
+local.properties
+**/.cxx/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+*.iml
