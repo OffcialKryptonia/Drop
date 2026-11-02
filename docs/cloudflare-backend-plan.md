@@ -23,7 +23,7 @@ apps need little or no change.
 | Files (documents, avatars) | spatie/medialibrary | R2 (S3-compatible) |
 | Background jobs | Laravel queues (sync) | Cloudflare Queues |
 | Scheduled commands (11) | Artisan commands | Cron Triggers + Queues |
-| Admin dashboard | Blade + DataTables | React SPA on Cloudflare Pages, same API |
+| Admin dashboard | Blade + DataTables | React SPA served by the same Worker at `/admin` (static assets), same API |
 | Email | SMTP | Resend (connector available) |
 | PDF / Excel exports | dompdf, maatwebsite/excel | Generated client-side or in a queue worker |
 | Secrets | `.env` | Wrangler secrets, never in the apps |
@@ -93,8 +93,10 @@ Flutter apps against both backends.
 
 ## 7. Cloudflare resources
 
-Workers (API + cron), Hyperdrive (to Supabase), R2 bucket, Queues, KV (settings
-cache, rate limits), Pages (admin SPA). Environments: `dev`, `staging`, `prod`.
+Workers (API, cron, and the `/admin` static assets), Hyperdrive (to Supabase), R2
+bucket, Queues, KV (settings cache, rate limits). Environments: `dev`, `staging`,
+`prod`. Hosted on the default `*.workers.dev` domain for now; a custom domain
+(for example `api.<yourdomain>`) can be attached later without code changes.
 
 ## 8. Risks
 
@@ -106,13 +108,72 @@ cache, rate limits), Pages (admin SPA). Environments: `dev`, `staging`, `prod`.
 - Workers CPU limits: heavy reports (payout PDFs, Excel exports) run in queue
   consumers or client-side, not in request handlers.
 
-## 9. Decisions needed from the owner
+## 9. Decisions (resolved 2026-11-02)
 
-1. Is there live data to migrate from the existing MySQL database, or is this a
-   fresh launch? (Changes whether we write an import tool.)
-2. Approve creating a new Supabase project (it may carry a cost; will confirm the
-   cost with you before creating anything).
-3. Cloudflare account: which account/zone and domain for the API
-   (for example `api.<yourdomain>`)?
-4. Confirm keeping Firestore for realtime in v1.
-5. Cron cadence for matching, scheduled rides, payouts and inactivity cleanup.
+1. Admin dashboard: web-based, served at `/admin` from the same Worker.
+2. Live data exists in the old MySQL database and must be migrated (see section 11).
+3. Supabase: project `drop` created on the free plan in `eu-west-2` (London),
+   organization Kryptonia Group. See free-plan caveats in section 12.
+4. Domain: default `workers.dev` for now; custom domain later.
+5. Realtime: keep Firestore in v1. The Worker writes Firestore documents through
+   the Firestore REST API, authenticating with a service-account JWT signed using
+   WebCrypto (RS256), which Workers support. A spike in Phase B proves this
+   before anything depends on it.
+6. Job timing: see section 10.
+
+## 10. Job timing (proposal)
+
+Research basis. Uber publishes that it batches nearby riders and drivers for "a
+few seconds" before pairing them, instead of instantly matching the closest
+driver, but it does not publish the exact window or offer timeout. Bolt's driver
+help article says scheduled rides are accepted by drivers in advance, the driver
+must be online by the set time or the ride is reassigned, the rider gets 5
+minutes after the scheduled start before a no-show cancellation fee applies, and
+the fee goes to the driver if the rider cancels less than one hour before pickup.
+Everything below that is a number rather than a rule from those sources is an
+engineering default for Drop, to be tuned with real data.
+
+Real-time dispatch is event-driven (Queues), not cron:
+
+| Step | Default |
+|---|---|
+| Batch window after a ride request | 3 s, then pair riders and drivers together |
+| Search radius | start 2 km, widen to 4 km, then 6 km if nobody accepts |
+| Offer timeout per driver | 15 s, then offer to the next-best driver |
+| Max offer rounds before "no drivers found" | 3 rounds (about 45 s) |
+| Driver location ping | 5 s on a trip, 10 s online and idle |
+
+Cloudflare Cron Triggers (UTC; Lagos is UTC+1):
+
+| Job (legacy command) | Schedule |
+|---|---|
+| Find scheduled rides due (`FindScheduledRides`) | every minute: start dispatch 15 min before pickup; reminders to driver at 60 and 15 min |
+| Reassign if scheduled driver is not online (`ChangeRideDriver`) | every minute, checks rides within 10 min of pickup |
+| Expire unaccepted scheduled rides (`CleanExpiredScheduledRides`) | every 5 min |
+| Set stale drivers offline (`OfflineInactiveDrivers`) | every 5 min (no location ping for 10 min) |
+| Driver payout reports (`GenerateDriverPayoutReports`) | weekly, Monday 01:00 UTC (02:00 Lagos) |
+| Payout report emails (`SendDriverPayoutReportMail`) | Monday 01:30 UTC |
+| Anonymize inactive users (`AnonymizeInactiveUsers`) | daily 02:00 UTC |
+| Database backup (`DatabaseBackup`) | nightly pg_dump to R2 via a scheduled GitHub Action (Workers cannot run pg_dump) |
+
+## 11. Live data migration (MySQL to Postgres)
+
+1. Take a full MySQL dump of production (owner provides; stored outside git).
+2. Write an idempotent import tool in TypeScript that maps legacy tables to the
+   new Postgres schema (users, driver documents, wallets and history, rides,
+   payments, settings, languages). Runs repeatably against staging.
+3. Money reconciliation gate: per-user wallet balance and total payments must
+   match the legacy totals exactly before cutover.
+4. Passwords: legacy bcrypt hashes are imported as is and verified with bcrypt on
+   login, so users do not have to reset passwords.
+5. Files: legacy uploads copied into R2, with URLs rewritten.
+6. Cutover: freeze writes on the old system, run a final delta import, switch the
+   apps' base URL, keep the old system read-only for rollback.
+
+## 12. Supabase free plan caveats (read before go-live)
+
+As far as I know, the free plan pauses projects after about a week of
+inactivity, has a small database size cap, and has no automatic daily backups or
+point-in-time recovery. That is fine for building and testing, but not for live
+wallet and payment data. Plan to move to a paid plan before importing real
+production data, and keep the nightly pg_dump to R2 either way.
