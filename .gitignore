@@ -28,3 +28,13 @@ local.properties
 .vscode/
 .DS_Store
 *.iml
+
+# Signing & Firebase config (per-developer / per-environment, never commit)
+**/key.properties
+*.jks
+*.keystore
+**/google-services.json
+**/GoogleService-Info.plist
+**/firebase_options.dart
+**/firebase-adminsdk*.json
+**/serviceAccount*.json
