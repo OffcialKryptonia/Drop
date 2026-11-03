@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Drop Admin</title>
+  <style>
+    :root {
+      --bg: #111111;
+      --card: #1b1b1b;
+      --text: #f5f5f5;
+      --muted: #a8a8a8;
+      --orange: #ff8a00;
+      --red: #ff3b00;
+      --ok: #3ddc84;
+      --bad: #ff5252;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 16px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    main {
+      width: 100%;
+      max-width: 420px;
+      background: var(--card);
+      border-radius: 16px;
+      padding: 28px 24px;
+      border: 1px solid #2a2a2a;
+    }
+    .mark {
+      width: 56px;
+      height: 56px;
+      border-radius: 14px;
+      display: grid;
+      place-items: center;
+      font-weight: 800;
+      font-size: 30px;
+      color: #fff;
+      background: linear-gradient(135deg, var(--orange), var(--red));
+      margin-bottom: 18px;
+    }
+    h1 { margin: 0 0 4px; font-size: 22px; }
+    p { margin: 0 0 20px; color: var(--muted); line-height: 1.5; }
+    .row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 0;
+      border-top: 1px solid #2a2a2a;
+      font-size: 15px;
+    }
+    .pill {
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 600;
+      background: #2a2a2a;
+      color: var(--muted);
+    }
+    .pill.ok { color: var(--ok); }
+    .pill.bad { color: var(--bad); }
+    small { display: block; margin-top: 18px; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="mark" aria-hidden="true">D</div>
+    <h1>Drop Admin</h1>
+    <p>The admin dashboard is being rebuilt. Sign-in and management screens will appear here.</p>
+    <div class="row"><span>API status</span><span id="api" class="pill">Checking…</span></div>
+    <div class="row"><span>Version</span><span id="ver" class="pill">–</span></div>
+    <small id="time"></small>
+  </main>
+  <script>
+    (async function () {
+      var api = document.getElementById("api");
+      try {
+        var res = await fetch("/api/health", { cache: "no-store" });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        var data = await res.json();
+        api.textContent = "Online";
+        api.className = "pill ok";
+        document.getElementById("ver").textContent = data.version;
+        document.getElementById("time").textContent = "Server time: " + data.time;
+      } catch (e) {
+        api.textContent = "Unreachable";
+        api.className = "pill bad";
+      }
+    })();
+  </script>
+</body>
+</html>

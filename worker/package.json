@@ -1,0 +1,21 @@
+{
+  "name": "drop-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Drop backend on Cloudflare Workers (API + /admin dashboard assets)",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "cf-typegen": "wrangler types"
+  },
+  "dependencies": {
+    "hono": "^4.13.16"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261103.1",
+    "typescript": "^5.9.0",
+    "wrangler": "^4.156.2"
+  }
+}
