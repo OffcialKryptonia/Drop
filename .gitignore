@@ -38,3 +38,7 @@ local.properties
 **/firebase_options.dart
 **/firebase-adminsdk*.json
 **/serviceAccount*.json
+
+# Live database dumps (personal data, never commit)
+drop-dump-*/
+*.sql.gz
