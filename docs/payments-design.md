@@ -19,6 +19,12 @@ Honest limits: the first card payment may show the bank's own 3-D Secure / OTP s
 - `GET /api/payment-gateway-list` returns enabled gateways with no keys.
 - `GET /api/payments/{reference}` lets the app poll status.
 
+## Provider findings (Nov 2026)
+- **Korapay** has NGN virtual bank accounts (developers.korapay.com/docs/virtual-bank-accounts) and card payments via hosted checkout or direct API. No native payments SDK found (its mobile SDKs are for identity liveness). The direct card API would put raw card data through our server (PCI burden), so we avoid it.
+- **Pocketfi**: no public API docs found by search; the account owner must supply the docs link or a dashboard screenshot before it is built.
+- **Paystack**: official Flutter SDK (`paystack_flutter_sdk`, `access_code` flow) and charge-authorization for saved cards. Needs a Paystack business account (none yet).
+- So the first build is **bank-transfer wallet top-up through Korapay virtual accounts** (fully native, existing account). Card in-app and saved cards follow once Paystack (or another SDK-based provider) is available.
+
 ## Providers
 | Provider | Initialize | Webhook signature |
 |---|---|---|
@@ -45,5 +51,5 @@ Remove razorpay, stripe, paytabs, braintree, paypal, the old Paystack fork and t
 ## Build order
 1. Migration: wallets, wallet_ledger, payment_gateways (no secrets), payment_intents, payments.
 2. Wallet endpoints (balance, history).
-3. Pocketfi virtual accounts + Paystack card (test mode) end to end, then Flutterwave and Korapay.
+3. Korapay virtual-account top-up (test mode) end to end; then Paystack card + saved cards; Pocketfi and Flutterwave afterwards.
 4. App changes.
