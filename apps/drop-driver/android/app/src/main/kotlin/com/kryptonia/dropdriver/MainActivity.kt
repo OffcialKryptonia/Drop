@@ -1,4 +1,4 @@
-package com.mighty.taxidriver
+package com.kryptonia.dropdriver
 
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.android.FlutterFragmentActivity

@@ -120,7 +120,7 @@ class _DrawerComponentState extends State<DrawerComponent> {
                     }),
                 DrawerWidget(
                     paddingApply: true,
-                    title: 'Mighty Coin History',
+                    title: 'Drop Coin History',
                     iconData: ic_earn,
                     onTap: () {
                       Navigator.pop(context);
