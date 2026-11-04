@@ -11,7 +11,19 @@
     "directory": "./public",
     "binding": "ASSETS"
   },
+  // Supabase Postgres through Hyperdrive (connection "drop-db"; the id is not a secret).
+  // For local development, point it at a local Postgres with:
+  //   CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE=postgresql://...
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "442add97d75d4cc2bf4c7da8706997af"
+    }
+  ],
   "observability": {
     "enabled": true
-  }
+  },
+  // Branch builds run "wrangler preview", which requires this block (it can be empty).
+  // Bindings, assets and settings above are shared by previews.
+  "previews": {}
 }
