@@ -1,0 +1,17 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+
+    match /rides/{id} { allow read, write: if signedIn(); }
+    match /users/{id} { allow read, write: if signedIn(); }
+    match /RideTalk/{doc=**} { allow read, write: if signedIn(); }
+    match /RideTalkHistory/{doc=**} { allow read, write: if signedIn(); }
+
+    // Read before sign-in (the driver app's popup config). Never writable from apps.
+    match /show_popup/{id} { allow read: if true; allow write: if false; }
+
+    // Everything else is locked.
+    match /{document=**} { allow read, write: if false; }
+  }
+}
