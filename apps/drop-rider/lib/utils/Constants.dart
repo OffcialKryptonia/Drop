@@ -1,7 +1,7 @@
 import '../manage_imports.dart';
 
 //region App name
-const mAppName = 'ADD_YOUR_APP_NAME_HERE';
+const mAppName = 'Drop';
 //endregion
 
 const PRODUCTION_MODE = true;

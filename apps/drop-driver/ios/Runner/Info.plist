@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Taxi Driver</string>
+	<string>Drop Driver</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -45,21 +45,21 @@
 		<true/>
 	</dict>
 	<key>NSCameraUsageDescription</key>
-	<string>Mighty Driver app requires access to the Camera to upload your profile photo.</string>
+	<string>Drop Driver app requires access to the Camera to upload your profile photo.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Looking for local tcp Bonjour service</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Mighty Driver  App uses your location to pick origins, destinations, and predict ride times</string>
+	<string>Drop Driver  App uses your location to pick origins, destinations, and predict ride times</string>
 	<key>NSLocationAlwaysUsageDescription</key>
-	<string>Mighty Driver requires address permission access to get the current location of the user.</string>
+	<string>Drop Driver requires address permission access to get the current location of the user.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Mighty Driver  requires address permission access to get the current location of the user.</string>
+	<string>Drop Driver  requires address permission access to get the current location of the user.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Mighty Driver  app requires access to microphone when you will be used to record your speech at time of  press the &quot;Mic&quot; button.</string>
+	<string>Drop Driver  app requires access to microphone when you will be used to record your speech at time of  press the &quot;Mic&quot; button.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Mighty Driver requires access to the photo library to upload your profile photo.</string>
+	<string>Drop Driver requires access to the photo library to upload your profile photo.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Mighty Driver requires access to the photo library to upload your profile photo.</string>
+	<string>Drop Driver requires access to the photo library to upload your profile photo.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>

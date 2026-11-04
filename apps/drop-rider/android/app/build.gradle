@@ -36,7 +36,7 @@ if (flutterRoot == null) {
 //}
 
 android {
-    namespace = "com.mighty.taxirider"
+    namespace = "com.kryptonia.drop"
     compileSdkVersion 36
     ndkVersion "29.0.13113456"
 
@@ -56,7 +56,7 @@ android {
     }
 
     defaultConfig {
-        applicationId "com.mighty.taxirider"
+        applicationId "com.kryptonia.drop"
         minSdkVersion 26
         targetSdkVersion 35
         versionCode 41

@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:taxi_driver/network/AppServerConfig.dart';
 
 //region App name
-const mAppName = 'ADD_YOUR_APP_NAME_HERE';
+const mAppName = 'Drop Driver';
 //endregion
 
 const PRODUCTION_MODE = true;

@@ -1,4 +1,4 @@
-Product: Mighty Driver
+Product: Drop Driver
 Code Canyon Version: 24
 Version Release Date: 15 May 2026
 Supported Flutter Version: 3.38.x

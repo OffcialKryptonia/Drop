@@ -19,7 +19,7 @@
         android:name="${applicationName}"
         android:extractNativeLibs="true"
         android:icon="@mipmap/ic_launcher"
-        android:label="ADD_YOUR_APP_NAME_HERE"
+        android:label="Drop Driver"
         tools:replace="android:label">
         <service
             android:name="id.flutter.flutter_background_service.BackgroundService"
