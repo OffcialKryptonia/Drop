@@ -23,7 +23,9 @@ Honest limits: the first card payment may show the bank's own 3-D Secure / OTP s
 - **Korapay** has NGN virtual bank accounts (developers.korapay.com/docs/virtual-bank-accounts) and card payments via hosted checkout or direct API. No native payments SDK found (its mobile SDKs are for identity liveness). The direct card API would put raw card data through our server (PCI burden), so we avoid it.
 - **Pocketfi**: no public API docs found by search; the account owner must supply the docs link or a dashboard screenshot before it is built.
 - **Paystack**: official Flutter SDK (`paystack_flutter_sdk`, `access_code` flow) and charge-authorization for saved cards. Needs a Paystack business account (none yet).
-- So the first build is **bank-transfer wallet top-up through Korapay virtual accounts** (fully native, existing account). Card in-app and saved cards follow once Paystack (or another SDK-based provider) is available.
+- Update after reading the real docs: **Korapay NGN virtual accounts require the customer's BVN** and are capped at 50 accounts by default (support must raise it). **Pocketfi static accounts** (Kuda/Nomba/Paga) make BVN/NIN optional and document no cap; webhooks are HMAC-SHA512 of the raw body in header `Pocketfi-Signature`; sandbox base `https://api.pocketfi.ng/api/test`; live `https://api.pocketfi.ng/api/v1`; Bearer token auth.
+- So the first build is **bank-transfer wallet top-up through Pocketfi virtual accounts** (fully native). Korapay follows for card/checkout where needed; in-app card SDK and saved cards need a Paystack (or similar) account.
+- Pocketfi caveats to resolve in sandbox: the webhook masks the account number, email and phone, and carries `customer.id`; creation returns no customer id, so we map `customer.id` to our user by listing accounts (`GET /virtual-accounts/fetch` returns `user_id` and full account number) right after creation. The webhook has no explicit status field (treated as successful credit). No documented server-side transaction-verify endpoint was found; ask Pocketfi support.
 
 ## Providers
 | Provider | Initialize | Webhook signature |
