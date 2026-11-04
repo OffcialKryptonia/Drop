@@ -22,5 +22,8 @@
   ],
   "observability": {
     "enabled": true
-  }
+  },
+  // Branch builds run "wrangler preview", which requires this block (it can be empty).
+  // Bindings, assets and settings above are shared by previews.
+  "previews": {}
 }
