@@ -3,17 +3,26 @@
 ## Principle
 The apps hold **no gateway keys and no payment SDKs**. All provider secrets live in the Worker (Cloudflare secrets, entered in the dashboard). The old apps shipped secret keys (Stripe, Flutterwave) to every phone; that stops.
 
-## Flow (card / bank / transfer)
-1. `GET /api/payment-gateway-list` returns only enabled gateways: `id`, `title`, `type`, logo. Never keys.
-2. `POST /api/payments/initiate` `{gateway, amount, purpose: wallet_topup | ride, ride_request_id?}`. The Worker creates a `payment_intents` row (status `pending`, unique `reference`), calls the provider's *initialize* API, and returns `{reference, checkout_url}`.
-3. The app opens `checkout_url` in an in-app WebView and closes it when the provider redirects to our callback URL.
-4. The app then polls `GET /api/payments/{reference}` until `paid` / `failed`.
-5. **Crediting happens only on the server**, from a signature-verified webhook plus a server-side "verify transaction" call. The WebView redirect is never trusted.
+## Experience (native, no web pages)
+Priority is a smooth, mobile-native flow. Users never land on a browser-style page.
+
+1. **Wallet top-up by bank transfer (main path in Nigeria).** Each user gets a dedicated virtual account (Pocketfi; Paystack/Korapay can be added). The app shows the account number with a **Copy** button and bank name; the user pays from their banking app; the Worker receives the provider webhook and credits the wallet. The app updates live. No redirect, no card entry, no per-transaction fee beyond the provider's.
+2. **Card, in-app.** The app asks the Worker to initialise the payment and receives an `access_code` (public, single-use). The provider's **Flutter SDK** (Paystack first) renders its payment sheet inside the app using only that code and the public key. The first successful card payment returns a reusable authorization, which the Worker stores (never the card number).
+3. **Saved card, one tap.** Later payments use `POST /api/payments/charge-saved-card`; the Worker calls the provider's charge-authorization API. No screen at all. If the bank demands 2FA, the response asks the app to open the SDK sheet for that one payment.
+4. **Ride payment.** Wallet, saved card and cash complete instantly in the app flow. Online card payment during a ride uses (2)/(3).
+
+Honest limits: the first card payment may show the bank's own 3-D Secure / OTP step (inside the provider sheet). That is a bank rule, not something we can remove.
+
+## Server rules for every path
+- Secrets stay in the Worker. The app only ever receives public keys, `access_code`s and account numbers.
+- **Crediting happens only on the server**, from a signature-verified webhook plus a server-side "verify transaction" call. The app's own "success" is never trusted; it just waits for the server to say `paid`.
+- `GET /api/payment-gateway-list` returns enabled gateways with no keys.
+- `GET /api/payments/{reference}` lets the app poll status.
 
 ## Providers
 | Provider | Initialize | Webhook signature |
 |---|---|---|
-| Paystack | `POST /transaction/initialize` | HMAC-SHA512 of body, header `x-paystack-signature` |
+| Paystack | `POST /transaction/initialize` (returns `access_code`), `charge_authorization` for saved cards | HMAC-SHA512 of body, header `x-paystack-signature` |
 | Flutterwave | `POST /v3/payments` | `verif-hash` header equals secret hash |
 | Korapay | `POST /merchant/api/v1/charges/initialize` | HMAC-SHA256 of `data`, header `x-korapay-signature` |
 | Pocketfi | dedicated virtual account per user | per Pocketfi docs; incoming transfer credits wallet |
@@ -31,10 +40,10 @@ Currency: NGN. Exact request fields are confirmed against each provider's curren
 `PAYSTACK_SECRET_KEY`, `FLUTTERWAVE_SECRET_KEY`, `FLUTTERWAVE_SECRET_HASH`, `KORAPAY_SECRET_KEY`, `POCKETFI_API_KEY`.
 
 ## App changes
-Remove razorpay, stripe, paytabs, braintree, paypal, the Paystack fork and the Flutterwave SDK. `PaymentScreen` becomes: choose method, call initiate, open WebView, poll.
+Remove razorpay, stripe, paytabs, braintree, paypal, the old Paystack fork and the Flutterwave SDK. Add the official `paystack_flutter_sdk`. `PaymentScreen` becomes: wallet balance, Fund wallet (bank transfer details / card), saved cards, history.
 
 ## Build order
 1. Migration: wallets, wallet_ledger, payment_gateways (no secrets), payment_intents, payments.
 2. Wallet endpoints (balance, history).
-3. Paystack end to end (test mode), then Flutterwave, Korapay, Pocketfi.
+3. Pocketfi virtual accounts + Paystack card (test mode) end to end, then Flutterwave and Korapay.
 4. App changes.
