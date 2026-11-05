@@ -7,94 +7,265 @@
   <title>Drop Admin</title>
   <style>
     :root {
-      --bg: #111111;
-      --card: #1b1b1b;
-      --text: #f5f5f5;
-      --muted: #a8a8a8;
-      --orange: #ff8a00;
-      --red: #ff3b00;
-      --ok: #3ddc84;
-      --bad: #ff5252;
+      --bg: #111111; --card: #1b1b1b; --line: #2a2a2a; --text: #f5f5f5; --muted: #a8a8a8;
+      --orange: #ff8a00; --red: #ff3b00; --ok: #3ddc84; --bad: #ff5252; --input: #121212;
     }
     * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      min-height: 100vh;
-      display: grid;
-      place-items: center;
-      padding: 16px;
-      background: var(--bg);
-      color: var(--text);
-      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    }
-    main {
-      width: 100%;
-      max-width: 420px;
-      background: var(--card);
-      border-radius: 16px;
-      padding: 28px 24px;
-      border: 1px solid #2a2a2a;
-    }
-    .mark {
-      width: 56px;
-      height: 56px;
-      border-radius: 14px;
-      display: grid;
-      place-items: center;
-      font-weight: 800;
-      font-size: 30px;
-      color: #fff;
-      background: linear-gradient(135deg, var(--orange), var(--red));
-      margin-bottom: 18px;
-    }
-    h1 { margin: 0 0 4px; font-size: 22px; }
-    p { margin: 0 0 20px; color: var(--muted); line-height: 1.5; }
-    .row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 12px 0;
-      border-top: 1px solid #2a2a2a;
-      font-size: 15px;
-    }
-    .pill {
-      padding: 4px 10px;
-      border-radius: 999px;
-      font-size: 13px;
-      font-weight: 600;
-      background: #2a2a2a;
-      color: var(--muted);
-    }
-    .pill.ok { color: var(--ok); }
-    .pill.bad { color: var(--bad); }
-    small { display: block; margin-top: 18px; color: var(--muted); }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    header { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--bg); z-index: 2; }
+    .mark { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; font-weight: 800; font-size: 20px; color: #fff; background: linear-gradient(135deg, var(--orange), var(--red)); }
+    header h1 { margin: 0; font-size: 18px; flex: 1; }
+    button, .btn { font: inherit; cursor: pointer; border: 0; border-radius: 10px; padding: 11px 16px; color: #fff; background: linear-gradient(135deg, var(--orange), var(--red)); font-weight: 600; }
+    button.ghost { background: transparent; border: 1px solid var(--line); color: var(--text); }
+    button:disabled { opacity: .5; cursor: default; }
+    main { max-width: 640px; margin: 0 auto; padding: 16px; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 18px; margin-bottom: 14px; }
+    h2 { margin: 0 0 4px; font-size: 20px; }
+    .muted { color: var(--muted); font-size: 14px; }
+    label { display: block; margin: 14px 0 6px; font-size: 14px; color: var(--muted); }
+    input { width: 100%; font: inherit; color: var(--text); background: var(--input); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+    input:focus { outline: 2px solid var(--orange); border-color: transparent; }
+    .gw-head { display: flex; align-items: center; gap: 10px; }
+    .gw-head .name { flex: 1; font-weight: 700; font-size: 17px; }
+    .pill { font-size: 12px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+    .pill.on { color: var(--ok); border-color: #1f5a3a; }
+    .pill.warn { color: var(--orange); border-color: #6a4300; }
+    .tabs { display: flex; gap: 8px; margin: 14px 0 0; }
+    .tabs button { flex: 1; padding: 9px; font-weight: 600; background: transparent; border: 1px solid var(--line); color: var(--muted); }
+    .tabs button.active { color: #fff; border-color: var(--orange); background: #2a1b08; }
+    .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); margin-top: 14px; }
+    .switch { position: relative; width: 52px; height: 30px; flex: none; }
+    .switch input { position: absolute; opacity: 0; inset: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; z-index: 1; }
+    .switch span { position: absolute; inset: 0; border-radius: 999px; background: #3a3a3a; transition: .15s; }
+    .switch span::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; transition: .15s; }
+    .switch input:checked + span { background: var(--ok); }
+    .switch input:checked + span::after { transform: translateX(22px); }
+    .set { color: var(--ok); font-size: 13px; }
+    .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+    .msg { margin: 12px 0 0; padding: 10px 12px; border-radius: 10px; font-size: 14px; display: none; }
+    .msg.ok { display: block; background: #12301f; color: var(--ok); }
+    .msg.err { display: block; background: #3a1616; color: var(--bad); }
+    .empty { text-align: center; color: var(--muted); padding: 28px 0; }
+    [hidden] { display: none !important; }
+    a { color: var(--orange); }
   </style>
 </head>
 <body>
+  <header>
+    <div class="mark">D</div>
+    <h1 id="title">Drop Admin</h1>
+    <button class="ghost" id="logout" hidden>Sign out</button>
+  </header>
+
   <main>
-    <div class="mark" aria-hidden="true">D</div>
-    <h1>Drop Admin</h1>
-    <p>The admin dashboard is being rebuilt. Sign-in and management screens will appear here.</p>
-    <div class="row"><span>API status</span><span id="api" class="pill">Checking…</span></div>
-    <div class="row"><span>Version</span><span id="ver" class="pill">–</span></div>
-    <small id="time"></small>
+    <!-- Sign in -->
+    <section id="login" class="card" hidden>
+      <h2>Sign in</h2>
+      <p class="muted">Administrator account only.</p>
+      <form id="loginForm" autocomplete="on">
+        <label for="email">Email</label>
+        <input id="email" type="email" autocomplete="username" required>
+        <label for="password">Password</label>
+        <input id="password" type="password" autocomplete="current-password" required>
+        <p id="loginMsg" class="msg"></p>
+        <p style="margin:16px 0 0"><button type="submit" id="loginBtn" style="width:100%">Sign in</button></p>
+      </form>
+      <p class="muted" style="margin-top:16px"><a href="#setup" id="setupLink">First-time setup</a></p>
+    </section>
+
+    <!-- First admin -->
+    <section id="setup" class="card" hidden>
+      <h2>Create the first admin</h2>
+      <p class="muted">Needs the setup code you saved in Cloudflare as <b>ADMIN_BOOTSTRAP_TOKEN</b>. It works only until the first admin exists.</p>
+      <form id="setupForm" autocomplete="off">
+        <label for="s_token">Setup code</label><input id="s_token" type="password" required>
+        <label for="s_first">First name</label><input id="s_first" required>
+        <label for="s_last">Last name</label><input id="s_last" required>
+        <label for="s_user">Username</label><input id="s_user" required minlength="3">
+        <label for="s_email">Email</label><input id="s_email" type="email" required>
+        <label for="s_pass">Password (10+ characters)</label><input id="s_pass" type="password" required minlength="10" autocomplete="new-password">
+        <p id="setupMsg" class="msg"></p>
+        <p style="margin:16px 0 0"><button type="submit" style="width:100%">Create admin</button></p>
+      </form>
+      <p class="muted" style="margin-top:16px"><a href="#" id="backLogin">Back to sign in</a></p>
+    </section>
+
+    <!-- Payment methods -->
+    <section id="methods" hidden>
+      <div class="card">
+        <h2>Payment methods</h2>
+        <p class="muted" style="margin:0">Add each gateway's keys when its account is ready. Secret values are encrypted and never shown again after saving.</p>
+        <p id="encWarn" class="msg err">The server encryption key is not set yet, so credentials cannot be saved. Add the <b>SETTINGS_ENCRYPTION_KEY</b> secret in Cloudflare.</p>
+      </div>
+      <div id="list"></div>
+    </section>
   </main>
+
   <script>
-    (async function () {
-      var api = document.getElementById("api");
-      try {
-        var res = await fetch("/api/health", { cache: "no-store" });
-        if (!res.ok) throw new Error("HTTP " + res.status);
-        var data = await res.json();
-        api.textContent = "Online";
-        api.className = "pill ok";
-        document.getElementById("ver").textContent = data.version;
-        document.getElementById("time").textContent = "Server time: " + data.time;
-      } catch (e) {
-        api.textContent = "Unreachable";
-        api.className = "pill bad";
-      }
-    })();
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var TOKEN = null;
+    try { TOKEN = sessionStorage.getItem("drop_admin_token"); } catch (e) {}
+
+    function show(which) {
+      ["login", "setup", "methods"].forEach(function (s) { $(s).hidden = s !== which; });
+      $("logout").hidden = which !== "methods";
+    }
+    function msg(el, text, ok) { el.textContent = text || ""; el.className = "msg " + (text ? (ok ? "ok" : "err") : ""); }
+    function saveToken(t) { TOKEN = t; try { t ? sessionStorage.setItem("drop_admin_token", t) : sessionStorage.removeItem("drop_admin_token"); } catch (e) {} }
+
+    function api(method, path, body) {
+      return fetch("/api" + path, {
+        method: method,
+        headers: Object.assign({ "Accept": "application/json" }, body ? { "Content-Type": "application/json" } : {}, TOKEN ? { "Authorization": "Bearer " + TOKEN } : {}),
+        body: body ? JSON.stringify(body) : undefined
+      }).then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (j) { return { status: r.status, body: j }; });
+      });
+    }
+
+    $("loginForm").addEventListener("submit", function (e) {
+      e.preventDefault();
+      var btn = $("loginBtn"); btn.disabled = true; msg($("loginMsg"), "");
+      api("POST", "/login", { email: $("email").value, password: $("password").value, user_type: "admin" })
+        .then(function (r) {
+          btn.disabled = false;
+          if (r.body && r.body.status === true && r.body.data) { saveToken(r.body.data.api_token); $("password").value = ""; load(); }
+          else msg($("loginMsg"), (r.body && r.body.message) || "Could not sign in.");
+        }).catch(function () { btn.disabled = false; msg($("loginMsg"), "Network error. Try again."); });
+    });
+
+    $("setupLink").addEventListener("click", function (e) { e.preventDefault(); show("setup"); });
+    $("backLogin").addEventListener("click", function (e) { e.preventDefault(); show("login"); });
+    $("setupForm").addEventListener("submit", function (e) {
+      e.preventDefault(); msg($("setupMsg"), "");
+      api("POST", "/admin/bootstrap", {
+        token: $("s_token").value, first_name: $("s_first").value, last_name: $("s_last").value,
+        username: $("s_user").value, email: $("s_email").value, password: $("s_pass").value
+      }).then(function (r) {
+        if (r.status === 200 && r.body.api_token) { saveToken(r.body.api_token); $("s_token").value = ""; $("s_pass").value = ""; load(); }
+        else if (r.status === 404) msg($("setupMsg"), "Setup is not available (already done, or the setup code is wrong).");
+        else msg($("setupMsg"), (r.body && r.body.message) || "Could not create the admin.");
+      }).catch(function () { msg($("setupMsg"), "Network error. Try again."); });
+    });
+
+    $("logout").addEventListener("click", function () {
+      api("GET", "/logout").finally(function () { saveToken(null); show("login"); });
+    });
+
+    var state = { data: [], mode: {}, flash: null };
+
+    function load() {
+      api("GET", "/admin/payment-gateways").then(function (r) {
+        if (r.status === 401 || r.status === 403) { saveToken(null); show("login"); return; }
+        state.data = (r.body && r.body.data) || [];
+        $("encWarn").style.display = r.body && r.body.encryption_configured === false ? "block" : "none";
+        render(); show("methods");
+      }).catch(function () { show("login"); msg($("loginMsg"), "Network error. Try again."); });
+    }
+
+    function el(tag, attrs, kids) {
+      var n = document.createElement(tag);
+      Object.keys(attrs || {}).forEach(function (k) {
+        if (k === "text") n.textContent = attrs[k]; else if (k === "class") n.className = attrs[k]; else n.setAttribute(k, attrs[k]);
+      });
+      (kids || []).forEach(function (c) { n.appendChild(c); });
+      return n;
+    }
+
+    function render() {
+      var list = $("list"); list.textContent = "";
+      state.data.forEach(function (g) {
+        var mode = state.mode[g.type] || (g.is_test ? "test" : "live");
+        var card = el("div", { class: "card" });
+        var ready = g.ready_test || g.ready_live;
+        card.appendChild(el("div", { class: "gw-head" }, [
+          el("div", { class: "name", text: g.title }),
+          el("span", { class: "pill " + (g.status ? "on" : ""), text: g.status ? "On" : "Off" }),
+          g.fields.length ? el("span", { class: "pill " + (ready ? "on" : "warn"), text: ready ? "Keys added" : "Needs keys" }) : el("span")
+        ]));
+
+        // On/off
+        var sw = el("label", { class: "switch" }, [el("input", { type: "checkbox" }), el("span")]);
+        sw.firstChild.checked = g.status;
+        var row1 = el("div", { class: "row" }, [el("div", { text: "Available to riders" }), sw]);
+        card.appendChild(row1);
+        var out = el("p", { class: "msg" });
+
+        sw.firstChild.addEventListener("change", function (e) {
+          var want = e.target.checked;
+          put(g.type, { status: want }, out, function () { load(); }, function () { e.target.checked = !want; });
+        });
+
+        if (g.fields.length) {
+          // Active mode
+          var modeSw = el("label", { class: "switch" }, [el("input", { type: "checkbox" }), el("span")]);
+          modeSw.firstChild.checked = !g.is_test;
+          card.appendChild(el("div", { class: "row" }, [
+            el("div", {}, [el("div", { text: "Live mode" }), el("div", { class: "hint", text: g.is_test ? "Currently using TEST keys (no real money)." : "Currently using LIVE keys (real money)." })]),
+            modeSw
+          ]));
+          modeSw.firstChild.addEventListener("change", function (e) {
+            var live = e.target.checked;
+            if (live && !window.confirm("Switch " + g.title + " to LIVE? Real money will move.")) { e.target.checked = false; return; }
+            put(g.type, { is_test: !live }, out, function () { load(); }, function () { e.target.checked = !live; });
+          });
+
+          // Credentials for the selected tab
+          var tabs = el("div", { class: "tabs" });
+          ["test", "live"].forEach(function (m) {
+            var b = el("button", { type: "button", class: m === mode ? "active" : "", text: m === "test" ? "Test keys" : "Live keys" });
+            b.addEventListener("click", function () { state.mode[g.type] = m; render(); });
+            tabs.appendChild(b);
+          });
+          card.appendChild(tabs);
+
+          var inputs = {};
+          g.fields.forEach(function (f) {
+            var cur = f[mode];
+            card.appendChild(el("label", { text: f.label }));
+            var inp = el("input", {
+              type: f.secret ? "password" : "text", autocomplete: "off", autocapitalize: "off", spellcheck: "false",
+              placeholder: cur ? (f.secret ? cur.masked + "  (leave blank to keep)" : "") : "Not set"
+            });
+            if (cur && !f.secret) inp.value = cur.value || "";
+            inputs[f.key] = inp; card.appendChild(inp);
+            if (cur && f.secret) card.appendChild(el("div", { class: "set", text: "Saved " + cur.masked }));
+            if (f.hint) card.appendChild(el("div", { class: "hint", text: f.hint }));
+          });
+          var save = el("button", { type: "button", text: "Save " + (mode === "test" ? "test" : "live") + " keys", style: "width:100%;margin-top:16px" });
+          save.addEventListener("click", function () {
+            var vals = {};
+            g.fields.forEach(function (f) { var v = inputs[f.key].value; if (v !== "" ) vals[f.key] = v; });
+            if (!Object.keys(vals).length) { msg(out, "Nothing to save.", false); return; }
+            var creds = {}; creds[mode] = vals;
+            save.disabled = true;
+            put(g.type, { credentials: creds }, out, function () { load(); }, function () { save.disabled = false; });
+          });
+          card.appendChild(save);
+        } else {
+          card.appendChild(el("p", { class: "muted", text: "No keys needed." }));
+        }
+        card.appendChild(out);
+        if (state.flash && state.flash.type === g.type) { msg(out, state.flash.text, true); state.flash = null; }
+        list.appendChild(card);
+      });
+      if (!state.data.length) list.appendChild(el("div", { class: "empty", text: "No payment methods yet." }));
+    }
+
+    function put(type, body, out, done, fail) {
+      msg(out, "");
+      api("PUT", "/admin/payment-gateways/" + encodeURIComponent(type), body).then(function (r) {
+        if (r.status === 401) { saveToken(null); show("login"); return; }
+        if (r.status === 200) { state.flash = { type: type, text: "Saved." }; msg(out, "Saved.", true); done && done(); }
+        else { msg(out, (r.body && r.body.message) || "Could not save.", false); fail && fail(); }
+      }).catch(function () { msg(out, "Network error. Try again.", false); fail && fail(); });
+    }
+
+    if (location.hash === "#setup") show("setup");
+    else if (TOKEN) load();
+    else show("login");
+  })();
   </script>
 </body>
 </html>

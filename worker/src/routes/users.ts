@@ -8,9 +8,8 @@ import {
 } from "../serializers/user";
 
 export const userRoutes = new Hono<AppEnv>();
-userRoutes.use("*", withDb, requireAuth);
 
-userRoutes.get("/user-detail", async (c) => {
+userRoutes.get("/user-detail", withDb, requireAuth, async (c) => {
   const me = c.get("user");
   const requested = c.req.query("id");
   const id = requested === undefined ? me.id : /^\d{1,15}$/.test(requested) ? Number(requested) : NaN;
