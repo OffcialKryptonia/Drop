@@ -3,6 +3,7 @@ import type { AppEnv } from "./env";
 import { connectDb } from "./db";
 import { authRoutes } from "./routes/auth";
 import { userRoutes } from "./routes/users";
+import { adminRoutes } from "./routes/admin";
 
 const app = new Hono<AppEnv>();
 
@@ -35,6 +36,7 @@ app.get("/api/health/db", async (c) => {
 
 app.route("/api", authRoutes);
 app.route("/api", userRoutes);
+app.route("/api", adminRoutes);
 
 // Any other /api route that does not exist yet returns JSON, never HTML.
 app.all("/api/*", (c) =>

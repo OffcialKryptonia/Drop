@@ -9,7 +9,6 @@ import { MESSAGES, readBody, validationFailed } from "../lib/legacy";
 import { serializeUser } from "../serializers/user";
 
 export const authRoutes = new Hono<AppEnv>();
-authRoutes.use("*", withDb);
 
 const opt = (max = 255) =>
   z.preprocess((v) => (v === "" || v === undefined ? null : v), z.string().max(max).nullable());
@@ -38,7 +37,7 @@ function issues(err: z.ZodError): Record<string, string[]> {
   return out;
 }
 
-authRoutes.post("/login", async (c) => {
+authRoutes.post("/login", withDb, async (c) => {
   const parsed = loginSchema.safeParse(await readBody(c));
   if (!parsed.success) return validationFailed(c, issues(parsed.error));
   const { email, password, player_id, fcm_token, login_api } = parsed.data;
@@ -103,7 +102,7 @@ const registerSchema = z.object({
     .optional(),
 });
 
-authRoutes.post("/register", async (c) => {
+authRoutes.post("/register", withDb, async (c) => {
   const parsed = registerSchema.safeParse(await readBody(c));
   if (!parsed.success) return validationFailed(c, issues(parsed.error));
   const d = parsed.data;
@@ -163,7 +162,7 @@ authRoutes.post("/register", async (c) => {
   }
 });
 
-authRoutes.get("/logout", requireAuth, async (c) => {
+authRoutes.get("/logout", withDb, requireAuth, async (c) => {
   const db = c.get("db");
   const user = c.get("user");
   const clear = c.req.query("clear");
