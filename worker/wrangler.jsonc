@@ -5,11 +5,13 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-10-01",
   "compatibility_flags": ["nodejs_compat"],
-  // Static files. public/admin/* is served at /admin/* (the admin dashboard).
-  // Requests that match no file fall through to the Worker (the API).
+  // Static files: the DROP website at /, the admin dashboard at /admin/*.
+  // /api/* always goes to the Worker; other unmatched paths get public/404.html.
   "assets": {
     "directory": "./public",
-    "binding": "ASSETS"
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"],
+    "not_found_handling": "404-page"
   },
   // Supabase Postgres through Hyperdrive (connection "drop-db"; the id is not a secret).
   // For local development, point it at a local Postgres with:

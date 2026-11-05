@@ -44,7 +44,6 @@ app.all("/api/*", (c) =>
 );
 
 // Visiting the bare domain sends people to the admin dashboard.
-app.get("/", (c) => c.redirect("/admin/", 302));
 
 // Everything else (unknown paths) is a plain 404.
 app.notFound((c) => c.text("Not found", 404));
