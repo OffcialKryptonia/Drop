@@ -51,7 +51,7 @@ adminRoutes.post("/admin/bootstrap", withDb, async (c) => {
   const ins = await db.query(
     `insert into app.users (first_name, last_name, display_name, email, username, password_hash, login_type, user_type, status, admin_role_id)
      values ($1,$2,$3,$4,$5,$6,'app','admin','active', (select id from app.admin_roles where name = 'admin')) returning id`,
-    [d.first_name, d.last_name, `${d.first_name} ${d.last_name}`, d.email, d.username, await hashPassword(d.password)],
+    [d.first_name, d.last_name, `${d.first_name} ${d.last_name}`, d.email, d.username, await hashPassword(db, d.password)],
   );
   await db.query("insert into app.admin_audit (admin_id, action) values ($1, 'bootstrap_admin')", [ins.rows[0].id]);
   return c.json({ message: "Admin created. You can sign in now.", api_token: await createToken(db, ins.rows[0].id) });

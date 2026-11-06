@@ -51,7 +51,7 @@ authRoutes.post("/login", withDb, async (c) => {
     userType ? [email, userType] : [email],
   );
   const row = found.rows[0];
-  const ok = await verifyPassword(password, row?.password_hash ?? null);
+  const ok = await verifyPassword(db, password, row?.password_hash ?? null);
   if (!row || !ok) return c.json({ status: false, message: MESSAGES.authFailed }, 200);
   if (row.status === "banned") return c.json({ status: false, message: MESSAGES.accountBanned }, 200);
   if (login_api && row.user_type === "driver" && row.status !== "active") {
@@ -111,7 +111,7 @@ authRoutes.post("/register", withDb, async (c) => {
   // Clients never choose their own role or status: only riders and drivers can self-register,
   // riders are active at once, drivers wait for admin approval.
   const status = d.user_type === "driver" ? "pending" : "active";
-  const hash = await hashPassword(d.password);
+  const hash = await hashPassword(db, d.password);
   const referral = crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase();
 
   try {

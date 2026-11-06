@@ -425,7 +425,7 @@ adminCatalogRoutes.post("/admin/sub-admins", ...guard("subadmin add"), async (c)
     const r = await db.query(
       `insert into app.users (first_name, last_name, display_name, email, username, contact_number, password_hash, login_type, user_type, status, admin_role_id)
        values ($1,$2,$3,$4,$5,$6,$7,'app','admin',$8,$9) returning id`,
-      [d.first_name, d.last_name, `${d.first_name} ${d.last_name}`, d.email, d.username, d.contact_number, await hashPassword(d.password), d.status, d.admin_role_id]);
+      [d.first_name, d.last_name, `${d.first_name} ${d.last_name}`, d.email, d.username, d.contact_number, await hashPassword(db, d.password), d.status, d.admin_role_id]);
     await audit(c, "subadmin_add", String(r.rows[0].id), { email: d.email, role: d.admin_role_id });
     return c.json({ message: "Sub-admin added", id: r.rows[0].id }, 201);
   } catch (err) {
@@ -452,7 +452,7 @@ adminCatalogRoutes.put("/admin/sub-admins/:id", ...guard("subadmin edit"), async
   if (id === me.id && p.data.status === "inactive") return c.json({ message: "You cannot switch off your own account.", status: 422 }, 422);
   const { password, ...rest } = p.data;
   const data: Record<string, unknown> = { ...rest };
-  if (password) data.password_hash = await hashPassword(password);
+  if (password) data.password_hash = await hashPassword(db, password);
   if (rest.first_name || rest.last_name) {
     const cur = (await db.query("select first_name, last_name from app.users where id=$1", [id])).rows[0];
     data.display_name = `${rest.first_name ?? cur.first_name} ${rest.last_name ?? cur.last_name}`;
