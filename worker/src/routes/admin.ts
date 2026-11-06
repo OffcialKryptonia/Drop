@@ -1,8 +1,8 @@
-import { Hono, type Context, type Next } from "hono";
+import { Hono } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
 import { withDb } from "../db";
-import { requireAuth } from "../auth/middleware";
+import { guard } from "../lib/permissions";
 import { hashPassword } from "../auth/password";
 import { createToken } from "../auth/tokens";
 import { decryptValue, encryptValue } from "../lib/crypto";
@@ -49,25 +49,15 @@ adminRoutes.post("/admin/bootstrap", withDb, async (c) => {
   if (!safeEqual(d.token, expected)) return c.json({ message: "Not found", status: 404 }, 404);
 
   const ins = await db.query(
-    `insert into app.users (first_name, last_name, display_name, email, username, password_hash, login_type, user_type, status)
-     values ($1,$2,$3,$4,$5,$6,'app','admin','active') returning id`,
+    `insert into app.users (first_name, last_name, display_name, email, username, password_hash, login_type, user_type, status, admin_role_id)
+     values ($1,$2,$3,$4,$5,$6,'app','admin','active', (select id from app.admin_roles where name = 'admin')) returning id`,
     [d.first_name, d.last_name, `${d.first_name} ${d.last_name}`, d.email, d.username, await hashPassword(d.password)],
   );
   await db.query("insert into app.admin_audit (admin_id, action) values ($1, 'bootstrap_admin')", [ins.rows[0].id]);
   return c.json({ message: "Admin created. You can sign in now.", api_token: await createToken(db, ins.rows[0].id) });
 });
 
-// Everything below is admin-only.
-const adminOnly = [
-  withDb,
-  requireAuth,
-  async (c: Context<AppEnv>, next: Next) => {
-    if (c.get("user").user_type !== "admin") return c.json({ message: "Forbidden" }, 403);
-    await next();
-  },
-] as const;
-
-adminRoutes.get("/admin/payment-gateways", ...adminOnly, async (c) => {
+adminRoutes.get("/admin/payment-gateways", ...guard("payment_gateway list"), async (c) => {
   const db = c.get("db");
   const gws = await db.query("select type, title, status, is_test, sort_order from app.payment_gateways order by sort_order, id");
   const creds = await db.query("select gateway_type, mode, field, value_enc, is_secret, last4, updated_at from app.gateway_credentials");
@@ -105,7 +95,7 @@ const updateSchema = z.object({
     .optional(),
 });
 
-adminRoutes.put("/admin/payment-gateways/:type", ...adminOnly, async (c) => {
+adminRoutes.put("/admin/payment-gateways/:type", ...guard("payment_gateway edit"), async (c) => {
   const type = c.req.param("type");
   const spec = GATEWAY_FIELDS[type];
   if (!spec) return c.json({ message: "Unknown payment method" }, 404);
