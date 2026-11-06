@@ -5,6 +5,7 @@ import { authRoutes } from "./routes/auth";
 import { userRoutes } from "./routes/users";
 import { adminRoutes } from "./routes/admin";
 import { adminCatalogRoutes } from "./routes/admin-catalog";
+import { walletRoutes } from "./routes/wallet";
 
 const app = new Hono<AppEnv>();
 
@@ -39,6 +40,7 @@ app.route("/api", authRoutes);
 app.route("/api", userRoutes);
 app.route("/api", adminRoutes);
 app.route("/api", adminCatalogRoutes);
+app.route("/api", walletRoutes);
 
 // Any other /api route that does not exist yet returns JSON, never HTML.
 app.all("/api/*", (c) =>

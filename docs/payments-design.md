@@ -55,3 +55,13 @@ Remove razorpay, stripe, paytabs, braintree, paypal, the old Paystack fork and t
 2. Wallet endpoints (balance, history).
 3. Korapay virtual-account top-up (test mode) end to end; then Paystack card + saved cards; Pocketfi and Flutterwave afterwards.
 4. App changes.
+
+## Built: wallet and Pocketfi bank-transfer top-up (Nov 2026)
+Endpoints (legacy names kept so the shipped apps keep working): `GET /api/wallet-detail`, `GET /api/wallet-list`, `GET /api/payment-gateway-list`; new: `GET /api/wallet/virtual-account`, `POST /api/webhooks/pocketfi`.
+- **Account number**: created at Pocketfi on first request (static Kuda account), stored, reused. Needs the user's name, email and a Nigerian phone number.
+- **Webhook URL to give Pocketfi** (Dashboard, Settings, Webhooks): `https://<your-domain>/api/webhooks/pocketfi`. Verified by HMAC-SHA512 of the raw body against the saved Secret key (test or live).
+- **Idempotent**: one credit per `transaction.reference`, even for six simultaneous deliveries (tested).
+- **Fee**: the wallet is credited the full amount the rider sent; Pocketfi's fee is recorded in `payment_events.fee` and is borne by DROP. Change in `routes/wallet.ts` if that policy changes.
+- **Unknown customer or bad amount**: stored as `flagged` in `payment_events`, nothing credited, HTTP 200 (so Pocketfi does not retry). A reconcile screen in the admin comes later.
+- **Customer id mapping**: learned from Pocketfi's accounts list right after creation and again on demand (`resolveCustomers`). That list grows with users; if it gets large, ask Pocketfi for a per-account lookup.
+- Tests: `worker/test/wallet-smoke.mjs` (mock Pocketfi, 22 checks) and `worker/test/admin-smoke.sh`.

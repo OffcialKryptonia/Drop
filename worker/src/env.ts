@@ -7,6 +7,8 @@ export type Bindings = {
   SETTINGS_ENCRYPTION_KEY?: string;
   /** Lets the very first admin be created; unset it (or leave it) once an admin exists. */
   ADMIN_BOOTSTRAP_TOKEN?: string;
+  /** Tests only: points Pocketfi calls at a local mock instead of api.pocketfi.ng. Leave unset in production. */
+  POCKETFI_BASE_URL?: string;
 };
 
 /** The signed-in user, as loaded by the auth middleware (no secrets). */
