@@ -6,16 +6,16 @@
 - `og.jpg`: the supplied red app icon artwork, centred on its own red background.
 - `logo-reveal-dark.mp4/.jpg`, `logo-reveal-light.mp4/.jpg`: the two supplied logo animations, re-encoded (audio removed, 1280px wide). Only the dark one is used on the page.
 
-## Photographs: PLACEHOLDERS, replace with DROP's own photography
-All three are free to use under the [Unsplash License](https://unsplash.com/license) (commercial use allowed, no permission needed, credit appreciated). They are loaded from Unsplash's image CDN. They are stock images, not DROP trips, drivers or customers, and no DROP location is implied.
+## Photographs (supplied by the client)
+The three pictures are supplied by DROP and stored in `worker/public/assets/photos/` as WebP (two sizes each). No third-party stock photos or hotlinks remain on the site. They appear to be generated or illustrative images, not real DROP trips, drivers or customers, so no real person or DROP location is implied. Replace with real photography when available.
 
-| Where | Photo | Photographer | Link |
-|---|---|---|---|
-| Hero | Busy street in Lagos | Opeyemi Adisa | https://unsplash.com/photos/cFT_Xq4XyA0 |
-| Passenger section | Woman at a yellow bus window, Lagos | Ben Iwara | https://unsplash.com/photos/i-XBdBCc0Yc |
-| Driver section | Man in a car's driver seat | Omotayo Tajudeen | https://unsplash.com/photos/5OOUed0eWAU |
+| Where | File | Shows |
+|---|---|---|
+| Hero | `hero-street-*.webp` | Grey sedan on a busy street with yellow buses, golden hour |
+| Passenger section | `passenger-waiting-*.webp` | Woman waiting beside a DROP-branded car, phone in hand |
+| Driver section | `driver-car-*.webp` | Smiling driver in a white car with the DROP logo |
 
-To replace: put new files in `worker/public/assets/`, update the `<img>` tags in `worker/public/index.html`, and remove the credit links.
+To replace: add new files in `worker/public/assets/photos/`, update the `<img>` tags in `worker/public/index.html`, and adjust `object-position` in `assets/site.css` if the subject is cropped.
 
 ## Font
 Outfit, SIL Open Font License (`assets/fonts/OFL-Outfit.txt`), self-hosted.
