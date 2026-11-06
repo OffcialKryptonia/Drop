@@ -1,0 +1,570 @@
+// Drop Admin. Plain JavaScript, no dependencies. All data is inserted with textContent (never innerHTML).
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var TOKEN = null, ME = null;
+  try { TOKEN = sessionStorage.getItem("drop_admin_token"); } catch (e) {}
+
+  // ---------- helpers ----------
+  function h(tag, attrs) {
+    var n = document.createElement(tag);
+    Object.keys(attrs || {}).forEach(function (k) {
+      var v = attrs[k];
+      if (v === null || v === undefined || v === false) return;
+      if (k === "text") n.textContent = v;
+      else if (k === "class") n.className = v;
+      else if (k === "on") Object.keys(v).forEach(function (ev) { n.addEventListener(ev, v[ev]); });
+      else if (k === "value") n.value = v;
+      else if (k === "checked") n.checked = !!v;
+      else n.setAttribute(k, v === true ? "" : v);
+    });
+    for (var i = 2; i < arguments.length; i++) {
+      var c = arguments[i];
+      if (c === null || c === undefined || c === false) continue;
+      if (Array.isArray(c)) c.forEach(function (x) { if (x) n.appendChild(x); });
+      else n.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
+    }
+    return n;
+  }
+  function can(p) { return !!ME && ME.permissions.indexOf(p) !== -1; }
+  function saveToken(t) { TOKEN = t; try { t ? sessionStorage.setItem("drop_admin_token", t) : sessionStorage.removeItem("drop_admin_token"); } catch (e) {} }
+  function msg(el, text, ok) { el.textContent = text || ""; el.className = "msg " + (text ? (ok ? "ok" : "err") : ""); }
+  var toastTimer;
+  function toast(text, bad) {
+    var t = h("div", { class: "toast" + (bad ? " err" : ""), text: text });
+    document.body.appendChild(t); clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.remove(); }, 2600);
+  }
+  function naira(v) { return v === null || v === undefined ? "-" : "₦" + Number(v).toLocaleString("en-NG", { maximumFractionDigits: 2 }); }
+
+  function api(method, path, body) {
+    return fetch("/api" + path, {
+      method: method,
+      headers: Object.assign({ Accept: "application/json" }, body ? { "Content-Type": "application/json" } : {}, TOKEN ? { Authorization: "Bearer " + TOKEN } : {}),
+      body: body ? JSON.stringify(body) : undefined
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (j) {
+        if (r.status === 401) { signedOut(); }
+        return { status: r.status, ok: r.ok, body: j };
+      });
+    }).catch(function () { return { status: 0, ok: false, body: { message: "Network error. Try again." } }; });
+  }
+  function errText(r) {
+    var b = r.body || {};
+    if (b.errors) { var k = Object.keys(b.errors)[0]; return (k && k !== "body" ? k.replace(/_/g, " ") + ": " : "") + b.errors[k][0]; }
+    return b.message || "Something went wrong.";
+  }
+
+  // ---------- signed-out screens ----------
+  function showAuth(which) {
+    $("app").hidden = true; $("authWrap").hidden = false;
+    $("login").hidden = which !== "login"; $("setup").hidden = which !== "setup";
+  }
+  function signedOut() { saveToken(null); ME = null; showAuth("login"); }
+
+  $("loginForm").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var btn = $("loginBtn"); btn.disabled = true; msg($("loginMsg"), "");
+    api("POST", "/login", { email: $("email").value, password: $("password").value, user_type: "admin" }).then(function (r) {
+      btn.disabled = false;
+      if (r.body && r.body.status === true && r.body.data) { saveToken(r.body.data.api_token); $("password").value = ""; start(); }
+      else msg($("loginMsg"), (r.body && r.body.message) || "Could not sign in.");
+    });
+  });
+  $("setupLink").addEventListener("click", function (e) { e.preventDefault(); showAuth("setup"); });
+  $("backLogin").addEventListener("click", function (e) { e.preventDefault(); showAuth("login"); });
+  $("setupForm").addEventListener("submit", function (e) {
+    e.preventDefault(); msg($("setupMsg"), "");
+    api("POST", "/admin/bootstrap", {
+      token: $("s_token").value, first_name: $("s_first").value, last_name: $("s_last").value,
+      username: $("s_user").value, email: $("s_email").value, password: $("s_pass").value
+    }).then(function (r) {
+      if (r.status === 200 && r.body.api_token) { saveToken(r.body.api_token); $("s_token").value = ""; $("s_pass").value = ""; start(); }
+      else if (r.status === 404) msg($("setupMsg"), "Setup is not available (already done, or the setup code is wrong).");
+      else msg($("setupMsg"), errText(r));
+    });
+  });
+  $("logout").addEventListener("click", function () { api("GET", "/logout").then(signedOut); });
+
+  // ---------- shell ----------
+  var PAGES = [
+    { id: "ride-types", label: "Ride types", group: "Operations", perm: "service list", render: pageRideTypes },
+    { id: "regions", label: "Regions", group: "Operations", perm: "region list", render: pageRegions },
+    { id: "ride-options", label: "Ride options", group: "Operations", perm: "service_option list", render: pageOptions },
+    { id: "payment-methods", label: "Payment methods", group: "Financial", perm: "payment_gateway list", render: pagePayments },
+    { id: "roles", label: "Roles", group: "System", perm: "role list", render: pageRoles },
+    { id: "sub-admins", label: "Sub-admins", group: "System", perm: "subadmin list", render: pageSubAdmins }
+  ];
+  function setNav(open) { document.body.classList.toggle("nav-open", open); }
+  $("menuBtn").addEventListener("click", function () { setNav(true); });
+  $("scrim").addEventListener("click", function () { setNav(false); });
+
+  function start() {
+    api("GET", "/admin/me").then(function (r) {
+      if (!r.ok) { if (r.status === 403) { saveToken(null); showAuth("login"); msg($("loginMsg"), "This account is not an administrator."); } else showAuth("login"); return; }
+      ME = r.body;
+      $("authWrap").hidden = true; $("app").hidden = false;
+      $("who").textContent = (ME.name || "") + " · " + ME.email;
+      var nav = $("navLinks"); nav.textContent = ""; var last = null;
+      PAGES.forEach(function (p) {
+        if (!can(p.perm)) return;
+        if (p.group !== last) { nav.appendChild(h("div", { class: "group", text: p.group })); last = p.group; }
+        nav.appendChild(h("a", { href: "#/" + p.id, "data-page": p.id, text: p.label }));
+      });
+      route();
+    });
+  }
+
+  function route() {
+    if (!ME) return;
+    var id = (location.hash.replace(/^#\/?/, "") || "").split("/")[0];
+    var page = PAGES.filter(function (p) { return p.id === id && can(p.perm); })[0] || PAGES.filter(function (p) { return can(p.perm); })[0];
+    var links = document.querySelectorAll("#navLinks a");
+    Array.prototype.forEach.call(links, function (a) { a.classList.toggle("active", page && a.getAttribute("data-page") === page.id); });
+    setNav(false);
+    // Each visit gets a fresh container, so a slow response from a page you already left cannot draw over this one.
+    var holder = $("page"); holder.textContent = "";
+    var root = h("div"); holder.appendChild(root);
+    if (!page) { root.appendChild(h("div", { class: "card" }, h("h2", { text: "No access yet" }), h("p", { class: "muted", text: "Your role has no permissions. Ask a super admin to update it." }))); return; }
+    $("title").textContent = page.label;
+    page.render(root);
+  }
+  window.addEventListener("hashchange", route);
+
+  // ---------- reusable bits ----------
+  function sw(checked, onChange) {
+    var input = h("input", { type: "checkbox", checked: checked });
+    input.addEventListener("change", function () { onChange(input.checked, input); });
+    return h("label", { class: "switch" }, input, h("span"));
+  }
+  function field(label, input, hint) { return h("div", {}, h("label", { class: "f", text: label }), input, hint ? h("div", { class: "hint", text: hint }) : null); }
+  function text(v, ph) { return h("input", { type: "text", value: v == null ? "" : v, placeholder: ph || "" }); }
+  function num(v, ph) { return h("input", { type: "number", step: "any", inputmode: "decimal", value: v == null ? "" : v, placeholder: ph || "" }); }
+  function select(opts, v) {
+    var s = h("select");
+    opts.forEach(function (o) { s.appendChild(h("option", { value: o[0], text: o[1] })); });
+    s.value = v == null ? "" : String(v); return s;
+  }
+  /** A row of tick pills. Returns { el, get() }. */
+  function checks(opts, selected) {
+    var box = h("div", { class: "checks" }); var inputs = {};
+    opts.forEach(function (o) {
+      var i = h("input", { type: "checkbox", checked: selected.indexOf(o[0]) !== -1 });
+      var l = h("label", { class: "chk" + (i.checked ? " on" : "") }, i, o[1]);
+      i.addEventListener("change", function () { l.classList.toggle("on", i.checked); });
+      inputs[o[0]] = i; box.appendChild(l);
+    });
+    return { el: box, get: function () { return opts.map(function (o) { return o[0]; }).filter(function (k) { return inputs[k].checked; }); } };
+  }
+  function nn(el) { var v = el.value.trim(); return v === "" ? null : Number(v); }
+  function ns(el) { var v = el.value.trim(); return v === "" ? null : v; }
+  function confirmDo(text, fn) { if (window.confirm(text)) fn(); }
+  function head(title, sub, right) {
+    return h("div", { class: "bar" }, h("div", { class: "grow" }, h("h2", { text: title }), sub ? h("div", { class: "muted", text: sub }) : null), right || null);
+  }
+  function loading(root) { root.textContent = ""; root.appendChild(h("div", { class: "empty", text: "Loading…" })); }
+
+  // ---------- Ride types ----------
+  var rt = { region: "", regions: [] };
+  var CATEGORIES = [["car", "Car"], ["bike", "Bike"], ["tricycle", "Tricycle"], ["bus", "Bus or van"], ["van", "Van"], ["delivery", "Delivery"], ["other", "Other"]];
+  var BOOKING = [["now", "Book now"], ["scheduled", "Scheduled"], ["multi_drop", "Multi-drop"], ["bidding", "Bidding"], ["for_other", "For someone else"]];
+  var PAYMENTS = [["cash", "Cash"], ["wallet", "Wallet"], ["card", "Card"], ["virtual_account", "Virtual account"]];
+
+  function pageRideTypes(root) {
+    loading(root);
+    var regionsReq = can("region list") ? api("GET", "/admin/regions") : Promise.resolve({ body: { data: [] } });
+    Promise.all([regionsReq, api("GET", "/admin/services" + (rt.region ? "?region_id=" + rt.region : ""))]).then(function (res) {
+      rt.regions = (res[0].body && res[0].body.data) || [];
+      var list = (res[1].body && res[1].body.data) || [];
+      root.textContent = "";
+      var regionSel = select([["", "All regions"]].concat(rt.regions.map(function (r) { return [r.id, r.name || ("Region " + r.id)]; })), rt.region);
+      regionSel.addEventListener("change", function () { rt.region = regionSel.value; pageRideTypes(root); });
+      root.appendChild(head("Ride types", "Add, price, switch on or off and reorder what riders can book.",
+        can("service add") ? h("button", { text: "Add ride type", on: { click: function () { rideTypeForm(root, null); } } }) : null));
+      root.appendChild(h("div", { class: "card" }, field("Region", regionSel)));
+
+      var card = h("div", { class: "card" });
+      if (!list.length) {
+        card.appendChild(h("div", { class: "empty", text: rt.regions.length ? "No ride types here yet." : "Add a region first, then its ride types." }));
+        if (rt.region && can("service add")) {
+          card.appendChild(h("p", { style: "text-align:center" }, h("button", { text: "Add the starter set", on: { click: function () {
+            api("POST", "/admin/regions/" + rt.region + "/starter-ride-types").then(function (r) { toast(r.ok ? r.body.message : errText(r), !r.ok); pageRideTypes(root); });
+          } } })));
+          card.appendChild(h("p", { class: "muted", style: "text-align:center", text: "Adds Go, Comfort, XL, Premium, Bike, Keke, Shuttle and more, all switched off with placeholder fares for you to review." }));
+        }
+      }
+      list.forEach(function (s, i) {
+        var acts = h("div", { class: "acts" });
+        if (can("service edit") && list.length > 1) {
+          acts.appendChild(h("button", { class: "ghost small", text: "↑", "aria-label": "Move up", disabled: i === 0, on: { click: function () { move(list, i, -1, root); } } }));
+          acts.appendChild(h("button", { class: "ghost small", text: "↓", "aria-label": "Move down", disabled: i === list.length - 1, on: { click: function () { move(list, i, 1, root); } } }));
+        }
+        if (can("service edit")) acts.appendChild(h("button", { class: "ghost small", text: "Edit", on: { click: function () { rideTypeForm(root, s.id); } } }));
+        if (can("service add") && rt.regions.length > 1) acts.appendChild(h("button", { class: "ghost small", text: "Copy", on: { click: function () { copyTo(s, root); } } }));
+        if (can("service delete")) acts.appendChild(h("button", { class: "danger small", text: "Delete", on: { click: function () {
+          confirmDo("Delete " + s.name + "?", function () { api("DELETE", "/admin/services/" + s.id).then(function (r) { toast(r.ok ? "Deleted" : errText(r), !r.ok); if (r.ok) pageRideTypes(root); }); });
+        } } }));
+        var sub = [s.category, s.capacity + " seat" + (s.capacity === 1 ? "" : "s"), "from " + naira(s.base_fare), s.region_name].filter(Boolean).join(" · ");
+        card.appendChild(h("div", { class: "item" },
+          h("div", { class: "main" }, h("div", { class: "t", text: s.name + (s.badge ? "  · " + s.badge : "") }), h("div", { class: "s", text: sub }), h("div", { style: "margin-top:8px" }, acts)),
+          can("service edit") ? sw(s.status, function (on, input) {
+            api("PUT", "/admin/services/" + s.id + "/status", { status: on }).then(function (r) { if (!r.ok) { input.checked = !on; toast(errText(r), true); } });
+          }) : h("span", { class: "pill " + (s.status ? "on" : ""), text: s.status ? "On" : "Off" })
+        ));
+      });
+      root.appendChild(card);
+    });
+  }
+  function move(list, i, d, root) {
+    var ids = list.map(function (s) { return s.id; });
+    var t = ids[i]; ids[i] = ids[i + d]; ids[i + d] = t;
+    api("PUT", "/admin/services-order", { ids: ids }).then(function (r) { if (!r.ok) toast(errText(r), true); pageRideTypes(root); });
+  }
+  function copyTo(s, root) {
+    var others = rt.regions.filter(function (r) { return r.id !== s.region_id; });
+    var pick = window.prompt("Copy \"" + s.name + "\" to which region? Type a number:\n" + others.map(function (r, i) { return (i + 1) + ". " + r.name; }).join("\n"));
+    var r = others[Number(pick) - 1]; if (!r) return;
+    api("POST", "/admin/services/" + s.id + "/duplicate", { region_id: r.id }).then(function (x) { toast(x.ok ? "Copied to " + r.name + " (switched off)" : errText(x), !x.ok); });
+  }
+
+  function rideTypeForm(root, id) {
+    loading(root);
+    var one = id ? api("GET", "/admin/services/" + id) : Promise.resolve({ body: { data: {} } });
+    one.then(function (r) {
+      var s = (r.body && r.body.data) || {};
+      if (id && !r.ok) { toast("Ride type not found", true); return pageRideTypes(root); }
+      var i18n = s.name_i18n || {}, hrs = s.working_hours;
+      var f = {
+        name: text(s.name), region_id: select(rt.regions.map(function (g) { return [g.id, g.name]; }), s.region_id || rt.region || (rt.regions[0] && rt.regions[0].id)),
+        category: select(CATEGORIES, s.category || "car"), capacity: num(s.capacity == null ? 4 : s.capacity),
+        description: text(s.description), icon_url: text(s.icon_url, "https://…"), photo_url: text(s.photo_url, "https://…"),
+        ha: text(i18n.ha), yo: text(i18n.yo), ig: text(i18n.ig), pcm: text(i18n.pcm),
+        base_fare: num(s.base_fare), minimum_fare: num(s.minimum_fare), minimum_distance: num(s.minimum_distance),
+        per_distance: num(s.per_distance), per_minute_drive: num(s.per_minute_drive), per_minute_wait: num(s.per_minute_wait),
+        waiting_time_limit: num(s.waiting_time_limit), cancellation_fee: num(s.cancellation_fee),
+        commission_type: select([["percentage", "Percentage"], ["fixed", "Fixed amount"]], s.commission_type || "percentage"),
+        admin_commission: num(s.admin_commission == null ? 15 : s.admin_commission), fleet_commission: num(s.fleet_commission == null ? 0 : s.fleet_commission),
+        booking: checks(BOOKING, s.booking_modes || ["now"]), payments: checks(PAYMENTS, s.payment_methods || ["cash", "wallet"]),
+        min_driver_rating: num(s.min_driver_rating), min_wallet_balance: num(s.min_wallet_balance),
+        limit_hours: h("input", { type: "checkbox", checked: !!hrs }), from: h("input", { type: "time", value: hrs ? hrs.from : "06:00" }), to: h("input", { type: "time", value: hrs ? hrs.to : "22:00" }),
+        badge: text(s.badge, "New, Popular…"), sort_order: num(s.sort_order || 0), status: h("input", { type: "checkbox", checked: s.status !== false && !!id ? s.status : false })
+      };
+      var out = h("p", { class: "msg" });
+      root.textContent = "";
+      root.appendChild(head(id ? "Edit ride type" : "Add ride type", null, h("button", { class: "ghost", text: "Back", on: { click: function () { pageRideTypes(root); } } })));
+      var card = h("div", { class: "card" });
+      card.appendChild(h("h3", { text: "Basics" }));
+      card.appendChild(field("Name", f.name));
+      card.appendChild(h("div", { class: "grid2" }, field("Region", f.region_id), field("Category", f.category)));
+      card.appendChild(h("div", { class: "grid2" }, field("Seats or load capacity", f.capacity), field("Badge", f.badge)));
+      card.appendChild(field("Short description", f.description));
+      card.appendChild(h("div", { class: "grid2" }, field("Icon link", f.icon_url), field("Photo link", f.photo_url)));
+      card.appendChild(h("h3", { text: "Name in other languages" }));
+      card.appendChild(h("div", { class: "grid2" }, field("Hausa", f.ha), field("Yoruba", f.yo), field("Igbo", f.ig), field("Pidgin", f.pcm)));
+      card.appendChild(h("h3", { text: "Fare (₦)" }));
+      card.appendChild(h("div", { class: "grid2" }, field("Base fare", f.base_fare), field("Minimum fare", f.minimum_fare), field("Minimum distance", f.minimum_distance), field("Per distance", f.per_distance),
+        field("Per minute driving", f.per_minute_drive), field("Per minute waiting", f.per_minute_wait), field("Free waiting (minutes)", f.waiting_time_limit), field("Cancellation fee", f.cancellation_fee)));
+      card.appendChild(h("h3", { text: "Commission" }));
+      card.appendChild(h("div", { class: "grid2" }, field("Type", f.commission_type), field("DROP share", f.admin_commission), field("Fleet share", f.fleet_commission)));
+      card.appendChild(h("h3", { text: "Booking and payment" }));
+      card.appendChild(field("Booking modes", f.booking.el));
+      card.appendChild(field("Payment methods allowed", f.payments.el, "Cash and wallet work in the shipped apps today. Card and virtual account follow with the native payment screens."));
+      card.appendChild(h("h3", { text: "Driver rules" }));
+      card.appendChild(h("div", { class: "grid2" }, field("Minimum driver rating (0-5)", f.min_driver_rating), field("Minimum wallet balance (₦)", f.min_wallet_balance, "Blocks new trips below this. Can be negative.")));
+      card.appendChild(h("h3", { text: "Availability" }));
+      card.appendChild(h("label", { class: "chk", style: "margin-top:10px" }, f.limit_hours, "Only available between set hours"));
+      card.appendChild(h("div", { class: "grid2" }, field("From", f.from), field("To", f.to)));
+      card.appendChild(field("Display order (lowest first)", f.sort_order));
+      card.appendChild(h("div", { class: "row" }, h("div", { text: "Available to riders" }), h("label", { class: "switch" }, f.status, h("span"))));
+      card.appendChild(out);
+      var save = h("button", { text: id ? "Save changes" : "Add ride type", style: "width:100%;margin-top:14px" });
+      save.addEventListener("click", function () {
+        var names = {}; ["ha", "yo", "ig", "pcm"].forEach(function (k) { if (f[k].value.trim()) names[k] = f[k].value.trim(); });
+        var body = {
+          name: f.name.value.trim(), region_id: Number(f.region_id.value), category: f.category.value, capacity: Number(f.capacity.value || 1),
+          description: ns(f.description), icon_url: ns(f.icon_url), photo_url: ns(f.photo_url), name_i18n: names,
+          base_fare: nn(f.base_fare) || 0, minimum_fare: nn(f.minimum_fare) || 0, minimum_distance: nn(f.minimum_distance) || 0, per_distance: nn(f.per_distance) || 0,
+          per_minute_drive: nn(f.per_minute_drive) || 0, per_minute_wait: nn(f.per_minute_wait) || 0, waiting_time_limit: nn(f.waiting_time_limit) || 0, cancellation_fee: nn(f.cancellation_fee) || 0,
+          commission_type: f.commission_type.value, admin_commission: nn(f.admin_commission) || 0, fleet_commission: nn(f.fleet_commission) || 0,
+          booking_modes: f.booking.get(), payment_methods: f.payments.get(),
+          min_driver_rating: nn(f.min_driver_rating), min_wallet_balance: nn(f.min_wallet_balance),
+          working_hours: f.limit_hours.checked ? { from: f.from.value, to: f.to.value } : null,
+          badge: ns(f.badge), sort_order: Number(f.sort_order.value || 0), status: f.status.checked
+        };
+        if (!id) body.description_i18n = {};
+        if (!body.name) return msg(out, "Enter a name.");
+        if (!body.region_id) return msg(out, "Pick a region.");
+        if (!body.booking_modes.length) return msg(out, "Pick at least one booking mode.");
+        if (!body.payment_methods.length) return msg(out, "Pick at least one payment method.");
+        save.disabled = true; msg(out, "");
+        api(id ? "PUT" : "POST", "/admin/services" + (id ? "/" + id : ""), body).then(function (r) {
+          save.disabled = false;
+          if (r.ok) { toast("Saved"); rt.region = String(body.region_id); pageRideTypes(root); } else msg(out, errText(r));
+        });
+      });
+      card.appendChild(save);
+      root.appendChild(card);
+    });
+  }
+
+  // ---------- Regions ----------
+  function pageRegions(root) {
+    loading(root);
+    api("GET", "/admin/regions").then(function (r) {
+      var list = (r.body && r.body.data) || [];
+      root.textContent = "";
+      root.appendChild(head("Regions", "The areas where Drop operates.", can("region add") ? h("button", { text: "Add region", on: { click: function () { regionForm(root, null); } } }) : null));
+      var card = h("div", { class: "card" });
+      if (!list.length) card.appendChild(h("div", { class: "empty", text: "No regions yet. Add your first operating area." }));
+      list.forEach(function (g) {
+        var acts = h("div", { class: "acts" });
+        if (can("region edit")) acts.appendChild(h("button", { class: "ghost small", text: "Edit", on: { click: function () { regionForm(root, g); } } }));
+        if (can("region delete")) acts.appendChild(h("button", { class: "danger small", text: "Delete", on: { click: function () {
+          confirmDo("Delete region " + g.name + "?", function () { api("DELETE", "/admin/regions/" + g.id).then(function (x) { toast(x.ok ? "Deleted" : errText(x), !x.ok); if (x.ok) pageRegions(root); }); });
+        } } }));
+        card.appendChild(h("div", { class: "item" },
+          h("div", { class: "main" }, h("div", { class: "t", text: g.name || "Region " + g.id }),
+            h("div", { class: "s", text: g.ride_types + " ride type" + (g.ride_types === 1 ? "" : "s") + " · " + g.timezone + " · " + g.distance_unit + (g.coordinates ? " · boundary set" : " · no boundary") }),
+            h("div", { style: "margin-top:8px" }, acts)),
+          h("span", { class: "pill " + (g.status ? "on" : ""), text: g.status ? "On" : "Off" })));
+      });
+      root.appendChild(card);
+    });
+  }
+  function regionForm(root, g) {
+    var pts = (g && g.coordinates || []).map(function (p) { return p.lat + ", " + p.lng; }).join("\n");
+    var f = {
+      name: text(g && g.name), unit: select([["km", "Kilometres"], ["mile", "Miles"]], g ? g.distance_unit : "km"),
+      tz: text(g ? g.timezone : "Africa/Lagos"), poly: h("textarea", { placeholder: "9.0765, 7.3986\n9.1000, 7.4500\n9.0400, 7.5000" }),
+      status: h("input", { type: "checkbox", checked: g ? g.status : true })
+    };
+    f.poly.value = pts;
+    var out = h("p", { class: "msg" });
+    root.textContent = "";
+    root.appendChild(head(g ? "Edit region" : "Add region", null, h("button", { class: "ghost", text: "Back", on: { click: function () { pageRegions(root); } } })));
+    var card = h("div", { class: "card" },
+      field("Name", f.name), h("div", { class: "grid2" }, field("Distance unit", f.unit), field("Time zone", f.tz)),
+      field("Boundary points (optional)", f.poly, "One point per line as latitude, longitude. At least 3. Drawing the boundary on a map comes with the Google Maps step."),
+      h("div", { class: "row" }, h("div", { text: "Region is active" }), h("label", { class: "switch" }, f.status, h("span"))), out);
+    var save = h("button", { text: "Save", style: "width:100%;margin-top:14px" });
+    save.addEventListener("click", function () {
+      var coords = null, lines = f.poly.value.split("\n").map(function (x) { return x.trim(); }).filter(Boolean);
+      if (lines.length) {
+        coords = lines.map(function (l) { var p = l.split(/[ ,]+/); return { lat: Number(p[0]), lng: Number(p[1]) }; });
+        if (coords.some(function (p) { return !isFinite(p.lat) || !isFinite(p.lng); })) return msg(out, "Each boundary line must be: latitude, longitude.");
+      }
+      if (!f.name.value.trim()) return msg(out, "Enter a name.");
+      save.disabled = true; msg(out, "");
+      api(g ? "PUT" : "POST", "/admin/regions" + (g ? "/" + g.id : ""), { name: f.name.value.trim(), distance_unit: f.unit.value, timezone: f.tz.value.trim(), status: f.status.checked, coordinates: coords })
+        .then(function (r) { save.disabled = false; if (r.ok) { toast("Saved"); pageRegions(root); } else msg(out, errText(r)); });
+    });
+    card.appendChild(save); root.appendChild(card);
+  }
+
+  // ---------- Ride options ----------
+  function pageOptions(root) {
+    loading(root);
+    api("GET", "/admin/service-options").then(function (r) {
+      var list = (r.body && r.body.data) || [];
+      root.textContent = "";
+      root.appendChild(head("Ride options", "Extras riders can tick when booking, each with its own price."));
+      if (can("service_option add")) {
+        var n = text("", "e.g. Roof rack"), p = num("", "Price (₦)"), out = h("p", { class: "msg" });
+        var add = h("button", { text: "Add option", style: "width:100%;margin-top:14px" });
+        add.addEventListener("click", function () {
+          if (!n.value.trim()) return msg(out, "Enter a name.");
+          add.disabled = true;
+          api("POST", "/admin/service-options", { name: n.value.trim(), price: nn(p) || 0 }).then(function (x) { add.disabled = false; if (x.ok) { toast("Added"); pageOptions(root); } else msg(out, errText(x)); });
+        });
+        root.appendChild(h("div", { class: "card" }, h("div", { class: "grid2" }, field("Name", n), field("Price (₦)", p)), out, add));
+      }
+      var card = h("div", { class: "card" });
+      if (!list.length) card.appendChild(h("div", { class: "empty", text: "No options yet." }));
+      list.forEach(function (o) {
+        var price = num(o.price);
+        var acts = h("div", { class: "acts" });
+        if (can("service_option edit")) acts.appendChild(h("button", { class: "ghost small", text: "Save price", on: { click: function () {
+          api("PUT", "/admin/service-options/" + o.id, { price: nn(price) || 0 }).then(function (x) { toast(x.ok ? "Saved" : errText(x), !x.ok); });
+        } } }));
+        if (can("service_option delete")) acts.appendChild(h("button", { class: "danger small", text: "Delete", on: { click: function () {
+          confirmDo("Delete " + o.name + "?", function () { api("DELETE", "/admin/service-options/" + o.id).then(function (x) { toast(x.ok ? "Deleted" : errText(x), !x.ok); if (x.ok) pageOptions(root); }); });
+        } } }));
+        card.appendChild(h("div", { class: "item" },
+          h("div", { class: "main" }, h("div", { class: "t", text: o.name }), h("div", { style: "max-width:200px;margin-top:6px" }, price), h("div", { style: "margin-top:8px" }, acts)),
+          can("service_option edit") ? sw(o.status, function (on, input) {
+            api("PUT", "/admin/service-options/" + o.id, { status: on }).then(function (x) { if (!x.ok) { input.checked = !on; toast(errText(x), true); } });
+          }) : null));
+      });
+      root.appendChild(card);
+    });
+  }
+
+  // ---------- Payment methods (unchanged behaviour, moved here) ----------
+  var pm = { data: [], mode: {}, flash: null };
+  function pagePayments(root) {
+    loading(root);
+    api("GET", "/admin/payment-gateways").then(function (r) {
+      pm.data = (r.body && r.body.data) || [];
+      root.textContent = "";
+      var warn = h("p", { class: "msg err", text: "The server encryption key is not set yet, so credentials cannot be saved. Add the SETTINGS_ENCRYPTION_KEY secret in Cloudflare." });
+      if (r.body && r.body.encryption_configured === false) warn.style.display = "block";
+      root.appendChild(h("div", { class: "card" }, h("h2", { text: "Payment methods" }),
+        h("p", { class: "muted", style: "margin:0", text: "Add each gateway's keys when its account is ready. Secret values are encrypted and never shown again after saving." }), warn));
+      var list = h("div"); root.appendChild(list); renderPayments(list, root);
+    });
+  }
+  function putGateway(type, body, out, done, fail) {
+    msg(out, "");
+    api("PUT", "/admin/payment-gateways/" + encodeURIComponent(type), body).then(function (r) {
+      if (r.status === 200) { pm.flash = { type: type, text: "Saved." }; msg(out, "Saved.", true); done && done(); }
+      else { msg(out, errText(r)); fail && fail(); }
+    });
+  }
+  function renderPayments(list, root) {
+    list.textContent = "";
+    var canEdit = can("payment_gateway edit");
+    pm.data.forEach(function (g) {
+      var mode = pm.mode[g.type] || (g.is_test ? "test" : "live");
+      var ready = g.ready_test || g.ready_live;
+      var card = h("div", { class: "card" });
+      card.appendChild(h("div", { class: "item", style: "border:0;padding:0" }, h("div", { class: "main t", text: g.title }),
+        h("span", { class: "pill " + (g.status ? "on" : ""), text: g.status ? "On" : "Off" }),
+        g.fields.length ? h("span", { class: "pill " + (ready ? "on" : "warn"), text: ready ? "Keys added" : "Needs keys" }) : null));
+      var out = h("p", { class: "msg" });
+      var reload = function () { pagePayments(root); };
+      if (canEdit) {
+        card.appendChild(h("div", { class: "row" }, h("div", { text: "Available to riders" }),
+          sw(g.status, function (on, input) { putGateway(g.type, { status: on }, out, reload, function () { input.checked = !on; }); })));
+      }
+      if (g.fields.length) {
+        if (canEdit) {
+          card.appendChild(h("div", { class: "row" }, h("div", {}, h("div", { text: "Live mode" }), h("div", { class: "hint", text: g.is_test ? "Currently using TEST keys (no real money)." : "Currently using LIVE keys (real money)." })),
+            sw(!g.is_test, function (live, input) {
+              if (live && !window.confirm("Switch " + g.title + " to LIVE? Real money will move.")) { input.checked = false; return; }
+              putGateway(g.type, { is_test: !live }, out, reload, function () { input.checked = !live; });
+            })));
+          var tabs = h("div", { class: "tabs" });
+          ["test", "live"].forEach(function (m) {
+            tabs.appendChild(h("button", { type: "button", class: m === mode ? "active" : "", text: m === "test" ? "Test keys" : "Live keys", on: { click: function () { pm.mode[g.type] = m; renderPayments(list, root); } } }));
+          });
+          card.appendChild(tabs);
+          var inputs = {};
+          g.fields.forEach(function (f) {
+            var cur = f[mode];
+            card.appendChild(h("label", { class: "f", text: f.label }));
+            var inp = h("input", { type: f.secret ? "password" : "text", autocomplete: "off", autocapitalize: "off", spellcheck: "false", placeholder: cur ? (f.secret ? cur.masked + "  (leave blank to keep)" : "") : "Not set" });
+            if (cur && !f.secret) inp.value = cur.value || "";
+            inputs[f.key] = inp; card.appendChild(inp);
+            if (cur && f.secret) card.appendChild(h("div", { class: "set", text: "Saved " + cur.masked }));
+            if (f.hint) card.appendChild(h("div", { class: "hint", text: f.hint }));
+          });
+          var save = h("button", { type: "button", text: "Save " + mode + " keys", style: "width:100%;margin-top:16px" });
+          save.addEventListener("click", function () {
+            var vals = {}; g.fields.forEach(function (f) { var v = inputs[f.key].value; if (v !== "") vals[f.key] = v; });
+            if (!Object.keys(vals).length) return msg(out, "Nothing to save.");
+            var creds = {}; creds[mode] = vals; save.disabled = true;
+            putGateway(g.type, { credentials: creds }, out, reload, function () { save.disabled = false; });
+          });
+          card.appendChild(save);
+        }
+      } else card.appendChild(h("p", { class: "muted", text: "No keys needed." }));
+      card.appendChild(out);
+      if (pm.flash && pm.flash.type === g.type) { msg(out, pm.flash.text, true); pm.flash = null; }
+      list.appendChild(card);
+    });
+    if (!pm.data.length) list.appendChild(h("div", { class: "empty", text: "No payment methods yet." }));
+  }
+
+  // ---------- Roles ----------
+  function pageRoles(root) {
+    loading(root);
+    Promise.all([api("GET", "/admin/roles"), api("GET", "/admin/permissions")]).then(function (res) {
+      var roles = (res[0].body && res[0].body.data) || [], mods = (res[1].body && res[1].body.data) || [];
+      root.textContent = "";
+      root.appendChild(head("Roles", "Decide exactly what each kind of admin can do.", can("role add") ? h("button", { text: "Add role", on: { click: function () { roleForm(root, null, mods); } } }) : null));
+      var card = h("div", { class: "card" });
+      roles.forEach(function (r) {
+        var acts = h("div", { class: "acts" });
+        if (!r.is_super && can("role edit")) acts.appendChild(h("button", { class: "ghost small", text: "Edit", on: { click: function () { roleForm(root, r, mods); } } }));
+        if (!r.is_super && can("role delete")) acts.appendChild(h("button", { class: "danger small", text: "Delete", on: { click: function () {
+          confirmDo("Delete role " + r.label + "?", function () { api("DELETE", "/admin/roles/" + r.id).then(function (x) { toast(x.ok ? "Deleted" : errText(x), !x.ok); if (x.ok) pageRoles(root); }); });
+        } } }));
+        card.appendChild(h("div", { class: "item" }, h("div", { class: "main" }, h("div", { class: "t", text: r.label }),
+          h("div", { class: "s", text: r.is_super ? "Full access · " + r.members + " member" + (r.members === 1 ? "" : "s") : r.permissions.length + " permissions · " + r.members + " member" + (r.members === 1 ? "" : "s") }),
+          h("div", { style: "margin-top:8px" }, acts))));
+      });
+      root.appendChild(card);
+    });
+  }
+  function roleForm(root, r, mods) {
+    var have = r ? r.permissions : [];
+    var name = text(r && r.name, "e.g. support"), label = text(r && r.label, "e.g. Support team");
+    if (r) name.disabled = false;
+    var groups = mods.map(function (m) {
+      var c = checks(m.actions.map(function (a) { return [m.key + " " + a, a]; }), have);
+      return { m: m, c: c };
+    });
+    var out = h("p", { class: "msg" });
+    root.textContent = "";
+    root.appendChild(head(r ? "Edit role" : "Add role", null, h("button", { class: "ghost", text: "Back", on: { click: function () { pageRoles(root); } } })));
+    var card = h("div", { class: "card" }, h("div", { class: "grid2" }, field("Label", label), field("Short name", name, "Lowercase letters, numbers, dash.")), h("h3", { text: "Permissions" }));
+    groups.forEach(function (g) { card.appendChild(h("div", { class: "perm-mod" }, h("div", { class: "name", text: g.m.label }), g.c.el)); });
+    card.appendChild(out);
+    var save = h("button", { text: "Save role", style: "width:100%;margin-top:14px" });
+    save.addEventListener("click", function () {
+      var perms = []; groups.forEach(function (g) { perms = perms.concat(g.c.get()); });
+      save.disabled = true; msg(out, "");
+      api(r ? "PUT" : "POST", "/admin/roles" + (r ? "/" + r.id : ""), { name: name.value.trim(), label: label.value.trim(), permissions: perms })
+        .then(function (x) { save.disabled = false; if (x.ok) { toast("Saved"); pageRoles(root); } else msg(out, errText(x)); });
+    });
+    card.appendChild(save); root.appendChild(card);
+  }
+
+  // ---------- Sub-admins ----------
+  function pageSubAdmins(root) {
+    loading(root);
+    Promise.all([api("GET", "/admin/sub-admins"), can("role list") ? api("GET", "/admin/roles") : Promise.resolve({ body: { data: [] } })]).then(function (res) {
+      var list = (res[0].body && res[0].body.data) || [], roles = (res[1].body && res[1].body.data) || [];
+      root.textContent = "";
+      root.appendChild(head("Sub-admins", "People who can sign in to this dashboard.", can("subadmin add") ? h("button", { text: "Add sub-admin", on: { click: function () { subForm(root, null, roles); } } }) : null));
+      var card = h("div", { class: "card" });
+      list.forEach(function (u) {
+        var acts = h("div", { class: "acts" });
+        if (can("subadmin edit")) acts.appendChild(h("button", { class: "ghost small", text: "Edit", on: { click: function () { subForm(root, u, roles); } } }));
+        if (can("subadmin delete") && u.id !== ME.id) acts.appendChild(h("button", { class: "danger small", text: "Delete", on: { click: function () {
+          confirmDo("Delete " + u.email + "?", function () { api("DELETE", "/admin/sub-admins/" + u.id).then(function (x) { toast(x.ok ? "Deleted" : errText(x), !x.ok); if (x.ok) pageSubAdmins(root); }); });
+        } } }));
+        card.appendChild(h("div", { class: "item" },
+          h("div", { class: "main" }, h("div", { class: "t", text: (u.first_name || "") + " " + (u.last_name || "") }), h("div", { class: "s", text: u.email + " · " + (u.role_label || "No role") }), h("div", { style: "margin-top:8px" }, acts)),
+          h("span", { class: "pill " + (u.status === "active" ? "on" : ""), text: u.status })));
+      });
+      root.appendChild(card);
+    });
+  }
+  function subForm(root, u, roles) {
+    var f = {
+      first: text(u && u.first_name), last: text(u && u.last_name), email: h("input", { type: "email", value: u ? u.email : "" }), user: text(u && u.username),
+      phone: text(u && u.contact_number), role: select(roles.map(function (r) { return [r.id, r.label]; }), u && u.admin_role_id),
+      status: select([["active", "Active"], ["inactive", "Switched off"]], u ? u.status : "active"), pass: h("input", { type: "password", autocomplete: "new-password" })
+    };
+    var out = h("p", { class: "msg" });
+    root.textContent = "";
+    root.appendChild(head(u ? "Edit sub-admin" : "Add sub-admin", null, h("button", { class: "ghost", text: "Back", on: { click: function () { pageSubAdmins(root); } } })));
+    var card = h("div", { class: "card" }, h("div", { class: "grid2" }, field("First name", f.first), field("Last name", f.last), field("Email", f.email), field("Username", f.user), field("Phone", f.phone), field("Role", f.role)),
+      field("Status", f.status), field(u ? "New password (leave blank to keep)" : "Password (10+ characters)", f.pass), out);
+    var save = h("button", { text: "Save", style: "width:100%;margin-top:14px" });
+    save.addEventListener("click", function () {
+      var body = { first_name: f.first.value.trim(), last_name: f.last.value.trim(), email: f.email.value.trim(), username: f.user.value.trim(), contact_number: ns(f.phone), admin_role_id: Number(f.role.value), status: f.status.value };
+      if (f.pass.value) body.password = f.pass.value; else if (!u) return msg(out, "Enter a password (10+ characters).");
+      if (!body.admin_role_id) return msg(out, "Pick a role.");
+      save.disabled = true; msg(out, "");
+      api(u ? "PUT" : "POST", "/admin/sub-admins" + (u ? "/" + u.id : ""), body).then(function (x) { save.disabled = false; if (x.ok) { toast("Saved"); pageSubAdmins(root); } else msg(out, errText(x)); });
+    });
+    card.appendChild(save); root.appendChild(card);
+  }
+
+  // ---------- boot ----------
+  if (location.hash === "#setup") showAuth("setup");
+  else if (TOKEN) start();
+  else showAuth("login");
+})();
