@@ -87,3 +87,10 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--orange); bo
 .toast.err { background: #3a1616; color: var(--bad); }
 .perm-mod { border-top: 1px solid var(--line); padding: 10px 0; }
 .perm-mod .name { font-weight: 600; margin-bottom: 4px; }
+
+.tabs.wrap { flex-wrap: wrap; }
+.tabs.wrap button { flex: 1 1 auto; }
+.docimg { display: block; max-width: 100%; max-height: 420px; border-radius: 10px; margin-top: 10px; border: 1px solid var(--line); }
+.kv { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.kv .k { color: var(--muted); }
+.card textarea { font-family: inherit; min-height: 80px; }
