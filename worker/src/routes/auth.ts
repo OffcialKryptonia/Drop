@@ -58,11 +58,16 @@ authRoutes.post("/login", withDb, async (c) => {
     return c.json({ status: false, message: MESSAGES.userNotActive }, 200);
   }
 
+  // The unified app always opens in Passenger mode. A driver who is still online keeps Driver mode,
+  // and the old driver app (which logs in as user_type driver) stays in Driver mode.
+  const mode = row.user_type === "admin" || row.user_type === "fleet" ? row.active_mode
+    : userType === "driver" && (row.roles as string[]).includes("driver") ? "driver"
+    : row.is_online && row.active_mode === "driver" ? "driver" : "rider";
   const updated = await db.query(
     `update app.users set
-        player_id = coalesce($2, player_id), fcm_token = coalesce($3, fcm_token), last_actived_at = now()
-      where id = $1 returning player_id, fcm_token, last_actived_at`,
-    [row.id, player_id, fcm_token],
+        player_id = coalesce($2, player_id), fcm_token = coalesce($3, fcm_token), last_actived_at = now(), active_mode = $4
+      where id = $1 returning player_id, fcm_token, last_actived_at, active_mode`,
+    [row.id, player_id, fcm_token, mode],
   );
   Object.assign(row, updated.rows[0]);
   delete row.password_hash;
@@ -119,12 +124,13 @@ authRoutes.post("/register", withDb, async (c) => {
     const ins = await db.query(
       `insert into app.users (first_name, last_name, display_name, email, username, password_hash, uid, login_type,
           user_type, status, country_code, contact_number, gender, address, timezone, player_id, fcm_token,
-          service_id, latitude, longitude, partner_referral_code, referral_code, last_actived_at)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22, now())
+          service_id, latitude, longitude, partner_referral_code, referral_code, roles, active_mode, last_actived_at)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24, now())
        returning id`,
       [d.first_name, d.last_name, `${d.first_name} ${d.last_name}`.trim(), d.email, d.username, hash, d.uid,
         d.login_type ?? "app", d.user_type, status, d.country_code, d.contact_number, d.gender ?? null, d.address,
-        d.timezone, d.player_id, d.fcm_token, d.service_id, d.latitude, d.longitude, d.partner_referral_code, referral],
+        d.timezone, d.player_id, d.fcm_token, d.service_id, d.latitude, d.longitude, d.partner_referral_code, referral,
+        d.user_type === "driver" ? ["rider", "driver"] : ["rider"], d.user_type === "driver" ? "driver" : "rider"],
     );
     const id = ins.rows[0].id as number;
     const ud = d.user_detail;
@@ -137,6 +143,10 @@ authRoutes.post("/register", withDb, async (c) => {
           ud.work_address ?? null, ud.home_address ?? null, ud.work_latitude ?? null, ud.work_longitude ?? null,
           ud.home_latitude ?? null, ud.home_longitude ?? null],
       );
+    }
+    if (d.user_type === "driver") {
+      // Registering as a driver through the old flow files an application that waits for admin review.
+      await db.query("insert into app.driver_profiles (user_id, status, service_id, submitted_at) values ($1, 'submitted', $2, now())", [id, d.service_id]);
     }
     if (d.user_type === "driver" && d.service_id) {
       await db.query("insert into app.driver_services (driver_id, service_id) values ($1,$2)", [id, d.service_id]);

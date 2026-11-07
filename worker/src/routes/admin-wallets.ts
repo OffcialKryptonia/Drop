@@ -24,11 +24,11 @@ adminWalletRoutes.get("/admin/driver-wallets", ...guard("driver_wallet list"), a
   const perPage = Math.min(Math.max(Number(c.req.query("per_page")) || 20, 1), 100);
   const page = Math.max(Number(c.req.query("page")) || 1, 1);
 
-  const where = ["u.user_type = 'driver'", "u.deleted_at is null", "$1::numeric is not null"];
+  const where = ["'driver' = any(u.roles)", "u.deleted_at is null", "$1::numeric is not null"];
   const params: unknown[] = [min];
   if (filter === "blocked") where.push("coalesce(w.balance, 0) < $1::numeric");
   if (q) { params.push(`%${q}%`); where.push(`(u.email ilike $${params.length} or u.first_name ilike $${params.length} or u.last_name ilike $${params.length} or u.contact_number ilike $${params.length})`); }
-  const from = `from app.users u left join app.wallets w on w.user_id = u.id where ${where.join(" and ")}`;
+  const from = `from app.users u left join app.wallets w on w.user_id = u.id and w.kind = 'driver' where ${where.join(" and ")}`;
   const total = (await db.query(`select count(*)::int n ${from}`, params)).rows[0].n;
   const rows = (await db.query(
     `select u.id, u.first_name, u.last_name, u.email, u.contact_number, u.status, coalesce(w.balance, 0) as balance, coalesce(w.balance, 0) < $1::numeric as blocked
@@ -43,7 +43,7 @@ adminWalletRoutes.get("/admin/driver-wallets", ...guard("driver_wallet list"), a
 adminWalletRoutes.get("/admin/driver-wallets/:id/ledger", ...guard("driver_wallet list"), async (c) => {
   const id = idParam(c); if (!id) return c.json({ message: "Not found" }, 404);
   const rows = (await c.get("db").query(
-    "select id, direction, amount, balance_after, kind, description, created_at from app.wallet_ledger where user_id = $1 order by created_at desc, id desc limit 30", [id])).rows;
+    "select l.id, l.direction, l.amount, l.balance_after, l.kind, l.description, l.created_at from app.wallet_ledger l join app.wallets w on w.id = l.wallet_id where w.user_id = $1 and w.kind = 'driver' order by l.created_at desc, l.id desc limit 30", [id])).rows;
   return c.json({ data: rows.map((r) => ({ ...r, amount: Number(r.amount), balance_after: Number(r.balance_after) })) });
 });
 
@@ -71,12 +71,12 @@ adminWalletRoutes.post("/admin/driver-wallets/:id/adjust", ...guard("driver_wall
   const amount = toMoney(p.data.amount);
   if (!amount) return validationFailed(c, { amount: ["Enter a valid amount."] });
   const db = c.get("db");
-  const driver = (await db.query("select 1 from app.users where id = $1 and user_type = 'driver' and deleted_at is null", [id])).rowCount;
+  const driver = (await db.query("select 1 from app.users where id = $1 and 'driver' = any(roles) and deleted_at is null", [id])).rowCount;
   if (!driver) return c.json({ message: "Driver not found", status: 404 }, 404);
   try {
     await db.query("begin");
     const r = await postToWallet(db, {
-      userId: id, direction: p.data.direction, amount, kind: "adjustment", allowNegative: true,
+      userId: id, direction: p.data.direction, amount, kind: "adjustment", wallet: "driver", allowNegative: true,
       idempotencyKey: `adjust:${crypto.randomUUID()}`, description: p.data.reason, meta: { by_admin: c.get("user").id },
     });
     await audit(c, "driver_wallet_adjust", String(id), { direction: p.data.direction, amount, reason: p.data.reason });

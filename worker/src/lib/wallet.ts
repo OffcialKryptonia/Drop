@@ -8,6 +8,8 @@ type Post = {
   amount: string; // decimal string with at most 2 places, e.g. "5000.00"
   kind: "topup" | "ride_payment" | "ride_earning" | "commission" | "withdrawal" | "refund" | "adjustment" | "legacy_import";
   idempotencyKey: string;
+  /** Which of the person's two wallets: the rider wallet (default) or the driver/commission wallet. */
+  wallet?: "rider" | "driver";
   /** Only for DRIVER wallets (commission, admin adjustments). Riders can never go below zero. */
   allowNegative?: boolean;
   description?: string;
@@ -28,16 +30,15 @@ export function toMoney(v: unknown): string | null {
  * replayed event returns {duplicate: true} and changes nothing.
  */
 export async function postToWallet(db: Client, p: Post): Promise<{ duplicate: boolean; balance: string }> {
-  await db.query("insert into app.wallets (user_id) values ($1) on conflict (user_id) do nothing", [p.userId]);
-  const w = (await db.query("select id, balance from app.wallets where user_id = $1 for update", [p.userId])).rows[0];
+  const kind = p.wallet ?? "rider";
+  await db.query("insert into app.wallets (user_id, kind, allow_negative) values ($1, $2, $2 = 'driver') on conflict (user_id, kind) do nothing", [p.userId, kind]);
+  const w = (await db.query("select id, balance from app.wallets where user_id = $1 and kind = $2 for update", [p.userId, kind])).rows[0];
 
   const seen = await db.query("select balance_after from app.wallet_ledger where idempotency_key = $1", [p.idempotencyKey]);
   if (seen.rowCount) return { duplicate: true, balance: seen.rows[0].balance_after };
 
   if (p.allowNegative) {
-    const driver = (await db.query("select user_type from app.users where id = $1", [p.userId])).rows[0]?.user_type === "driver";
-    if (!driver) throw new Error("Only driver wallets may go negative");
-    await db.query("update app.wallets set allow_negative = true where id = $1 and not allow_negative", [w.id]);
+    if (kind !== "driver") throw new Error("Only driver wallets may go negative");
   } else if (p.direction === "debit") {
     const ok = (await db.query("select $1::numeric <= $2::numeric as ok", [p.amount, w.balance])).rows[0].ok;
     if (!ok) throw new InsufficientFunds();
