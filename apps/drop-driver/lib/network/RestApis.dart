@@ -9,6 +9,7 @@ import 'package:mighty_core/utils/core_network_utils.dart';
 import 'package:taxi_driver/model/DocumentListModel.dart';
 import 'package:taxi_driver/model/PayoutRecord.dart';
 import 'package:taxi_driver/model/PolyLineData.dart';
+import 'package:taxi_driver/model/VirtualAccountModel.dart';
 import 'package:taxi_driver/model/ReferralHistoryListModel.dart';
 import 'package:taxi_driver/model/ReviewsModel.dart';
 import 'package:taxi_driver/model/RideDetailModel.dart';
@@ -299,6 +300,14 @@ Future<WalletListModel> getWalletList({required int pageData}) async {
   return parseModel(
     apiCall: executeRequest('wallet-list?page=$pageData', method: HttpMethods.GET),
     fromJson: (json) => WalletListModel.fromJson(json),
+  );
+}
+
+/// The driver's own bank account number for wallet top-ups by transfer.
+Future<VirtualAccountModel> getWalletVirtualAccount() async {
+  return parseModel(
+    apiCall: executeRequest('wallet/virtual-account', method: HttpMethods.GET),
+    fromJson: (json) => VirtualAccountModel.fromJson(json),
   );
 }
 
