@@ -9,6 +9,7 @@ export const MODULES: { key: string; label: string; actions: string[] }[] = [
   { key: "service_option", label: "Ride options", actions: ["list", "add", "edit", "delete"] },
   { key: "region", label: "Regions", actions: ["list", "add", "edit", "delete"] },
   { key: "payment_gateway", label: "Payment methods", actions: ["list", "edit"] },
+  { key: "driver_wallet", label: "Driver wallets", actions: ["list", "edit"] },
   { key: "role", label: "Roles", actions: ["list", "add", "edit", "delete"] },
   { key: "subadmin", label: "Sub-admins", actions: ["list", "add", "edit", "delete"] },
 ];

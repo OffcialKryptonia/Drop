@@ -5,6 +5,7 @@ import { requireAuth } from "../auth/middleware";
 import { loadGateway, loadSecrets } from "../lib/gateway-creds";
 import { createStaticAccount, normalizePhone, pocketfiBase, resolveCustomers, verifySignature } from "../lib/pocketfi";
 import { postToWallet, toMoney } from "../lib/wallet";
+import { getGlobalMinBalance } from "../lib/commission";
 
 export const walletRoutes = new Hono<AppEnv>();
 
@@ -15,9 +16,11 @@ walletRoutes.get("/wallet-detail", withDb, requireAuth, async (c) => {
   const me = c.get("user");
   const w = (await c.get("db").query("select id, user_id, balance, currency, created_at, updated_at from app.wallets where user_id = $1", [me.id])).rows[0];
   const balance = num(w?.balance);
+  // Drivers below this balance cannot take new trips (the driver app reads this legacy field).
+  const minToGetRide = me.user_type === "driver" ? await getGlobalMinBalance(c.get("db")) : 0;
   return c.json({
     wallet_data: { id: w?.id ?? 0, user_id: me.id, total_amount: balance, total_withdrawn: 0, currency: w?.currency ?? "NGN", created_at: w?.created_at ?? null, updated_at: w?.updated_at ?? null },
-    min_amount_to_get_ride: 0,
+    min_amount_to_get_ride: minToGetRide,
     total_amount: balance,
   });
 });
