@@ -21,6 +21,12 @@ class WalletScreenState extends State<WalletScreen> {
 
   UserBankAccount? userBankAccount;
 
+  // Bank transfer top-up: the rider's own account number.
+  VirtualAccountData? virtualAccount;
+  bool accountLoading = true;
+  String? accountError;
+  bool accountUnavailable = false; // feature not switched on yet: hide the card
+
   @override
   void initState() {
     super.initState();
@@ -43,6 +49,103 @@ class WalletScreenState extends State<WalletScreen> {
   void init() async {
     getBankDetail();
     getWalletListApi();
+    if (currentPage == 1) loadVirtualAccount();
+  }
+
+  Future<void> loadVirtualAccount() async {
+    if (virtualAccount != null) return;
+    accountLoading = true;
+    accountError = null;
+    setState(() {});
+    await getWalletVirtualAccount().then((value) {
+      virtualAccount = value.data;
+      accountLoading = false;
+      setState(() {});
+    }).catchError((error) {
+      accountLoading = false;
+      final text = error.toString();
+      if (text.toLowerCase().contains('not available yet')) {
+        accountUnavailable = true;
+      } else {
+        accountError = text;
+      }
+      setState(() {});
+    });
+  }
+
+  Widget bankTransferCard() {
+    if (accountUnavailable) return SizedBox();
+    final account = virtualAccount;
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(16),
+      margin: EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        border: Border.all(color: primaryColor.withValues(alpha: 0.5)),
+        borderRadius: BorderRadius.circular(defaultRadius),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.account_balance, color: primaryColor, size: 20),
+              SizedBox(width: 8),
+              Expanded(child: Text(language.fundByTransfer, style: boldTextStyle())),
+            ],
+          ),
+          SizedBox(height: 12),
+          if (accountLoading)
+            Text(language.gettingAccountNumber, style: secondaryTextStyle())
+          else if (account != null && account.accountNumber.validate().isNotEmpty) ...[
+            if (account.bankName.validate().isNotEmpty)
+              Text(account.bankName.validate().toUpperCase(), style: secondaryTextStyle(size: 12)),
+            SizedBox(height: 4),
+            Row(
+              children: [
+                Expanded(
+                  child: SelectableText(
+                    account.accountNumber.validate(),
+                    style: boldTextStyle(size: 26),
+                  ),
+                ),
+                IconButton(
+                  tooltip: language.copyAccountNumber,
+                  icon: Icon(Icons.copy, color: primaryColor),
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: account.accountNumber.validate())).then((_) {
+                      toast(language.accountNumberCopied);
+                    });
+                  },
+                ),
+              ],
+            ),
+            if (account.accountName.validate().isNotEmpty)
+              Text(account.accountName.validate(), style: primaryTextStyle()),
+            SizedBox(height: 12),
+            Text(language.transferHint, style: secondaryTextStyle(size: 12)),
+            SizedBox(height: 12),
+            AppButtonWidget(
+              text: language.copyAccountNumber,
+              width: MediaQuery.of(context).size.width,
+              onTap: () {
+                Clipboard.setData(ClipboardData(text: account.accountNumber.validate())).then((_) {
+                  toast(language.accountNumberCopied);
+                });
+              },
+            ),
+          ] else ...[
+            Text(accountError.validate(), style: secondaryTextStyle()),
+            SizedBox(height: 12),
+            AppButtonWidget(
+              text: language.tryAgain,
+              width: MediaQuery.of(context).size.width,
+              onTap: () => loadVirtualAccount(),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   getWalletListApi() async {
@@ -124,6 +227,7 @@ class WalletScreenState extends State<WalletScreen> {
                       ),
                     ),
                   ),
+                  bankTransferCard(),
                   Text(language.recentTransactions, style: primaryTextStyle()),
                   AnimationLimiter(
                     child: ListView.builder(

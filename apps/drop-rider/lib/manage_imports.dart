@@ -118,6 +118,7 @@ export '../model/RiderModel.dart';
 export '../model/ServiceModel.dart';
 export '../model/StripePayModel.dart';
 export '../model/UserDetailModel.dart';
+export '../model/VirtualAccountModel.dart';
 export '../model/WalkThroughModel.dart';
 export '../model/WalletInfoModel.dart';
 export '../model/WalletListModel.dart';
