@@ -3,6 +3,8 @@ import type { Client } from "pg";
 export type Bindings = {
   ASSETS: Fetcher;
   HYPERDRIVE: Hyperdrive;
+  /** R2 bucket for driver documents and photos. Not bound yet = uploads answer 503. */
+  DOCS?: R2Bucket;
   /** Any long random phrase (32+ chars). Encrypts gateway credentials stored in the database. */
   SETTINGS_ENCRYPTION_KEY?: string;
   /** Lets the very first admin be created; unset it (or leave it) once an admin exists. */

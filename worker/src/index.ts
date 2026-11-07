@@ -8,6 +8,8 @@ import { adminCatalogRoutes } from "./routes/admin-catalog";
 import { walletRoutes } from "./routes/wallet";
 import { adminWalletRoutes } from "./routes/admin-wallets";
 import { modeRoutes } from "./routes/mode";
+import { driverApplicationRoutes } from "./routes/driver-application";
+import { adminDriverApplicationRoutes } from "./routes/admin-driver-applications";
 
 const app = new Hono<AppEnv>();
 
@@ -45,6 +47,8 @@ app.route("/api", adminCatalogRoutes);
 app.route("/api", walletRoutes);
 app.route("/api", adminWalletRoutes);
 app.route("/api", modeRoutes);
+app.route("/api", driverApplicationRoutes);
+app.route("/api", adminDriverApplicationRoutes);
 
 // Any other /api route that does not exist yet returns JSON, never HTML.
 app.all("/api/*", (c) =>

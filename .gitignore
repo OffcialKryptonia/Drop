@@ -42,3 +42,4 @@ local.properties
 # Live database dumps (personal data, never commit)
 drop-dump-*/
 *.sql.gz
+worker/wrangler.test.jsonc
