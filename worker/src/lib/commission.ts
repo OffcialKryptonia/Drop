@@ -20,7 +20,7 @@ export async function getGlobalMinBalance(db: Client): Promise<number> {
 
 /** Can this driver take a trip of this ride type? (balance must be at least the minimum). */
 export async function driverEligibility(db: Client, driverId: number, serviceId?: number | null) {
-  const w = await db.query("select balance from app.wallets where user_id = $1", [driverId]);
+  const w = await db.query("select balance from app.wallets where user_id = $1 and kind = 'driver'", [driverId]);
   const balance = Number(w.rows[0]?.balance ?? 0);
   let min = await getGlobalMinBalance(db);
   if (serviceId) {
@@ -50,7 +50,7 @@ export async function settleDriverForRide(
     if (!amount) return { commission, posted: false }; // zero commission: nothing to take
     const r = await postToWallet(db, {
       userId: ride.driverId, direction: "debit", amount, kind: "commission", rideRequestId: ride.id,
-      idempotencyKey: `commission:ride:${ride.id}`, description: "DROP commission on cash trip", meta, allowNegative: true,
+      idempotencyKey: `commission:ride:${ride.id}`, description: "DROP commission on cash trip", meta, wallet: "driver", allowNegative: true,
     });
     return { commission, posted: !r.duplicate, balance: r.balance };
   }
@@ -58,7 +58,7 @@ export async function settleDriverForRide(
   if (!earning) return { commission, posted: false };
   const r = await postToWallet(db, {
     userId: ride.driverId, direction: "credit", amount: earning, kind: "ride_earning", rideRequestId: ride.id,
-    idempotencyKey: `earning:ride:${ride.id}`, description: "Trip earnings", meta,
+    idempotencyKey: `earning:ride:${ride.id}`, description: "Trip earnings", meta, wallet: "driver",
   });
   return { commission, posted: !r.duplicate, balance: r.balance };
 }

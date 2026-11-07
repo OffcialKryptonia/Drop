@@ -10,14 +10,16 @@ import { getGlobalMinBalance } from "../lib/commission";
 export const walletRoutes = new Hono<AppEnv>();
 
 const num = (v: unknown) => (v === null || v === undefined ? 0 : Number(v));
+/** Which wallet the app is looking at: the driver wallet in Driver mode, the rider wallet otherwise. */
+const kindOf = (u: Record<string, unknown>): "rider" | "driver" => (u.active_mode === "driver" ? "driver" : "rider");
 
 /** Legacy "wallet-detail": the signed-in user's balance. */
 walletRoutes.get("/wallet-detail", withDb, requireAuth, async (c) => {
   const me = c.get("user");
-  const w = (await c.get("db").query("select id, user_id, balance, currency, created_at, updated_at from app.wallets where user_id = $1", [me.id])).rows[0];
+  const w = (await c.get("db").query("select id, user_id, balance, currency, created_at, updated_at from app.wallets where user_id = $1 and kind = $2", [me.id, kindOf(me)])).rows[0];
   const balance = num(w?.balance);
   // Drivers below this balance cannot take new trips (the driver app reads this legacy field).
-  const minToGetRide = me.user_type === "driver" ? await getGlobalMinBalance(c.get("db")) : 0;
+  const minToGetRide = kindOf(me) === "driver" ? await getGlobalMinBalance(c.get("db")) : 0;
   return c.json({
     wallet_data: { id: w?.id ?? 0, user_id: me.id, total_amount: balance, total_withdrawn: 0, currency: w?.currency ?? "NGN", created_at: w?.created_at ?? null, updated_at: w?.updated_at ?? null },
     min_amount_to_get_ride: minToGetRide,
@@ -31,13 +33,14 @@ walletRoutes.get("/wallet-list", withDb, requireAuth, async (c) => {
   const db = c.get("db");
   const perPage = Math.min(Math.max(Number(c.req.query("per_page")) || 20, 1), 100);
   const page = Math.max(Number(c.req.query("page")) || 1, 1);
-  const total = (await db.query("select count(*)::int n from app.wallet_ledger where user_id = $1", [me.id])).rows[0].n;
+  const kind = kindOf(me);
+  const total = (await db.query("select count(*)::int n from app.wallet_ledger l join app.wallets w on w.id = l.wallet_id where w.user_id = $1 and w.kind = $2", [me.id, kind])).rows[0].n;
   const rows = (await db.query(
     `select l.id, l.direction, l.amount, l.balance_after, l.kind, l.description, l.ride_request_id, l.created_at, w.currency
        from app.wallet_ledger l join app.wallets w on w.id = l.wallet_id
-      where l.user_id = $1 order by l.created_at desc, l.id desc limit $2 offset $3`,
-    [me.id, perPage, (page - 1) * perPage])).rows;
-  const w = (await db.query("select id, user_id, balance, currency, created_at, updated_at from app.wallets where user_id = $1", [me.id])).rows[0];
+      where w.user_id = $1 and w.kind = $2 order by l.created_at desc, l.id desc limit $3 offset $4`,
+    [me.id, kind, perPage, (page - 1) * perPage])).rows;
+  const w = (await db.query("select id, user_id, balance, currency, created_at, updated_at from app.wallets where user_id = $1 and kind = $2", [me.id, kind])).rows[0];
   const name = me.display_name ?? `${me.first_name ?? ""} ${me.last_name ?? ""}`.trim();
   return c.json({
     data: rows.map((r) => ({
@@ -67,9 +70,10 @@ walletRoutes.get("/payment-gateway-list", withDb, requireAuth, async (c) => {
 walletRoutes.get("/wallet/virtual-account", withDb, requireAuth, async (c) => {
   const me = c.get("user");
   const db = c.get("db");
+  const kind = kindOf(me);
   const shape = (r: Record<string, string>) => ({ data: { provider: r.provider, bank_name: r.bank_name, account_number: r.account_number, account_name: r.account_name } });
 
-  const existing = (await db.query("select provider, bank_name, account_number, account_name from app.virtual_accounts where user_id = $1 and provider = 'pocketfi' and status = 'active' limit 1", [me.id])).rows[0];
+  const existing = (await db.query("select provider, bank_name, account_number, account_name from app.virtual_accounts where user_id = $1 and wallet_kind = $2 and provider = 'pocketfi' and status = 'active' limit 1", [me.id, kind])).rows[0];
   if (existing) return c.json(shape(existing));
 
   const gw = await loadGateway(db, "pocketfi", c.env.SETTINGS_ENCRYPTION_KEY).catch(() => null);
@@ -86,13 +90,13 @@ walletRoutes.get("/wallet/virtual-account", withDb, requireAuth, async (c) => {
 
   try {
     await db.query(
-      "insert into app.virtual_accounts (user_id, provider, bank_name, account_number, account_name) values ($1,'pocketfi',$2,$3,$4)",
-      [me.id, acct.bankName, acct.accountNumber, acct.accountName]);
+      "insert into app.virtual_accounts (user_id, wallet_kind, provider, bank_name, account_number, account_name) values ($1,$5,'pocketfi',$2,$3,$4)",
+      [me.id, acct.bankName, acct.accountNumber, acct.accountName, kind]);
   } catch (e) {
     if ((e as { code?: string }).code !== UNIQUE_VIOLATION) throw e; // a parallel request saved it first
   }
   c.executionCtx.waitUntil(resolveCustomers(db, base, gw.creds).catch(() => 0));
-  const saved = (await db.query("select provider, bank_name, account_number, account_name from app.virtual_accounts where user_id = $1 and provider = 'pocketfi' limit 1", [me.id])).rows[0];
+  const saved = (await db.query("select provider, bank_name, account_number, account_name from app.virtual_accounts where user_id = $1 and wallet_kind = $2 and provider = 'pocketfi' limit 1", [me.id, kind])).rows[0];
   return c.json(shape(saved));
 });
 
@@ -133,7 +137,7 @@ walletRoutes.post("/webhooks/pocketfi", withDb, async (c) => {
     if (!amount) return await flag("Amount missing or invalid");
     if (!customerId) return await flag("No customer id in payload");
 
-    const find = async () => (await db.query("select user_id from app.virtual_accounts where provider = 'pocketfi' and provider_customer = $1 limit 1", [customerId])).rows[0];
+    const find = async () => (await db.query("select user_id, wallet_kind from app.virtual_accounts where provider = 'pocketfi' and provider_customer = $1 limit 1", [customerId])).rows[0];
     let owner = await find();
     if (!owner) {
       // The customer id is learned lazily from Pocketfi's accounts list. Try that once before flagging.
@@ -146,7 +150,7 @@ walletRoutes.post("/webhooks/pocketfi", withDb, async (c) => {
     if (!owner) return await flag("Unknown customer: no wallet matches this account");
 
     await postToWallet(db, {
-      userId: owner.user_id, direction: "credit", amount, kind: "topup", idempotencyKey: `pocketfi:${reference}`,
+      userId: owner.user_id, wallet: owner.wallet_kind, direction: "credit", amount, kind: "topup", idempotencyKey: `pocketfi:${reference}`,
       description: "Wallet top-up by bank transfer", meta: { provider: "pocketfi", reference, fee },
     });
     await db.query("update app.payment_events set status = 'credited', user_id = $2 where id = $1", [eventId, owner.user_id]);

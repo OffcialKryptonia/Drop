@@ -1,5 +1,6 @@
 // Commission wallet logic against a LOCAL/test database. Run: DATABASE_URL=... npx tsx test/commission.test.ts
 import pg from "pg";
+import { driverModeBlock, driverOnlineBlock } from "../src/lib/roles";
 import { computeCommission, driverEligibility, settleDriverForRide } from "../src/lib/commission";
 import { InsufficientFunds, postToWallet } from "../src/lib/wallet";
 
@@ -19,16 +20,16 @@ ok("zero fare = zero", computeCommission({ commission_type: "percentage", admin_
 
 // --- wallet effects ---
 const mk = async (type: string) => (await db.query(
-  "insert into app.users (first_name,last_name,display_name,email,username,password_hash,login_type,user_type,status) values ('T','T','T',$1,$2,'x','app',$3,'active') returning id",
+  "insert into app.users (first_name,last_name,display_name,email,username,password_hash,login_type,user_type,status,roles) values ('T','T','T',$1,$2,'x','app',$3,'active',case when $3='driver' then array['rider','driver'] else array['rider'] end) returning id",
   [`${type}${s}@x.com`, `${type}${s}`, type])).rows[0].id as number;
 const driver = await mk("driver"), rider = await mk("rider");
 const region = (await db.query("insert into app.regions (name, distance_unit, timezone, status) values ($1,'km','Africa/Lagos',true) returning id", ["R" + s])).rows[0].id;
 const svc = (await db.query("insert into app.services (name, region_id, capacity, base_fare, commission_type, admin_commission, payment_method, status) values ('T',$1,4,0,'percentage',15,'cash_wallet',true) returning id", [region])).rows[0].id;
-const bal = async (u: number) => Number((await db.query("select coalesce((select balance from app.wallets where user_id=$1),0) b", [u])).rows[0].b);
+const bal = async (u: number, kind = u === driver ? "driver" : "rider") => Number((await db.query("select coalesce((select balance from app.wallets where user_id=$1 and kind=$2),0) b", [u, kind])).rows[0].b);
 const tx = async (fn: () => Promise<unknown>) => { await db.query("begin"); try { const r = await fn(); await db.query("commit"); return r; } catch (e) { await db.query("rollback"); throw e; } };
 
 try {
-  await tx(() => postToWallet(db, { userId: driver, direction: "credit", amount: "100.00", kind: "topup", idempotencyKey: `t:${s}:1` }));
+  await tx(() => postToWallet(db, { userId: driver, wallet: "driver", direction: "credit", amount: "100.00", kind: "topup", idempotencyKey: `t:${s}:1` }));
   ok("driver topped up to 100", (await bal(driver)) === 100);
 
   const r1: any = await tx(() => settleDriverForRide(db, { id: 9100 + 1, driverId: driver, serviceId: svc, fare: 2000, paymentType: "cash" }));
@@ -37,13 +38,33 @@ try {
   ok("same ride settled twice changes nothing", !r2.posted && (await bal(driver)) === -200);
 
   ok("below minimum 0: not eligible", (await driverEligibility(db, driver, svc)).eligible === false);
-  await tx(() => postToWallet(db, { userId: driver, direction: "credit", amount: "500.00", kind: "topup", idempotencyKey: `t:${s}:2` }));
+  await tx(() => postToWallet(db, { userId: driver, wallet: "driver", direction: "credit", amount: "500.00", kind: "topup", idempotencyKey: `t:${s}:2` }));
   ok("after topping up: eligible", (await driverEligibility(db, driver, svc)).eligible === true);
   await db.query("update app.services set min_wallet_balance = 1000 where id = $1", [svc]);
   ok("ride type minimum overrides global", (await driverEligibility(db, driver, svc)).eligible === false);
 
   const r3: any = await tx(() => settleDriverForRide(db, { id: 9100 + 2, driverId: driver, serviceId: svc, fare: 1000, paymentType: "wallet" }));
   ok("wallet trip credits fare minus commission (850)", r3.posted && (await bal(driver)) === 300 + 850, JSON.stringify(r3));
+
+  // going online
+  await db.query("update app.services set min_wallet_balance = null where id = $1", [svc]);
+  await db.query("update app.settings set value = '5000'::jsonb where key = 'driver_min_wallet_balance'");
+  ok("online blocked below the minimum", (await driverOnlineBlock(db, driver, svc))?.code === "wallet_below_minimum");
+  await db.query("update app.settings set value = '0'::jsonb where key = 'driver_min_wallet_balance'");
+  ok("online allowed at or above the minimum", (await driverOnlineBlock(db, driver, svc)) === null);
+  const doc = (await db.query("insert into app.documents (name, type, is_required, status) values ('Licence','driver',true,true) returning id")).rows[0].id;
+  await db.query("insert into app.driver_documents (document_id, driver_id, expire_date) values ($1,$2,current_date - 1)", [doc, driver]);
+  ok("online blocked by an expired required document", (await driverOnlineBlock(db, driver, svc))?.code === "documents_expired");
+  await db.query("delete from app.driver_documents where document_id = $1", [doc]); await db.query("delete from app.documents where id = $1", [doc]);
+  ok("no driver profile: mode block says apply first", (await driverModeBlock(db, driver))?.code === "not_driver");
+
+  // one person, two wallets: nothing mixes
+  await tx(() => postToWallet(db, { userId: driver, direction: "credit", amount: "75.00", kind: "topup", idempotencyKey: `t:${s}:rw` }));
+  ok("same person has a separate rider wallet (75)", (await bal(driver, "rider")) === 75);
+  ok("driver wallet unchanged by rider top-up", (await bal(driver, "driver")) === 1150);
+  let cross = false;
+  try { await tx(() => postToWallet(db, { userId: driver, direction: "debit", amount: "100.00", kind: "ride_payment", idempotencyKey: `t:${s}:rw2` })); } catch (e) { cross = e instanceof InsufficientFunds; }
+  ok("rider wallet cannot borrow from the driver wallet", cross && (await bal(driver, "rider")) === 75);
 
   // riders are protected
   let blocked = false;
