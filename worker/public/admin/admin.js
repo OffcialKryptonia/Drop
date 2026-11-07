@@ -92,6 +92,7 @@
     { id: "regions", label: "Regions", group: "Operations", perm: "region list", render: pageRegions },
     { id: "ride-options", label: "Ride options", group: "Operations", perm: "service_option list", render: pageOptions },
     { id: "payment-methods", label: "Payment methods", group: "Financial", perm: "payment_gateway list", render: pagePayments },
+    { id: "driver-wallets", label: "Driver wallets", group: "Financial", perm: "driver_wallet list", render: pageDriverWallets },
     { id: "roles", label: "Roles", group: "System", perm: "role list", render: pageRoles },
     { id: "sub-admins", label: "Sub-admins", group: "System", perm: "subadmin list", render: pageSubAdmins }
   ];
@@ -473,6 +474,93 @@
       list.appendChild(card);
     });
     if (!pm.data.length) list.appendChild(h("div", { class: "empty", text: "No payment methods yet." }));
+  }
+
+  // ---------- Driver wallets (commission) ----------
+  var dw = { filter: "blocked", q: "", page: 1 };
+  function pageDriverWallets(root) {
+    loading(root);
+    var qs = "?filter=" + dw.filter + "&page=" + dw.page + (dw.q ? "&q=" + encodeURIComponent(dw.q) : "");
+    api("GET", "/admin/driver-wallets" + qs).then(function (r) {
+      var b = r.body || {}, list = b.data || [], pg = b.pagination || { page: 1, total_pages: 1, total: 0 };
+      root.textContent = "";
+      root.appendChild(head("Driver wallets", "Cash trips take DROP's commission from the driver's wallet. Below the minimum, a driver cannot take new trips."));
+
+      var min = num(b.minimum), out = h("p", { class: "msg" });
+      var card = h("div", { class: "card" }, field("Minimum balance to take trips (₦)", min, "0 means a driver whose balance is negative is blocked. A ride type can set its own minimum."));
+      if (can("driver_wallet edit")) {
+        var save = h("button", { text: "Save minimum", class: "small", style: "margin-top:10px" });
+        save.addEventListener("click", function () {
+          save.disabled = true;
+          api("PUT", "/admin/wallet-settings", { driver_min_wallet_balance: nn(min) === null ? 0 : nn(min) }).then(function (x) {
+            save.disabled = false; if (x.ok) { toast("Saved"); pageDriverWallets(root); } else msg(out, errText(x));
+          });
+        });
+        card.appendChild(save);
+      }
+      card.appendChild(out); root.appendChild(card);
+
+      var tabs = h("div", { class: "tabs", style: "margin-bottom:12px" });
+      [["blocked", "Blocked"], ["all", "All drivers"]].forEach(function (t) {
+        tabs.appendChild(h("button", { type: "button", class: dw.filter === t[0] ? "active" : "", text: t[1], on: { click: function () { dw.filter = t[0]; dw.page = 1; pageDriverWallets(root); } } }));
+      });
+      root.appendChild(tabs);
+      var search = h("input", { type: "search", value: dw.q, placeholder: "Search name, email or phone" });
+      search.addEventListener("keydown", function (e) { if (e.key === "Enter") { dw.q = search.value.trim(); dw.page = 1; pageDriverWallets(root); } });
+      root.appendChild(h("div", { class: "card" }, search));
+
+      var box = h("div", { class: "card" });
+      if (!list.length) box.appendChild(h("div", { class: "empty", text: dw.filter === "blocked" ? "No blocked drivers." : "No drivers found." }));
+      list.forEach(function (d) {
+        var acts = h("div", { class: "acts" });
+        acts.appendChild(h("button", { class: "ghost small", text: "History", on: { click: function () { driverHistory(root, d); } } }));
+        if (can("driver_wallet edit")) acts.appendChild(h("button", { class: "ghost small", text: "Adjust", on: { click: function () { driverAdjust(root, d); } } }));
+        box.appendChild(h("div", { class: "item" },
+          h("div", { class: "main" }, h("div", { class: "t", text: ((d.first_name || "") + " " + (d.last_name || "")).trim() || d.email }),
+            h("div", { class: "s", text: [d.email, d.contact_number].filter(Boolean).join(" · ") }),
+            h("div", { class: "s", text: "Balance " + naira(d.balance) }), h("div", { style: "margin-top:8px" }, acts)),
+          h("span", { class: "pill " + (d.blocked ? "warn" : "on"), text: d.blocked ? "Blocked" : "OK" })));
+      });
+      if (pg.total_pages > 1) {
+        box.appendChild(h("div", { class: "row" },
+          h("button", { class: "ghost small", text: "Previous", disabled: pg.page <= 1, on: { click: function () { dw.page--; pageDriverWallets(root); } } }),
+          h("span", { class: "muted", text: "Page " + pg.page + " of " + pg.total_pages }),
+          h("button", { class: "ghost small", text: "Next", disabled: pg.page >= pg.total_pages, on: { click: function () { dw.page++; pageDriverWallets(root); } } })));
+      }
+      root.appendChild(box);
+    });
+  }
+  function driverHistory(root, d) {
+    loading(root);
+    api("GET", "/admin/driver-wallets/" + d.id + "/ledger").then(function (r) {
+      var rows = (r.body && r.body.data) || [];
+      root.textContent = "";
+      root.appendChild(head("Wallet history", ((d.first_name || "") + " " + (d.last_name || "")).trim(), h("button", { class: "ghost", text: "Back", on: { click: function () { pageDriverWallets(root); } } })));
+      var card = h("div", { class: "card" });
+      if (!rows.length) card.appendChild(h("div", { class: "empty", text: "No transactions yet." }));
+      rows.forEach(function (x) {
+        card.appendChild(h("div", { class: "item" },
+          h("div", { class: "main" }, h("div", { class: "t", text: (x.direction === "credit" ? "+ " : "- ") + naira(x.amount) + "  · " + x.kind.replace(/_/g, " ") }),
+            h("div", { class: "s", text: new Date(x.created_at).toLocaleString() + (x.description ? " · " + x.description : "") })),
+          h("span", { class: "pill", text: "Bal " + naira(x.balance_after) })));
+      });
+      root.appendChild(card);
+    });
+  }
+  function driverAdjust(root, d) {
+    var dir = select([["credit", "Add money (credit)"], ["debit", "Take money (debit)"]], "credit"), amt = num("", "Amount (₦)"), why = text("", "Reason (required)"), out = h("p", { class: "msg" });
+    root.textContent = "";
+    root.appendChild(head("Adjust wallet", ((d.first_name || "") + " " + (d.last_name || "")).trim() + " · balance " + naira(d.balance), h("button", { class: "ghost", text: "Back", on: { click: function () { pageDriverWallets(root); } } })));
+    var go = h("button", { text: "Apply", style: "width:100%;margin-top:14px" });
+    go.addEventListener("click", function () {
+      var a = nn(amt); if (!a || a <= 0) return msg(out, "Enter an amount."); if (why.value.trim().length < 3) return msg(out, "Give a short reason.");
+      if (!window.confirm((dir.value === "credit" ? "Add " : "Take ") + naira(a) + (dir.value === "credit" ? " to " : " from ") + "this driver's wallet?")) return;
+      go.disabled = true;
+      api("POST", "/admin/driver-wallets/" + d.id + "/adjust", { direction: dir.value, amount: a, reason: why.value.trim() }).then(function (x) {
+        go.disabled = false; if (x.ok) { toast("Done. New balance " + naira(x.body.balance)); pageDriverWallets(root); } else msg(out, errText(x));
+      });
+    });
+    root.appendChild(h("div", { class: "card" }, field("Type", dir), field("Amount (₦)", amt), field("Reason", why, "Saved in the wallet history and the audit log."), out, go));
   }
 
   // ---------- Roles ----------
