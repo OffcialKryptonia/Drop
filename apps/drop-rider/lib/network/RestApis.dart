@@ -168,6 +168,14 @@ Future<WalletListModel> getWalletList({required int page}) async {
   );
 }
 
+/// The rider's own bank account number for wallet top-ups by transfer.
+Future<VirtualAccountModel> getWalletVirtualAccount() async {
+  return parseModel(
+    apiCall: executeRequest('wallet/virtual-account', method: HttpMethods.GET),
+    fromJson: (json) => VirtualAccountModel.fromJson(json),
+  );
+}
+
 Future<PaymentListModel> getPaymentList() async {
   return parseModel(
     apiCall: executeRequest('payment-gateway-list?status=1', method: HttpMethods.GET),
