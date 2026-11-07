@@ -88,6 +88,7 @@
 
   // ---------- shell ----------
   var PAGES = [
+    { id: "driver-applications", label: "Driver applications", group: "People", perm: "driver_application list", render: pageDriverApplications },
     { id: "ride-types", label: "Ride types", group: "Operations", perm: "service list", render: pageRideTypes },
     { id: "regions", label: "Regions", group: "Operations", perm: "region list", render: pageRegions },
     { id: "ride-options", label: "Ride options", group: "Operations", perm: "service_option list", render: pageOptions },
@@ -561,6 +562,138 @@
       });
     });
     root.appendChild(h("div", { class: "card" }, field("Type", dir), field("Amount (₦)", amt), field("Reason", why, "Saved in the wallet history and the audit log."), out, go));
+  }
+
+  // ---------- Driver applications ----------
+  var da = { status: "queue", page: 1, q: "" };
+  var APP_STATUS = { draft: "Draft", submitted: "Submitted", in_review: "In review", needs_changes: "Needs changes", approved: "Approved", rejected: "Rejected", suspended: "Suspended" };
+  var DOC_STATUS = { missing: "Missing", pending: "To review", approved: "Approved", rejected: "Rejected" };
+  function pillFor(st) { return st === "approved" ? "on" : st === "rejected" || st === "suspended" || st === "needs_changes" || st === "missing" ? "warn" : ""; }
+  function fullName(d) { return ((d.first_name || "") + " " + (d.last_name || "")).trim() || d.email || ""; }
+  /** Fetches a private file with the admin's token and returns a temporary blob URL. */
+  function fileUrl(path) {
+    return fetch("/api" + path, { headers: { Authorization: "Bearer " + TOKEN } }).then(function (r) {
+      if (!r.ok) throw new Error("not found");
+      return r.blob();
+    }).then(function (b) { return { url: URL.createObjectURL(b), type: b.type }; });
+  }
+
+  function pageDriverApplications(root) {
+    loading(root);
+    var qs = "?status=" + da.status + "&page=" + da.page + (da.q ? "&q=" + encodeURIComponent(da.q) : "");
+    api("GET", "/admin/driver-applications" + qs).then(function (r) {
+      var b = r.body || {}, list = b.data || [], counts = b.counts || {}, pg = b.pagination || { page: 1, total_pages: 1 };
+      root.textContent = "";
+      root.appendChild(head("Driver applications", "Review documents, then approve, ask for changes or reject."));
+      var queueN = (counts.submitted || 0) + (counts.in_review || 0);
+      var tabs = h("div", { class: "tabs wrap", style: "margin-bottom:12px" });
+      [["queue", "To review" + (queueN ? " (" + queueN + ")" : "")], ["needs_changes", "Needs changes"], ["approved", "Approved"], ["rejected", "Rejected"], ["suspended", "Suspended"], ["all", "All"]].forEach(function (t) {
+        tabs.appendChild(h("button", { type: "button", class: da.status === t[0] ? "active" : "", text: t[1], on: { click: function () { da.status = t[0]; da.page = 1; pageDriverApplications(root); } } }));
+      });
+      root.appendChild(tabs);
+      var search = h("input", { type: "search", value: da.q, placeholder: "Search name, email, phone or plate" });
+      search.addEventListener("keydown", function (e) { if (e.key === "Enter") { da.q = search.value.trim(); da.page = 1; pageDriverApplications(root); } });
+      root.appendChild(h("div", { class: "card" }, search));
+      var box = h("div", { class: "card" });
+      if (!list.length) box.appendChild(h("div", { class: "empty", text: da.status === "queue" ? "Nothing waiting for review." : "No applications here." }));
+      list.forEach(function (a) {
+        var vehicle = [a.vehicle_make, a.vehicle_model, a.vehicle_plate].filter(Boolean).join(" · ");
+        box.appendChild(h("div", { class: "item" },
+          h("div", { class: "main" }, h("div", { class: "t", text: fullName(a) }),
+            h("div", { class: "s", text: [a.ride_type, vehicle].filter(Boolean).join(" · ") || "No vehicle yet" }),
+            h("div", { class: "s", text: [a.email, a.contact_number].filter(Boolean).join(" · ") }),
+            h("div", { class: "s", text: a.submitted_at ? "Submitted " + new Date(a.submitted_at).toLocaleString() : "Not submitted" }),
+            h("div", { style: "margin-top:8px" }, h("button", { class: "ghost small", text: "Open", on: { click: function () { applicationDetail(root, a.id); } } }))),
+          h("span", { class: "pill " + pillFor(a.status), text: APP_STATUS[a.status] || a.status })));
+      });
+      if (pg.total_pages > 1) {
+        box.appendChild(h("div", { class: "row" },
+          h("button", { class: "ghost small", text: "Previous", disabled: pg.page <= 1, on: { click: function () { da.page--; pageDriverApplications(root); } } }),
+          h("span", { class: "muted", text: "Page " + pg.page + " of " + pg.total_pages }),
+          h("button", { class: "ghost small", text: "Next", disabled: pg.page >= pg.total_pages, on: { click: function () { da.page++; pageDriverApplications(root); } } })));
+      }
+      root.appendChild(box);
+    });
+  }
+
+  function applicationDetail(root, id) {
+    loading(root);
+    api("GET", "/admin/driver-applications/" + id).then(function (r) {
+      root.textContent = "";
+      var back = h("button", { class: "ghost", text: "Back", on: { click: function () { pageDriverApplications(root); } } });
+      if (!r.ok) { root.appendChild(head("Application", null, back)); root.appendChild(h("div", { class: "card" }, h("div", { class: "empty", text: errText(r) }))); return; }
+      var d = r.body.data;
+      root.appendChild(head(fullName(d), [d.email, d.contact_number].filter(Boolean).join(" · "), back));
+
+      var info = h("div", { class: "card" },
+        h("div", { class: "bar" }, h("h3", { text: "Application" }), h("span", { class: "pill " + pillFor(d.status), text: APP_STATUS[d.status] || d.status })));
+      var rows = [
+        ["Ride type", d.ride_type], ["Date of birth", d.date_of_birth ? String(d.date_of_birth).slice(0, 10) : null], ["Years driving", d.licence_years],
+        ["Vehicle", [d.vehicle_make, d.vehicle_model, d.vehicle_year, d.vehicle_colour].filter(Boolean).join(" ")], ["Plate", d.vehicle_plate], ["Seats", d.vehicle_seats],
+        ["Submitted", d.submitted_at ? new Date(d.submitted_at).toLocaleString() : null], ["Last decision", d.reviewed_at ? new Date(d.reviewed_at).toLocaleString() : null], ["Note to driver", d.review_note]
+      ];
+      rows.forEach(function (x) { if (x[1] !== null && x[1] !== undefined && x[1] !== "") info.appendChild(h("div", { class: "kv" }, h("span", { class: "k", text: x[0] }), h("span", { text: String(x[1]) }))); });
+      if (d.has_photo) {
+        var holder = h("div", { class: "s", text: "Loading photo…" });
+        info.appendChild(holder);
+        fileUrl("/admin/driver-applications/" + id + "/photo").then(function (f) { holder.textContent = ""; holder.appendChild(h("img", { class: "docimg", src: f.url, alt: "Applicant photo" })); }).catch(function () { holder.textContent = "Photo could not be loaded."; });
+      } else info.appendChild(h("div", { class: "s", text: "No photo uploaded." }));
+      root.appendChild(info);
+
+      var canEdit = can("driver_application edit"), reviewable = d.status === "submitted" || d.status === "in_review";
+      var docs = h("div", { class: "card" }, h("h3", { text: "Documents" }));
+      if (!d.documents.length) docs.appendChild(h("div", { class: "empty", text: "No documents are required for this ride type." }));
+      d.documents.forEach(function (x) {
+        var view = h("div");
+        var acts = h("div", { class: "acts" });
+        if (x.uploaded) acts.appendChild(h("button", { class: "ghost small", text: "View", on: { click: function (e) {
+          var btn = e.target; btn.disabled = true; btn.textContent = "Loading…";
+          fileUrl("/admin/driver-applications/" + id + "/documents/" + x.document_id + "/file").then(function (f) {
+            btn.remove();
+            if (f.type === "application/pdf") view.appendChild(h("a", { href: f.url, target: "_blank", rel: "noopener", text: "Open the PDF" }));
+            else view.appendChild(h("img", { class: "docimg", src: f.url, alt: x.name }));
+          }).catch(function () { btn.disabled = false; btn.textContent = "View"; toast("Could not open the file", true); });
+        } } }));
+        if (x.uploaded && canEdit && reviewable) {
+          if (x.status !== "approved") acts.appendChild(h("button", { class: "small", text: "Approve", on: { click: function () {
+            api("PUT", "/admin/driver-applications/" + id + "/documents/" + x.document_id, { status: "approved" }).then(function (z) { toast(z.ok ? "Approved" : errText(z), !z.ok); if (z.ok) applicationDetail(root, id); });
+          } } }));
+          if (x.status !== "rejected") acts.appendChild(h("button", { class: "danger small", text: "Reject", on: { click: function () {
+            var note = window.prompt("What is wrong with this document? The driver will see this."); if (!note || !note.trim()) return;
+            api("PUT", "/admin/driver-applications/" + id + "/documents/" + x.document_id, { status: "rejected", note: note.trim() }).then(function (z) { toast(z.ok ? "Rejected" : errText(z), !z.ok); if (z.ok) applicationDetail(root, id); });
+          } } }));
+        }
+        docs.appendChild(h("div", { class: "item" },
+          h("div", { class: "main" }, h("div", { class: "t", text: x.name + (x.required ? "" : " (optional)") }),
+            h("div", { class: "s", text: (x.has_expiry_date && x.expire_date ? "Expires " + x.expire_date + " · " : "") + (x.uploaded_at ? "Uploaded " + new Date(x.uploaded_at).toLocaleString() : "Not uploaded") }),
+            x.note ? h("div", { class: "s", text: "Note: " + x.note }) : null,
+            h("div", { style: "margin-top:8px" }, acts), view),
+          h("span", { class: "pill " + pillFor(x.status), text: DOC_STATUS[x.status] || x.status })));
+      });
+      root.appendChild(docs);
+
+      var actions = [];
+      if (d.status === "submitted") actions.push(["start_review", "Start review", "ghost", false]);
+      if (reviewable) { actions.push(["approve", "Approve driver", "", false], ["needs_changes", "Ask for changes", "ghost", true], ["reject", "Reject", "danger", true]); }
+      if (d.status === "approved") actions.push(["suspend", "Suspend driver", "danger", true]);
+      if (d.status === "suspended") actions.push(["reinstate", "Reinstate driver", "", false]);
+      if (canEdit && actions.length) {
+        var note = h("textarea", { rows: "3", placeholder: "Reason (shown to the driver; required to reject, ask for changes or suspend)" });
+        var out = h("p", { class: "msg" }), bar = h("div", { class: "acts", style: "margin-top:12px" });
+        actions.forEach(function (a) {
+          bar.appendChild(h("button", { class: a[2] + " small", text: a[1], on: { click: function (e) {
+            if (a[3] && note.value.trim().length < 3) return msg(out, "Write a short reason first.");
+            if (!window.confirm(a[1] + " for " + fullName(d) + "?")) return;
+            e.target.disabled = true;
+            api("POST", "/admin/driver-applications/" + id + "/review", { action: a[0], note: note.value.trim() || undefined }).then(function (z) {
+              if (z.ok) { toast("Done: " + (APP_STATUS[z.body.status] || z.body.status)); applicationDetail(root, id); }
+              else { e.target.disabled = false; msg(out, errText(z) + (z.body && z.body.missing ? " Still to approve: " + z.body.missing.map(function (m) { return m.name; }).join(", ") + "." : "")); }
+            });
+          } } }));
+        });
+        root.appendChild(h("div", { class: "card" }, h("h3", { text: "Decision" }), note, out, bar));
+      }
+    });
   }
 
   // ---------- Roles ----------
