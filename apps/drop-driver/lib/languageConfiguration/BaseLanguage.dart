@@ -107,6 +107,13 @@ class BaseLanguage {
 
   String get wallet => getContentValueFromKey(60);
 
+  // Bank transfer top-up (English fallbacks; can be translated from the admin language tools later).
+  String get fundByTransfer => 'Top up by bank transfer';
+  String get transferHint => 'Send any amount to this account from any bank app. Your wallet is credited automatically and can cover DROP\'s commission on cash trips.';
+  String get copyAccountNumber => 'Copy account number';
+  String get accountNumberCopied => 'Account number copied';
+  String get gettingAccountNumber => 'Getting your account number…';
+
   String get paymentDetail => getContentValueFromKey(61);
 
   String get rideId => getContentValueFromKey(62);
