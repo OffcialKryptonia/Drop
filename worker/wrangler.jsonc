@@ -22,6 +22,8 @@
       "id": "442add97d75d4cc2bf4c7da8706997af"
     }
   ],
+  // Private bucket for driver documents and photos. Files are only ever served through the Worker.
+  "r2_buckets": [{ "binding": "DOCS", "bucket_name": "drop-docs" }],
   "observability": {
     "enabled": true
   },
