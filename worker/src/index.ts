@@ -8,6 +8,7 @@ import { adminCatalogRoutes } from "./routes/admin-catalog";
 import { walletRoutes } from "./routes/wallet";
 import { adminWalletRoutes } from "./routes/admin-wallets";
 import { modeRoutes } from "./routes/mode";
+import { driverOnlineRoutes } from "./routes/driver-online";
 import { driverApplicationRoutes } from "./routes/driver-application";
 import { adminDriverApplicationRoutes } from "./routes/admin-driver-applications";
 
@@ -47,6 +48,7 @@ app.route("/api", adminCatalogRoutes);
 app.route("/api", walletRoutes);
 app.route("/api", adminWalletRoutes);
 app.route("/api", modeRoutes);
+app.route("/api", driverOnlineRoutes);
 app.route("/api", driverApplicationRoutes);
 app.route("/api", adminDriverApplicationRoutes);
 
