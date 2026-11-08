@@ -6,9 +6,9 @@ import 'package:flutter_mobx/flutter_mobx.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:drop/driver/screens/DashboardScreen.dart';
 
-import '../../main.dart';
-import '../../utils/Common.dart';
-import '../../utils/Constants.dart';
+import '../main.dart';
+import '../utils/Common.dart';
+import '../utils/Constants.dart';
 import '../components/ImageSourceDialog.dart';
 import '../model/ServiceModel.dart';
 import '../network/RestApis.dart';

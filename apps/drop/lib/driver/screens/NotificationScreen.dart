@@ -4,11 +4,11 @@ import 'package:drop/driver/utils/Extensions/dataTypeExtensions.dart';
 import 'package:drop/driver/utils/Extensions/int_extensions.dart';
 import 'package:drop/driver/utils/Images.dart';
 
-import '../../main.dart';
-import '../../network/RestApis.dart';
-import '../../utils/Colors.dart';
-import '../../utils/Common.dart';
-import '../../utils/Extensions/app_common.dart';
+import '../main.dart';
+import '../network/RestApis.dart';
+import '../utils/Colors.dart';
+import '../utils/Common.dart';
+import '../utils/Extensions/app_common.dart';
 import '../model/NotificationListModel.dart';
 import '../utils/Constants.dart';
 import 'ComplaintListScreen.dart';

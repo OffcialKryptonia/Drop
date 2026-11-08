@@ -7,7 +7,7 @@ import 'package:drop/driver/model/UserDetailModel.dart';
 import 'package:drop/driver/utils/Common.dart';
 import 'package:drop/driver/utils/Extensions/dataTypeExtensions.dart';
 
-import '../../main.dart';
+import '../main.dart';
 import '../Services/ChatMessagesService.dart';
 import '../components/ChatItemWidget.dart';
 import '../model/ChatMessageModel.dart';

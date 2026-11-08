@@ -3,7 +3,7 @@ import 'package:mighty_core/core_mighty/mighty_core.dart';
 import 'package:drop/driver/utils/Extensions/core_language_parser.dart';
 import 'package:drop/driver/utils/Extensions/dataTypeExtensions.dart';
 
-import '../../main.dart';
+import '../main.dart';
 import '../languageConfiguration/LanguageDataConstant.dart';
 import '../languageConfiguration/LanguageDefaultJson.dart';
 import '../languageConfiguration/ServerLanguageResponse.dart';

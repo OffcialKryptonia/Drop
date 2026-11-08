@@ -7,8 +7,8 @@ import 'package:pinput/pinput.dart';
 import 'package:drop/driver/screens/DocumentsScreen.dart';
 import 'package:drop/driver/utils/Extensions/dataTypeExtensions.dart';
 
-import '../../main.dart';
-import '../../network/RestApis.dart';
+import '../main.dart';
+import '../network/RestApis.dart';
 import '../Services/AuthService.dart';
 import '../languageConfiguration/LanguageDefaultJson.dart';
 import '../screens/DashboardScreen.dart';

@@ -3,7 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:drop/driver/utils/Common.dart';
 import 'package:drop/driver/utils/Extensions/dataTypeExtensions.dart';
 
-import '../../main.dart';
+import '../main.dart';
 import '../model/ChatMessageModel.dart';
 import '../utils/Colors.dart';
 import '../utils/Constants.dart';

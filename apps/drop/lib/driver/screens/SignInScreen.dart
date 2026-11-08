@@ -13,7 +13,7 @@ import 'package:drop/driver/utils/Extensions/context_extensions.dart';
 import 'package:drop/driver/utils/Extensions/dataTypeExtensions.dart';
 import 'package:drop/driver/utils/Images.dart';
 
-import '../../main.dart';
+import '../main.dart';
 import '../Services/AuthService.dart';
 import '../components/OTPDialog.dart';
 import '../model/UserDetailModel.dart';

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:drop/driver/model/CancleListResponse.dart';
 import 'package:drop/driver/utils/Extensions/extension.dart';
 
-import '../../main.dart';
+import '../main.dart';
 import '../network/RestApis.dart';
 import '../utils/Colors.dart';
 import '../utils/Common.dart';
