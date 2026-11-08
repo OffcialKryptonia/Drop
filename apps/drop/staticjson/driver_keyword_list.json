@@ -13,31 +13,31 @@
         "screenId": "1",
         "keyword_id": 363,
         "keyword_name": "driver_walkthrough_title_2",
-        "keyword_value": "Pickup Rider"
+        "keyword_value": "Pickup Passenger"
       },
       {
         "screenId": "1",
         "keyword_id": 364,
         "keyword_name": "driver_walkthrough_title_3",
-        "keyword_value": "Drop Rider"
+        "keyword_value": "Drop Passenger"
       },
       {
         "screenId": "1",
         "keyword_id": 365,
         "keyword_name": "driver_walkthrough_subtitle_1",
-        "keyword_value": "Get A Ride Request By Nearest Rider"
+        "keyword_value": "Get A Ride Request By Nearest Passenger"
       },
       {
         "screenId": "1",
         "keyword_id": 366,
         "keyword_name": "driver_walkthrough_subtitle_2",
-        "keyword_value": "Accept A Ride Request And Pickup A Rider For Destination"
+        "keyword_value": "Accept A Ride Request And Pickup A Passenger For Destination"
       },
       {
         "screenId": "1",
         "keyword_id": 367,
         "keyword_name": "driver_walkthrough_subtitle_3",
-        "keyword_value": "Drop A Rider To Destination"
+        "keyword_value": "Drop A Passenger To Destination"
       },
       {
         "screenId": "1",
@@ -979,13 +979,13 @@
         "screenId": "9",
         "keyword_id": 320,
         "keyword_name": "riderInformation",
-        "keyword_value": "RIDER INFORMATION"
+        "keyword_value": "PASSENGER INFORMATION"
       },
       {
         "screenId": "9",
         "keyword_id": 312,
         "keyword_name": "aboutRider",
-        "keyword_value": "About Rider"
+        "keyword_value": "About Passenger"
       },
       {
         "screenId": "9",
@@ -1033,7 +1033,7 @@
         "screenId": "9",
         "keyword_id": 235,
         "keyword_name": "riderInformation",
-        "keyword_value": "Rider Information"
+        "keyword_value": "Passenger Information"
       },
       {
         "screenId": "9",
@@ -1075,7 +1075,7 @@
         "screenId": "9",
         "keyword_id": 469,
         "keyword_name": "riderSettleCharge",
-        "keyword_value": "The rider will settle the extra charges using their"
+        "keyword_value": "The passenger will settle the extra charges using their"
       },
       {
         "screenId": "9",
@@ -1105,7 +1105,7 @@
         "screenId": "9",
         "keyword_id": 474,
         "keyword_name": "riderSettleAmount",
-        "keyword_value": "The rider will settle this amount with you."
+        "keyword_value": "The passenger will settle this amount with you."
       },
       {
         "screenId": "9",
@@ -1993,7 +1993,7 @@
         "screenId": "25",
         "keyword_id": 179,
         "keyword_name": "lblWhoRidingMsg",
-        "keyword_value": "Confirm the rider & make sure the trip information"
+        "keyword_value": "Confirm the passenger & make sure the trip information"
       },
       {
         "screenId": "25",
@@ -2389,7 +2389,7 @@
         "screenId": "27",
         "keyword_id": 340,
         "keyword_name": "riderReview",
-        "keyword_value": "Rider Review"
+        "keyword_value": "Passenger Review"
       },
       {
         "screenId": "27",
@@ -2521,7 +2521,7 @@
         "screenId": "30",
         "keyword_id": 139,
         "keyword_name": "mostReliableMightyRiderApp",
-        "keyword_value": "Most Reliable Mighty Rider App"
+        "keyword_value": "Most Reliable Mighty Passenger App"
       },
       {
         "screenId": "30",
@@ -2593,13 +2593,13 @@
         "screenId": "32",
         "keyword_id": 330,
         "keyword_name": "yourAccountIs",
-        "keyword_value": "Taxi Rider"
+        "keyword_value": "Taxi Passenger"
       },
       {
         "screenId": "32",
         "keyword_id": 1,
         "keyword_name": "appName",
-        "keyword_value": "Taxi Rider"
+        "keyword_value": "Taxi Passenger"
       }
     ]
   },
@@ -2683,7 +2683,7 @@
         "screenId": "34",
         "keyword_id": 353,
         "keyword_name": "riderNotAnswer",
-        "keyword_value": "Rider Not answering"
+        "keyword_value": "Passenger Not answering"
       },
       {
         "screenId": "34",
@@ -2695,7 +2695,7 @@
         "screenId": "34",
         "keyword_id": 355,
         "keyword_name": "riderNotOnTime",
-        "keyword_value": "Rider didn't show up on time"
+        "keyword_value": "Passenger didn't show up on time"
       },
       {
         "screenId": "34",
@@ -2731,7 +2731,7 @@
         "screenId": "34",
         "keyword_id": 361,
         "keyword_name": "rideCanceledByRider",
-        "keyword_value": "Ride canceled by Rider"
+        "keyword_value": "Ride canceled by Passenger"
       },
       {
         "screenId": "34",
@@ -3211,7 +3211,7 @@
         "screenId": "39",
         "keyword_id": 377,
         "keyword_name": "bid_under_review_note",
-        "keyword_value": "Please wait while the rider reviews and accepts your bid."
+        "keyword_value": "Please wait while the passenger reviews and accepts your bid."
       },
       {
         "screenId": "39",

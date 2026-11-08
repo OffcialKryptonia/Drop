@@ -10,7 +10,7 @@ export const STARTER_RIDE_TYPES = [
   { name: "DROP Bike", category: "bike", capacity: 1, base_fare: 200, minimum_fare: 400, per_distance: 60, per_minute_drive: 8, description: "Motorcycle taxi that beats traffic. Check local rules before enabling." },
   { name: "DROP Keke", category: "tricycle", capacity: 3, base_fare: 250, minimum_fare: 400, per_distance: 70, per_minute_drive: 8, description: "Tricycle for short local trips. Check local rules before enabling." },
   { name: "DROP Shuttle", category: "bus", capacity: 14, base_fare: 300, minimum_fare: 500, per_distance: 50, per_minute_drive: 5, description: "Shared van priced per seat." },
-  { name: "DROP Women", category: "car", capacity: 4, base_fare: 550, minimum_fare: 850, per_distance: 130, per_minute_drive: 16, description: "Women drivers for women riders." },
+  { name: "DROP Women", category: "car", capacity: 4, base_fare: 550, minimum_fare: 850, per_distance: 130, per_minute_drive: 16, description: "Women drivers for women passengers." },
   { name: "DROP Delivery", category: "delivery", capacity: 1, base_fare: 400, minimum_fare: 700, per_distance: 90, per_minute_drive: 10, description: "Parcels by bike or car." },
   { name: "DROP Hourly", category: "car", capacity: 4, base_fare: 4000, minimum_fare: 4000, per_distance: 0, per_minute_drive: 60, description: "Hire a car and driver by the hour." },
   { name: "DROP Outstation", category: "car", capacity: 4, base_fare: 3000, minimum_fare: 8000, per_distance: 150, per_minute_drive: 10, description: "Intercity trips with route pricing." },

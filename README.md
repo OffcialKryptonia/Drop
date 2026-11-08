@@ -2,14 +2,14 @@
 
 **Mobility, made simpler.**
 
-Drop is a ride-hailing and mobility software project organized as a monorepo. It brings together a Laravel backend and administration interface with separate Flutter applications for riders and drivers.
+Drop is a ride-hailing and mobility software project organized as a monorepo. It brings together a Laravel backend and administration interface with a Flutter app for passengers and drivers.
 
 ## Repository structure
 
 | Path | Component | Technology |
 |---|---|---|
 | `backend-admin/` | Backend services and administration dashboard | Laravel / PHP |
-| `apps/drop/` | Unified DROP app: rider by default, switchable driver mode (`lib/driver/`) | Flutter |
+| `apps/drop/` | Unified DROP app: passenger by default, switchable driver mode (`lib/driver/`) | Flutter |
 | `apps/drop-driver/` | Legacy standalone driver app (archived at slice 8, being replaced by driver mode) | Flutter |
 
 Some imported source directories retain legacy project names. These are implementation-history details and do not change the current product identity: **Drop**.
