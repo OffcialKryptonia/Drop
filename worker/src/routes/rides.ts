@@ -7,6 +7,7 @@ import { readBody, validationFailed } from "../lib/legacy";
 import { quoteRide } from "../lib/ride-pricing";
 import { computeFare } from "../lib/fare";
 import { getSetting } from "../lib/driver-application";
+import { chargeCancellationFee } from "../lib/ride-settlement";
 
 export const rideRoutes = new Hono<AppEnv>();
 type C = Context<AppEnv>;
@@ -48,6 +49,9 @@ const ride = (r: Row) => ({
   fare_breakdown: r.fare_breakdown,
   options: r.options,
   payment_method: r.payment_method,
+  cancellation_fee: Number(r.cancellation_fee ?? 0),
+  paid_with: r.paid_with ?? null,
+  completed_at: r.completed_at ?? null,
   expires_at: r.expires_at,
   created_at: r.created_at,
   driver: r.driver_id
@@ -154,17 +158,35 @@ rideRoutes.get("/ride/current", ...mw, async (c) => {
   return c.json({ status: true, data: row ? ride(row) : null });
 });
 
-/** Cancel the open request while it is still searching or accepted (cancellation fees arrive with trip states). */
+/** Cancel the open request. After a driver has accepted, a late cancellation can cost the ride type's cancellation fee. */
 rideRoutes.post("/ride/cancel", ...mw, async (c) => {
+  const db = c.get("db");
   const body = await readBody(c);
   const reason = typeof body.reason === "string" ? body.reason.trim().slice(0, 300) || null : null;
-  const r = await c.get("db").query(
-    `update app.ride_requests set status = 'cancelled', cancelled_by = 'rider', cancel_reason = $2, cancelled_at = now()
-      where rider_id = $1 and status in ('searching', 'accepted') returning id, driver_id`,
-    [c.get("user").id, reason],
+  const before = (await db.query("select * from app.ride_requests where rider_id = $1 and status in ('searching', 'accepted', 'arrived') order by id desc limit 1", [c.get("user").id])).rows[0];
+  if (!before) {
+    const trip = (await db.query("select 1 from app.ride_requests where rider_id = $1 and status = 'in_progress'", [c.get("user").id])).rowCount;
+    if (trip) return c.json({ status: false, code: "trip_in_progress", message: "Your trip has started. Ask the driver to end it." }, 409);
+    return c.json({ status: false, code: "nothing_to_cancel", message: "There is no ride you can cancel right now." }, 409);
+  }
+  const r = await db.query(
+    `update app.ride_requests set status = 'cancelled', cancelled_by = 'rider', cancel_reason = $3, cancelled_at = now()
+      where id = $1 and rider_id = $2 and status = $4 returning id, driver_id`,
+    [before.id, c.get("user").id, reason, before.status],
   );
-  // The driver who had accepted is free to take other requests again.
-  if (r.rowCount && r.rows[0].driver_id) await c.get("db").query("update app.users set is_available = true where id = $1 and is_online", [r.rows[0].driver_id]);
-  if (!r.rowCount) return c.json({ status: false, code: "nothing_to_cancel", message: "There is no ride you can cancel right now." }, 409);
-  return c.json({ status: true, id: Number(r.rows[0].id) });
+  if (!r.rowCount) return c.json({ status: false, code: "nothing_to_cancel", message: "That ride just changed. Please check again." }, 409);
+  let fee = 0;
+  if (r.rows[0].driver_id) {
+    fee = await chargeCancellationFee(db, { ...before, status_before: before.status }, await getSetting(db, "ride_cancel_grace_seconds", 120));
+    // The driver who had accepted is free to take other requests again.
+    await db.query("update app.users set is_available = true where id = $1 and is_online", [r.rows[0].driver_id]);
+  }
+  return c.json({ status: true, id: Number(r.rows[0].id), cancellation_fee: fee });
+});
+
+/** The passenger's finished and cancelled rides, newest first. */
+rideRoutes.get("/ride/history", ...mw, async (c) => {
+  const rows = (await c.get("db").query(
+    `${RIDE_SELECT} where r.rider_id = $1 and r.status in ('completed', 'cancelled', 'expired') order by r.id desc limit 50`, [c.get("user").id])).rows;
+  return c.json({ status: true, data: rows.map(ride) });
 });

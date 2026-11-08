@@ -5,6 +5,7 @@ import { requireAuth } from "../auth/middleware";
 import { computeCommission, type CommissionRule } from "../lib/commission";
 import { driverOnlineBlock, requireApprovedDriver } from "../lib/roles";
 import { getSetting } from "../lib/driver-application";
+import { completeRide } from "../lib/ride-settlement";
 
 export const driverRideRoutes = new Hono<AppEnv>();
 type C = Context<AppEnv>;
@@ -133,4 +134,58 @@ driverRideRoutes.post("/driver/requests/:id/decline", ...mw, async (c) => {
     );
   }
   return c.json({ status: true });
+});
+
+const notYours = (c: C) => c.json({ status: false, code: "wrong_state", message: "This ride is not in the right state for that." }, 409);
+const idOf = (c: C) => Number(c.req.param("id"));
+
+/** Move a ride one step forward, only if it is this driver's and in the expected state. */
+async function step(c: C, from: string, to: string, stamp: string) {
+  const r = await c.get("db").query(
+    `update app.ride_requests set status = $3, ${stamp} = now() where id = $1 and driver_id = $2 and status = $4 returning id`,
+    [idOf(c), c.get("user").id, to, from],
+  );
+  if (!r.rowCount) return notYours(c);
+  const active = await activeOf(c);
+  return c.json({ status: true, data: active ? request(active, await ruleOf(c, active.service_id)) : null });
+}
+
+/** Driver is at the pickup point. */
+driverRideRoutes.post("/driver/rides/:id/arrived", ...mw, (c) => step(c, "accepted", "arrived", "arrived_at"));
+/** Passenger is in the car: trip starts. */
+driverRideRoutes.post("/driver/rides/:id/start", ...mw, (c) => step(c, "arrived", "in_progress", "started_at"));
+
+/** Trip finished: pays the driver / takes commission and frees the driver for the next request. */
+driverRideRoutes.post("/driver/rides/:id/complete", ...mw, async (c) => {
+  const done = await completeRide(c.get("db"), idOf(c), c.get("user").id);
+  if (!done) return notYours(c);
+  return c.json({ status: true, data: { id: Number(done.id), status: done.status, fare: Number(done.fare), commission: Number(done.commission), earning: Math.round((Number(done.fare) - Number(done.commission)) * 100) / 100, paid_with: done.paid_with, collect_cash: done.paid_with === "cash" } });
+});
+
+/** Driver backs out before the trip starts: the request goes back to other drivers (not this one). No fee for the passenger. */
+driverRideRoutes.post("/driver/rides/:id/cancel", ...mw, async (c) => {
+  const db = c.get("db");
+  const me = c.get("user").id;
+  await db.query("begin");
+  try {
+    const r = await db.query(
+      `update app.ride_requests set status = 'searching', driver_id = null, accepted_at = null, arrived_at = null,
+              expires_at = now() + make_interval(secs => $3::int)
+        where id = $1 and driver_id = $2 and status in ('accepted', 'arrived') returning id`,
+      [idOf(c), me, await getSetting(db, "ride_request_expiry_seconds", 120)],
+    );
+    if (!r.rowCount) { await db.query("rollback"); return notYours(c); }
+    await db.query("insert into app.ride_request_declines (request_id, driver_id) values ($1, $2) on conflict do nothing", [idOf(c), me]);
+    await db.query("update app.users set is_available = true where id = $1", [me]);
+    await db.query("commit");
+  } catch (e) { await db.query("rollback").catch(() => {}); throw e; }
+  return c.json({ status: true });
+});
+
+/** The driver's finished trips with what they earned. */
+driverRideRoutes.get("/driver/rides/history", ...mw, async (c) => {
+  const rows = (await c.get("db").query(
+    `select id, status, fare, commission, paid_with, pickup_address, dropoff_address, distance, distance_unit, completed_at, cancellation_fee
+       from app.ride_requests where driver_id = $1 and status = 'completed' order by id desc limit 50`, [c.get("user").id])).rows;
+  return c.json({ status: true, data: rows.map((r) => ({ ...r, id: Number(r.id), fare: Number(r.fare), commission: Number(r.commission), earning: Math.round((Number(r.fare) - Number(r.commission)) * 100) / 100 })) });
 });
