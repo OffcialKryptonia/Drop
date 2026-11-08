@@ -27,9 +27,8 @@ def white_mark(rider):
 if __name__ == "__main__":
     rider = Image.open(sys.argv[1]).convert("RGB"); driver = Image.open(sys.argv[2]).convert("RGB")
     mark = white_mark(rider)
-    r = os.path.join(ROOT, "drop-rider", "images", "app_images"); d = os.path.join(ROOT, "drop-driver", "images", "app_images")
+    r = os.path.join(ROOT, "drop", "images", "app_images"); d = r
     rider.resize((1024, 1024), Image.LANCZOS).save(f"{r}/ic_app_logo.png", optimize=True)
     mark.save(f"{r}/ic_logo_white.png", optimize=True)
-    driver.resize((1024, 1024), Image.LANCZOS).save(f"{d}/ic_app_logo.png", optimize=True)
-    mark.save(f"{d}/ic_driver_white.png", optimize=True)
+    driver.resize((1024, 1024), Image.LANCZOS).save(f"{d}/driver_ic_app_logo.png", optimize=True)
     print("logos written")
