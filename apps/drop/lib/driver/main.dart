@@ -6,7 +6,7 @@ import 'package:flutter_mobx/flutter_mobx.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:mighty_core/core_mighty/mighty_core.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:drop/driver/screens/SplashScreen.dart';
+import 'package:drop/driver/screens/DriverHomeScreen.dart';
 import 'package:drop/driver/store/AppStore.dart';
 import 'package:drop/driver/utils/Colors.dart';
 import 'package:drop/driver/utils/Common.dart';
@@ -97,7 +97,7 @@ class DriverShell extends StatelessWidget {
         builder: (context, child) {
           return SafeArea(top: false, child: ScrollConfiguration(behavior: MyBehavior(), child: child!));
         },
-        home: SplashScreen(),
+        home: const DriverHomeScreen(),
         supportedLocales: getSupportedLocales(),
         locale: Locale(appStore.selectedLanguage.validate(value: defaultLanguageCode).split('_').first),
         localizationsDelegates: const [
