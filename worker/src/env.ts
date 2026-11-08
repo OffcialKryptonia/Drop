@@ -9,6 +9,8 @@ export type Bindings = {
   SETTINGS_ENCRYPTION_KEY?: string;
   /** Lets the very first admin be created; unset it (or leave it) once an admin exists. */
   ADMIN_BOOTSTRAP_TOKEN?: string;
+  /** Server-side Google Maps key (Routes API) for road distance and time. Unset = straight-line estimate. */
+  GOOGLE_MAPS_SERVER_KEY?: string;
   /** Tests only: points Pocketfi calls at a local mock instead of api.pocketfi.ng. Leave unset in production. */
   POCKETFI_BASE_URL?: string;
 };

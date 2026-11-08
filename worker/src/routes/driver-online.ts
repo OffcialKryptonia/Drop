@@ -48,7 +48,7 @@ driverOnlineRoutes.post("/driver/online", ...mw, async (c) => {
   const block = await driverOnlineBlock(db, me.id, prof?.service_id);
   if (block) return c.json({ status: false, ...block }, 403);
 
-  await db.query("update app.users set is_online = true, is_available = true, latitude = $2, longitude = $3 where id = $1", [me.id, pos.data.latitude, pos.data.longitude]);
+  await db.query("update app.users set is_online = true, is_available = true, latitude = $2, longitude = $3, last_location_update_at = now() where id = $1", [me.id, pos.data.latitude, pos.data.longitude]);
   return c.json({ status: true, is_online: true });
 });
 
@@ -56,6 +56,6 @@ driverOnlineRoutes.post("/driver/online", ...mw, async (c) => {
 driverOnlineRoutes.post("/driver/location", ...mw, async (c) => {
   const pos = coord.safeParse(await readBody(c));
   if (!pos.success) return validationFailed(c, { location: ["The location is invalid."] });
-  const r = await c.get("db").query("update app.users set latitude = $2, longitude = $3 where id = $1 and is_online", [c.get("user").id, pos.data.latitude, pos.data.longitude]);
+  const r = await c.get("db").query("update app.users set latitude = $2, longitude = $3, last_location_update_at = now() where id = $1 and is_online", [c.get("user").id, pos.data.latitude, pos.data.longitude]);
   return c.json({ status: true, updated: (r.rowCount ?? 0) > 0 });
 });
