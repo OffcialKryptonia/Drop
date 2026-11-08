@@ -24,6 +24,8 @@
   ],
   // Private bucket for driver documents and photos. Files are only ever served through the Worker.
   "r2_buckets": [{ "binding": "DOCS", "bucket_name": "drop-docs" }],
+  // Every minute: expire unaccepted ride requests, take silent drivers offline.
+  "triggers": { "crons": ["* * * * *"] },
   "observability": {
     "enabled": true
   },

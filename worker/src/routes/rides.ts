@@ -50,7 +50,26 @@ const ride = (r: Row) => ({
   payment_method: r.payment_method,
   expires_at: r.expires_at,
   created_at: r.created_at,
+  driver: r.driver_id
+    ? {
+        id: Number(r.driver_id),
+        name: [r.driver_first_name, r.driver_last_name].filter(Boolean).join(" "),
+        contact_number: r.driver_contact_number ?? null,
+        vehicle: { make: r.vehicle_make, model: r.vehicle_model, colour: r.vehicle_colour, plate: r.vehicle_plate },
+        location: r.driver_lat == null ? null : { lat: r.driver_lat, lng: r.driver_lng, updated_at: r.driver_location_at },
+      }
+    : null,
 });
+
+/** One ride with its service name and, once accepted, the driver's details and live position. */
+const RIDE_SELECT = `select r.*, s.name as service_name,
+       du.first_name as driver_first_name, du.last_name as driver_last_name, du.contact_number as driver_contact_number,
+       du.latitude as driver_lat, du.longitude as driver_lng, du.last_location_update_at as driver_location_at,
+       p.vehicle_make, p.vehicle_model, p.vehicle_colour, p.vehicle_plate
+  from app.ride_requests r
+  join app.services s on s.id = r.service_id
+  left join app.users du on du.id = r.driver_id
+  left join app.driver_profiles p on p.user_id = r.driver_id`;
 
 /** A request nobody accepted in time becomes 'expired'. (A scheduled sweep arrives with matching.) */
 const expireStale = (c: C) =>
@@ -59,8 +78,7 @@ const expireStale = (c: C) =>
 const currentOf = async (c: C) =>
   (
     await c.get("db").query(
-      `select r.*, s.name as service_name from app.ride_requests r join app.services s on s.id = r.service_id
-        where r.rider_id = $1 and r.status = any($2) order by r.id desc limit 1`,
+      `${RIDE_SELECT} where r.rider_id = $1 and r.status = any($2) order by r.id desc limit 1`,
       [c.get("user").id, OPEN],
     )
   ).rows[0] ?? null;
@@ -121,7 +139,7 @@ rideRoutes.post("/ride/request", ...mw, async (c) => {
       [me.id, type.id, q.region.id, p.data.pickup.lat, p.data.pickup.lng, p.data.pickup.address ?? null, p.data.dropoff.lat, p.data.dropoff.lng, p.data.dropoff.address ?? null,
         q.distance, q.region.distance_unit, q.route.duration_minutes, q.route.source, fare.total, JSON.stringify(fare), JSON.stringify(options), p.data.payment_method, expiry],
     );
-    const row = (await db.query("select r.*, s.name as service_name from app.ride_requests r join app.services s on s.id = r.service_id where r.id = $1", [ins.rows[0].id])).rows[0];
+    const row = (await db.query(`${RIDE_SELECT} where r.id = $1`, [ins.rows[0].id])).rows[0];
     return c.json({ status: true, data: ride(row) }, 201);
   } catch (e) {
     if ((e as { code?: string }).code === "23505") return c.json({ status: false, code: "already_has_ride", message: "You already have a ride in progress." }, 409);
@@ -142,9 +160,11 @@ rideRoutes.post("/ride/cancel", ...mw, async (c) => {
   const reason = typeof body.reason === "string" ? body.reason.trim().slice(0, 300) || null : null;
   const r = await c.get("db").query(
     `update app.ride_requests set status = 'cancelled', cancelled_by = 'rider', cancel_reason = $2, cancelled_at = now()
-      where rider_id = $1 and status in ('searching', 'accepted') returning id`,
+      where rider_id = $1 and status in ('searching', 'accepted') returning id, driver_id`,
     [c.get("user").id, reason],
   );
+  // The driver who had accepted is free to take other requests again.
+  if (r.rowCount && r.rows[0].driver_id) await c.get("db").query("update app.users set is_available = true where id = $1 and is_online", [r.rows[0].driver_id]);
   if (!r.rowCount) return c.json({ status: false, code: "nothing_to_cancel", message: "There is no ride you can cancel right now." }, 409);
   return c.json({ status: true, id: Number(r.rows[0].id) });
 });
