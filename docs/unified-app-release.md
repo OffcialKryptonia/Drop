@@ -12,20 +12,23 @@ The old driver app (`com.kryptonia.dropdriver`) is retired: its code lives on in
 - Sign-up and sign-in, passenger wallet, top-up.
 - "Become a driver" online application, admin review in the web admin (Driver applications), mode switch.
 - Driver home: online/offline with wallet and document checks, location pings.
+- Rides backend: requests, matching (first accept wins), trip states, cash/wallet settlement, cancellation fees, history.
+- Passenger home: pick drop-off on the map, ride types with server prices, request, follow the driver, receipt.
+- Driver home: incoming request cards, accept/decline, navigate, arrived / start / complete, cancel.
 
 ## What is not built yet (blocks a public launch)
-1. Rides backend: ride requests, matching by nearest online drivers, accept, trip states, fares, cash/wallet settlement (the commission and wallet functions already exist), cancellations, ratings.
-2. Driver mode: ride request screen, active trip screen, earnings, trip history (the copied old screens expect the old API).
-3. Push notifications for requests and application decisions (devices table, OneSignal).
+1. Ratings and reviews, scheduled rides, waiting-time charges, card payments for trips.
+2. Driver earnings, payouts/withdrawals and trip history screens, passenger ride history screen (the copied old screens expect the old API).
+3. Push notifications for requests and application decisions (devices table, OneSignal). Until then requests are picked up by polling every 4 seconds while the driver app is open.
 4. Server-driven text for the new screens (currently English strings in code).
-5. Staleness rule: ignore drivers whose last location ping is old.
+5. Live tracking through Firestore (polling every 4 seconds for now).
 
 ## Before the first store build
 - Firebase: add SHA-1/SHA-256 fingerprints to `com.kryptonia.drop`; confirm `google-services.json` / `GoogleService-Info.plist` belong to that app ID; remove `com.kryptonia.dropdriver` afterwards.
-- Google Maps API key restricted to `com.kryptonia.drop`.
+- Google Maps API key (Android manifest and iOS) is required for the passenger map; restricted to `com.kryptonia.drop`.
 - Android: release keystore, versionCode, Play Console listing. Location permission declaration covers foreground use only.
 - iOS: Apple Developer bundle ID `com.kryptonia.drop`, location usage strings reviewed, push capability.
-- Run `flutter analyze` and a real-device pass through: sign-up, top-up, apply as driver, admin approves, switch mode, go online, switch back.
+- Run `flutter analyze` and a real-device pass through: sign-up, top-up, apply as driver, admin approves, switch mode, go online, switch back, then a full test trip: request, accept, arrive, start, complete (cash and wallet).
 - Worker: deployed from `main`, secrets set in the Cloudflare dashboard, R2 bucket `drop-docs` bound.
 
 ## Rollout order
