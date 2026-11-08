@@ -3,6 +3,8 @@ import 'package:mighty_core/utils/core_enum.dart';
 import 'package:mighty_core/utils/core_network_utils.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../utils/Constants.dart' show USER_ID;
+
 const String ACTIVE_MODE_KEY = 'ACTIVE_MODE';
 const String DRIVER_STATUS_KEY = 'DRIVER_STATUS';
 const String USER_ROLES_KEY = 'USER_ROLES';
@@ -66,7 +68,25 @@ class ModeController {
     }
   }
 
-  /// Back to a clean rider state after sign-out.
+  /// Asks the server for the current roles and driver status (approval can change while the app is open).
+  static Future<void> refreshFromServer() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final id = prefs.getInt(USER_ID);
+      if (id == null || id == 0) return;
+      final res = await parseModel<Map<String, dynamic>>(
+        apiCall: executeRequest('user-detail?id=$id', method: HttpMethods.GET),
+        fromJson: (json) => Map<String, dynamic>.from(json as Map),
+      );
+      final data = res['data'];
+      if (data is Map) {
+        final r = data['roles'];
+        await applyUser(r is List ? r.map((e) => e.toString()).toList() : null, data['active_mode']?.toString(), data['driver_status']?.toString());
+      }
+    } catch (_) {}
+  }
+
+  /// Back to a clean passenger state after sign-out.
   static Future<void> clear() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(ACTIVE_MODE_KEY);
