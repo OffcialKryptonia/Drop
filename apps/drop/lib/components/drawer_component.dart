@@ -1,6 +1,7 @@
 import 'package:drop/screens/ReviewsScreen.dart';
 
 import '../manage_imports.dart';
+import 'ModeSwitchTile.dart';
 
 class DrawerComponent extends StatefulWidget {
   final Function(String)? onClose;
@@ -49,6 +50,7 @@ class _DrawerComponentState extends State<DrawerComponent> {
                   }),
                 ),
                 Divider(thickness: 1, height: 40),
+                ModeSwitchTile(target: 'driver'),
                 DrawerWidget(
                   title: language.profile,
                   iconData: ic_my_profile,

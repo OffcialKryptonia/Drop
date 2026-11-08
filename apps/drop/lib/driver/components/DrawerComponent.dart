@@ -27,6 +27,7 @@ import '../utils/Extensions/ConformationDialog.dart';
 import '../utils/Extensions/app_common.dart';
 import '../utils/Images.dart';
 import 'DrawerWidget.dart';
+import 'package:drop/components/ModeSwitchTile.dart';
 
 class DrawerComponent extends StatefulWidget {
   final Function? onCall;
@@ -73,6 +74,7 @@ class _DrawerComponentState extends State<DrawerComponent> {
               }),
             ),
             Divider(thickness: 1, height: 40),
+            ModeSwitchTile(target: 'rider'),
             DrawerWidget(
                 title: language.profile,
                 iconData: ic_my_profile,

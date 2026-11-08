@@ -7,6 +7,7 @@ import 'package:drop/model/search_location_model.dart';
 import 'package:drop/model/select_location_model.dart';
 
 import '../manage_imports.dart';
+import '../service/ModeController.dart';
 
 Future<LoginResponse> signUpApi(Map request) async {
   return parseModel(
@@ -61,6 +62,7 @@ Future<LoginResponse> logInApi(Map request, {bool isSocialLogin = false}) async 
       await appStore.setUserProfile(loginResponse.data!.profileImage.validate());
       await appStore.setReferralCode(loginResponse.data!.referralCode.validate());
       MightyCore().configure(authToken: loginResponse.data!.apiToken.validate());
+      await ModeController.applyUser(loginResponse.data!.roles, loginResponse.data!.activeMode, loginResponse.data!.driverStatus);
     }
     return loginResponse;
   }).catchError((e) {
@@ -447,6 +449,7 @@ logOutSuccess() async {
     sharedPref.remove(REMEMBER_ME);
   }
   sharedPref.remove(LOGIN_TYPE);
+  await ModeController.clear();
   launchScreen(getContext, SignInScreen(), isNewTask: true);
 }
 

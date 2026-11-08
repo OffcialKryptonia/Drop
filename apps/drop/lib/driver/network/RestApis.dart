@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart';
+import 'package:drop/service/ModeController.dart';
 import 'package:mighty_core/core_mighty/mighty_core.dart';
 import 'package:mighty_core/utils/core_enum.dart';
 import 'package:mighty_core/utils/core_network_utils.dart';
@@ -802,7 +803,8 @@ logOutSuccess() async {
   sharedPref.remove(LOGIN_TYPE);
   sharedPref.remove(LATITUDE);
   sharedPref.remove(LONGITUDE);
-  launchScreen(getContext, SignInScreen(), isNewTask: true);
+  // Unified app: signing out of driver mode returns to the rider shell (sign-in).
+  await ModeController.clear();
 }
 
 Future<AppSettingModel> getAppSettingApi() async {

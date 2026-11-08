@@ -1,6 +1,8 @@
 import 'package:mighty_core/core_mighty/mighty_core.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'manage_imports.dart';
+import 'package:drop/driver/main.dart' as drv;
+import 'service/ModeController.dart';
 
 LanguageJsonData? selectedServerLanguageData;
 List<LanguageJsonData>? defaultServerLanguageData = [];
@@ -55,6 +57,8 @@ void main() async {
   FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
   appStore.setLanguage(sharedPref.getString(SELECTED_LANGUAGE_CODE) ?? defaultLanguageCode);
   await appStore.setLoggedIn(sharedPref.getBool(IS_LOGGED_IN) ?? false, isInitializing: true);
+  ModeController.onSignedOut = () => appStore.setLoggedIn(false);
+  await ModeController.restore(sharedPref);
   await appStore.setUserEmail(sharedPref.getString(USER_EMAIL) ?? '', isInitialization: true);
   await appStore.setUserProfile(sharedPref.getString(USER_PROFILE_PHOTO) ?? '');
   try {
@@ -129,6 +133,13 @@ class _MyAppState extends State<MyApp> {
 
   @override
   Widget build(BuildContext context) {
+    return ValueListenableBuilder<String>(
+      valueListenable: ModeController.mode,
+      builder: (context, mode, _) => mode == 'driver' ? _DriverHost() : _riderApp(),
+    );
+  }
+
+  Widget _riderApp() {
     return Observer(builder: (context) {
       return MaterialApp(
         navigatorKey: navigatorKey,
@@ -160,5 +171,32 @@ class MyBehavior extends ScrollBehavior {
   @override
   Widget buildOverscrollIndicator(BuildContext context, Widget child, ScrollableDetails details) {
     return child;
+  }
+}
+
+
+/// Driver mode root: prepares the driver module, then shows it.
+class _DriverHost extends StatefulWidget {
+  @override
+  State<_DriverHost> createState() => _DriverHostState();
+}
+
+class _DriverHostState extends State<_DriverHost> {
+  bool ready = false;
+
+  @override
+  void initState() {
+    super.initState();
+    drv.initDriverModule().whenComplete(() {
+      if (mounted) setState(() => ready = true);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!ready) {
+      return MaterialApp(debugShowCheckedModeBanner: false, home: Scaffold(body: Center(child: CircularProgressIndicator())));
+    }
+    return drv.DriverShell();
   }
 }
