@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import type { Client } from "pg";
 import { z } from "zod";
 import type { AppEnv } from "../env";
 import { withDb } from "../db";
@@ -9,9 +10,12 @@ import { serializeUser } from "../serializers/user";
 
 export const modeRoutes = new Hono<AppEnv>();
 
-/** Does this person have a trip in progress? The rides backend replaces this stub with a real check. */
-async function hasActiveTrip(_userId: number): Promise<boolean> {
-  return false;
+/** Is this person in the middle of a ride, as a passenger or as a driver? */
+async function activeRide(db: Client, userId: number): Promise<{ as: "passenger" | "driver" } | null> {
+  const r = (await db.query(
+    `select (rider_id = $1) as passenger from app.ride_requests
+      where (rider_id = $1 or driver_id = $1) and status in ('searching', 'accepted', 'arrived', 'in_progress') limit 1`, [userId])).rows[0];
+  return r ? { as: r.passenger ? "passenger" : "driver" } : null;
 }
 
 /**
@@ -28,7 +32,8 @@ modeRoutes.post("/mode", withDb, requireAuth, async (c) => {
   if (p.data.mode === "driver") {
     const block = await driverModeBlock(db, me.id);
     if (block) return c.json({ status: false, ...block }, 403);
-  } else if (await hasActiveTrip(me.id)) {
+    if (await activeRide(db, me.id)) return c.json({ status: false, code: "active_trip", message: "Finish your current ride before switching to Driver mode." }, 409);
+  } else if (await activeRide(db, me.id)) {
     return c.json({ status: false, code: "active_trip", message: "Finish your current trip before switching to Passenger mode." }, 409);
   }
 
