@@ -23,7 +23,7 @@ modeRoutes.post("/mode", withDb, requireAuth, async (c) => {
   if (!p.success) return validationFailed(c, { mode: [p.error.issues[0].message] });
   const me = c.get("user");
   const db = c.get("db");
-  if (me.user_type === "admin" || me.user_type === "fleet") return c.json({ status: false, code: "not_available", message: "Mode switching is for riders and drivers." }, 403);
+  if (me.user_type === "admin" || me.user_type === "fleet") return c.json({ status: false, code: "not_available", message: "Mode switching is for passengers and drivers." }, 403);
 
   if (p.data.mode === "driver") {
     const block = await driverModeBlock(db, me.id);

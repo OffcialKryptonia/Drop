@@ -15,7 +15,7 @@ export const MESSAGES = {
   unauthenticated: "Unauthenticated",
   logout: "Logout successfully",
   validation: "The given data was invalid.",
-  riderSaved: "Rider has been save successfully",
+  riderSaved: "Passenger has been saved successfully",
   driverSaved: "Driver has been save successfully",
 } as const;
 

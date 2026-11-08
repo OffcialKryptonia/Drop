@@ -2,7 +2,7 @@ import '../manage_imports.dart';
 import '../service/ModeController.dart';
 
 /// Menu button that switches between rider and driver mode.
-/// target 'driver' (shown in rider menu) or 'rider' (shown in driver menu).
+/// target 'driver' (shown in passenger menu) or 'rider' (shown in driver menu).
 class ModeSwitchTile extends StatefulWidget {
   final String target;
 
@@ -93,7 +93,7 @@ class _ModeSwitchTileState extends State<ModeSwitchTile> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      toDriver ? 'Switch to driver' : 'Switch to rider',
+                      toDriver ? 'Switch to driver' : 'Switch to passenger',
                       style: TextStyle(fontWeight: FontWeight.w600, color: enabled ? Colors.white : Colors.grey.shade700),
                     ),
                     if (pending != null) Text(pending, style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),

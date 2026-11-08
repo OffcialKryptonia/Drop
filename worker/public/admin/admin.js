@@ -181,7 +181,7 @@
       root.textContent = "";
       var regionSel = select([["", "All regions"]].concat(rt.regions.map(function (r) { return [r.id, r.name || ("Region " + r.id)]; })), rt.region);
       regionSel.addEventListener("change", function () { rt.region = regionSel.value; pageRideTypes(root); });
-      root.appendChild(head("Ride types", "Add, price, switch on or off and reorder what riders can book.",
+      root.appendChild(head("Ride types", "Add, price, switch on or off and reorder what passengers can book.",
         can("service add") ? h("button", { text: "Add ride type", on: { click: function () { rideTypeForm(root, null); } } }) : null));
       root.appendChild(h("div", { class: "card" }, field("Region", regionSel)));
 
@@ -277,7 +277,7 @@
       card.appendChild(h("label", { class: "chk", style: "margin-top:10px" }, f.limit_hours, "Only available between set hours"));
       card.appendChild(h("div", { class: "grid2" }, field("From", f.from), field("To", f.to)));
       card.appendChild(field("Display order (lowest first)", f.sort_order));
-      card.appendChild(h("div", { class: "row" }, h("div", { text: "Available to riders" }), h("label", { class: "switch" }, f.status, h("span"))));
+      card.appendChild(h("div", { class: "row" }, h("div", { text: "Available to passengers" }), h("label", { class: "switch" }, f.status, h("span"))));
       card.appendChild(out);
       var save = h("button", { text: id ? "Save changes" : "Add ride type", style: "width:100%;margin-top:14px" });
       save.addEventListener("click", function () {
@@ -369,7 +369,7 @@
     api("GET", "/admin/service-options").then(function (r) {
       var list = (r.body && r.body.data) || [];
       root.textContent = "";
-      root.appendChild(head("Ride options", "Extras riders can tick when booking, each with its own price."));
+      root.appendChild(head("Ride options", "Extras passengers can tick when booking, each with its own price."));
       if (can("service_option add")) {
         var n = text("", "e.g. Roof rack"), p = num("", "Price (₦)"), out = h("p", { class: "msg" });
         var add = h("button", { text: "Add option", style: "width:100%;margin-top:14px" });
@@ -435,7 +435,7 @@
       var out = h("p", { class: "msg" });
       var reload = function () { pagePayments(root); };
       if (canEdit) {
-        card.appendChild(h("div", { class: "row" }, h("div", { text: "Available to riders" }),
+        card.appendChild(h("div", { class: "row" }, h("div", { text: "Available to passengers" }),
           sw(g.status, function (on, input) { putGateway(g.type, { status: on }, out, reload, function () { input.checked = !on; }); })));
       }
       if (g.fields.length) {

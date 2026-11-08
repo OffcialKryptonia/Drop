@@ -15,7 +15,7 @@ check "health" '"ok":true' "$(j $BASE/api/health)"
 check "db health" '"ok":true' "$(j $BASE/api/health/db)"
 
 R=$(j -X POST $BASE/api/register -d "{\"first_name\":\"Ada\",\"last_name\":\"Obi\",\"email\":\"ada$S@x.com\",\"username\":\"ada$S\",\"password\":\"secret123\",\"user_type\":\"rider\"}")
-check "register rider" 'Rider has been save successfully' "$R"
+check "register passenger" 'Passenger has been saved successfully' "$R"
 TOKEN=$(echo "$R" | sed -n 's/.*"api_token":"\([^"]*\)".*/\1/p')
 check "register returns token" '|' "$TOKEN"
 
