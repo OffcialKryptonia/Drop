@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import type { AppEnv } from "./env";
+import type { AppEnv, Bindings } from "./env";
 import { connectDb } from "./db";
 import { authRoutes } from "./routes/auth";
 import { userRoutes } from "./routes/users";
@@ -10,6 +10,8 @@ import { adminWalletRoutes } from "./routes/admin-wallets";
 import { modeRoutes } from "./routes/mode";
 import { driverOnlineRoutes } from "./routes/driver-online";
 import { rideRoutes } from "./routes/rides";
+import { driverRideRoutes } from "./routes/driver-rides";
+import { sweepRides } from "./lib/ride-sweep";
 import { driverApplicationRoutes } from "./routes/driver-application";
 import { adminDriverApplicationRoutes } from "./routes/admin-driver-applications";
 
@@ -51,6 +53,7 @@ app.route("/api", adminWalletRoutes);
 app.route("/api", modeRoutes);
 app.route("/api", driverOnlineRoutes);
 app.route("/api", rideRoutes);
+app.route("/api", driverRideRoutes);
 app.route("/api", driverApplicationRoutes);
 app.route("/api", adminDriverApplicationRoutes);
 
@@ -69,4 +72,19 @@ app.onError((err, c) => {
   return c.json({ message: "Internal server error", status: 500 }, 500);
 });
 
-export default app;
+export default {
+  fetch: app.fetch,
+  /** Every minute: expire unaccepted ride requests and take silent drivers offline. */
+  async scheduled(_event: ScheduledController, env: Bindings, ctx: ExecutionContext) {
+    ctx.waitUntil(
+      (async () => {
+        const db = await connectDb(env.HYPERDRIVE.connectionString);
+        try {
+          console.log("ride sweep", JSON.stringify(await sweepRides(db)));
+        } finally {
+          await db.end();
+        }
+      })(),
+    );
+  },
+} satisfies ExportedHandler<Bindings>;
