@@ -1,5 +1,0 @@
-# Copy to key.properties (git-ignored) and fill in. Never commit the real file or the .jks.
-storePassword=REPLACE_ME
-keyPassword=REPLACE_ME
-keyAlias=REPLACE_ME
-storeFile=../keystore/drop-driver-release.jks

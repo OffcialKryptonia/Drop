@@ -2,7 +2,7 @@
 """Generate Android + iOS launcher icons for the Drop apps from the two master images.
 
 Usage: python3 tools/make_icons.py <rider_master.png> <driver_master.png>
-Masters are 2000x2000 squares. Writes into apps/drop-rider and apps/drop-driver.
+Masters are 2000x2000 squares. Writes into apps/drop (the unified app).
 """
 import os, sys
 from PIL import Image, ImageFilter, ImageChops
@@ -101,7 +101,5 @@ def ios(app, src):
 
 if __name__ == "__main__":
     rider = Image.open(sys.argv[1]).convert("RGB")
-    driver = Image.open(sys.argv[2]).convert("RGB")
-    android("drop-rider", rider, "rider"); ios("drop-rider", rider)
-    android("drop-driver", driver, "driver"); ios("drop-driver", driver)
+    android("drop", rider, "rider"); ios("drop", rider)
     print("icons written")
