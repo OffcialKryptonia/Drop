@@ -1,8 +1,10 @@
 import '../manage_imports.dart';
+import '../screens/DriverApplicationScreen.dart';
 import '../service/ModeController.dart';
 
-/// Menu button that switches between rider and driver mode.
-/// target 'driver' (shown in passenger menu) or 'rider' (shown in driver menu).
+/// Menu button for the passenger/driver mode.
+/// target 'driver' (passenger menu): becomes "Become a driver" until an application exists, then shows its status,
+/// then switches once approved. target 'rider' (driver menu): switches back to passenger mode.
 class ModeSwitchTile extends StatefulWidget {
   final String target;
 
@@ -25,16 +27,8 @@ class _ModeSwitchTileState extends State<ModeSwitchTile> {
 
   /// Approval can change while the app is open, so ask the server again.
   Future<void> _refresh() async {
-    try {
-      final id = sharedPref.getInt(USER_ID);
-      if (id == null || id == 0) return;
-      final res = await getUserDetail(userId: id);
-      final u = res.data;
-      if (u != null) {
-        await ModeController.applyUser(u.roles, u.activeMode, u.driverStatus);
-        if (mounted) setState(() {});
-      }
-    } catch (_) {}
+    await ModeController.refreshFromServer();
+    if (mounted) setState(() {});
   }
 
   String? _pendingText() {
@@ -54,6 +48,12 @@ class _ModeSwitchTileState extends State<ModeSwitchTile> {
     return null;
   }
 
+  void _openApplication() {
+    final nav = Navigator.of(context);
+    nav.pop();
+    nav.push(MaterialPageRoute(builder: (_) => const DriverApplicationScreen()));
+  }
+
   Future<void> _switch() async {
     if (busy) return;
     setState(() => busy = true);
@@ -69,14 +69,13 @@ class _ModeSwitchTileState extends State<ModeSwitchTile> {
 
   @override
   Widget build(BuildContext context) {
-    // Rider menu: nothing to show until the person has started a driver application.
-    if (toDriver && ModeController.driverStatus.isEmpty) return SizedBox.shrink();
     final pending = toDriver && !ModeController.isDriverApproved ? _pendingText() : null;
-    final enabled = pending == null && !busy;
+    final apply = toDriver && ModeController.driverStatus.isEmpty;
+    final enabled = !busy;
     return Padding(
       padding: EdgeInsets.only(bottom: 12),
       child: InkWell(
-        onTap: enabled ? _switch : null,
+        onTap: enabled ? (apply || pending != null ? _openApplication : _switch) : null,
         borderRadius: BorderRadius.circular(12),
         child: Container(
           padding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -93,10 +92,11 @@ class _ModeSwitchTileState extends State<ModeSwitchTile> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      toDriver ? 'Switch to driver' : 'Switch to passenger',
+                      apply ? 'Become a driver' : (toDriver && pending != null ? 'Driver application' : (toDriver ? 'Switch to driver' : 'Switch to passenger')),
                       style: TextStyle(fontWeight: FontWeight.w600, color: enabled ? Colors.white : Colors.grey.shade700),
                     ),
-                    if (pending != null) Text(pending, style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                    if (apply) Text('Apply online in minutes', style: TextStyle(fontSize: 12, color: Colors.white70)),
+                    if (pending != null) Text(pending, style: TextStyle(fontSize: 12, color: Colors.white70)),
                   ],
                 ),
               ),
