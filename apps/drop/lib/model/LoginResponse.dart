@@ -60,6 +60,9 @@ class UserModel {
   int? isVerifiedDriver;
   UserBankAccount? userBankAccount;
   String? referralCode;
+  List<String>? roles;
+  String? activeMode;
+  String? driverStatus;
 
   UserModel({
     this.id,
@@ -92,6 +95,9 @@ class UserModel {
     this.isVerifiedDriver,
     this.userBankAccount,
     this.referralCode,
+    this.roles,
+    this.activeMode,
+    this.driverStatus,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -126,6 +132,9 @@ class UserModel {
       isVerifiedDriver: json['is_verified_driver'],
       userBankAccount: json['user_bank_account'] != null ? new UserBankAccount.fromJson(json['user_bank_account']) : null,
       referralCode: json['referral_code'],
+      roles: json['roles'] is List ? List<String>.from((json['roles'] as List).map((e) => e.toString())) : null,
+      activeMode: json['active_mode']?.toString(),
+      driverStatus: json['driver_status']?.toString(),
     );
   }
 
@@ -160,6 +169,9 @@ class UserModel {
     data['profile_image'] = this.profileImage;
     data['is_verified_driver'] = this.isVerifiedDriver;
     data['referralCode'] = this.referralCode;
+    data['roles'] = this.roles;
+    data['active_mode'] = this.activeMode;
+    data['driver_status'] = this.driverStatus;
     if (this.userBankAccount != null) {
       data['user_bank_account'] = this.userBankAccount!.toJson();
     }

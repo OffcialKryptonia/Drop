@@ -60,16 +60,16 @@ bool _driverModuleReady = false;
 /// Firebase, SharedPreferences, MightyCore and crash hooks are already set up
 /// by the rider-side main(), so this only fills the driver module's own globals.
 Future<void> initDriverModule() async {
-  if (_driverModuleReady) return;
   sharedPref = await SharedPreferences.getInstance();
   appStore.setLanguage(sharedPref.getString(SELECTED_LANGUAGE_CODE) ?? defaultLanguageCode);
   await appStore.setLoggedIn(sharedPref.getBool(IS_LOGGED_IN) ?? false, isInitializing: true);
   await appStore.setUserId(sharedPref.getInt(USER_ID) ?? 0, isInitializing: true);
   await appStore.setUserEmail(sharedPref.getString(USER_EMAIL).validate(), isInitialization: true);
   await appStore.setUserProfile(sharedPref.getString(USER_PROFILE_PHOTO).validate(), isInitialization: true);
+  await mightyCoreInit();
+  if (_driverModuleReady) return;
   initJsonFile();
   await oneSignalSettings();
-  await mightyCoreInit();
   _driverModuleReady = true;
 }
 
