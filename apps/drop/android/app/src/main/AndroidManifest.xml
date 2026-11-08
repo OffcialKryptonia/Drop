@@ -26,7 +26,7 @@
             android:foregroundServiceType="location" />
         <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value="ADD_YOUR_GOOGLE_MAP_KEY_ANDROID_HERE" />" />
+            android:value="ADD_YOUR_GOOGLE_MAP_KEY_ANDROID_HERE" />
         <activity
             android:name=".MainActivity"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
