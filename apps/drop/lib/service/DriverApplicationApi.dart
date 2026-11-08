@@ -97,4 +97,25 @@ class DriverApplicationApi {
   static Future<void> submit() async {
     await _send(() async => http.post(_uri('driver/application/submit'), headers: await _headers()));
   }
+
+  // ---- driver mode: online state ----
+
+  /// Online state, wallet against the minimum, and why going online may be blocked.
+  static Future<Map<String, dynamic>> driverStatus() async => _send(() async => http.get(_uri('driver/status'), headers: await _headers()));
+
+  static Future<void> setOnline(bool online, {double? latitude, double? longitude}) async {
+    await _send(() async => http.post(
+          _uri('driver/online'),
+          headers: await _headers(contentType: 'application/json'),
+          body: jsonEncode({'online': online, if (latitude != null) 'latitude': latitude, if (longitude != null) 'longitude': longitude}),
+        ));
+  }
+
+  static Future<void> pingLocation(double latitude, double longitude) async {
+    await _send(() async => http.post(
+          _uri('driver/location'),
+          headers: await _headers(contentType: 'application/json'),
+          body: jsonEncode({'latitude': latitude, 'longitude': longitude}),
+        ));
+  }
 }
