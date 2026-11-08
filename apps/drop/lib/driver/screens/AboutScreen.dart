@@ -3,9 +3,9 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:drop/driver/utils/Extensions/dataTypeExtensions.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../utils/Colors.dart';
-import '../../utils/Constants.dart';
-import '../../utils/Extensions/app_common.dart';
+import '../utils/Colors.dart';
+import '../utils/Constants.dart';
+import '../utils/Extensions/app_common.dart';
 import '../main.dart';
 import '../model/SettingModel.dart';
 import '../utils/Common.dart';

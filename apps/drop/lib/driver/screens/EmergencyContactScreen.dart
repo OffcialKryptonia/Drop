@@ -6,7 +6,7 @@ import 'package:drop/driver/model/ContactNumberListModel.dart';
 import 'package:drop/driver/utils/Constants.dart';
 import 'package:drop/driver/utils/Extensions/dataTypeExtensions.dart';
 
-import '../../network/RestApis.dart';
+import '../network/RestApis.dart';
 import '../main.dart';
 import '../utils/Colors.dart';
 import '../utils/Common.dart';

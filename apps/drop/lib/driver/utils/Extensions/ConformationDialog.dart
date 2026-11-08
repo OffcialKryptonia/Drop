@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:drop/driver/utils/Extensions/dataTypeExtensions.dart';
-import '../../../main.dart';
+import '../../main.dart';
 import '../Colors.dart';
 import '../Common.dart';
 import '../Constants.dart';

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_mobx/flutter_mobx.dart';
 import 'package:drop/driver/Services/AuthService.dart';
 
-import '../../main.dart';
+import '../main.dart';
 import '../network/RestApis.dart';
 import '../utils/Extensions/extension.dart';
 import '../utils/utils.dart';

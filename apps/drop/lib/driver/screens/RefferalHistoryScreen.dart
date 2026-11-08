@@ -3,7 +3,7 @@ import 'package:flutter_mobx/flutter_mobx.dart';
 import 'package:drop/driver/utils/Colors.dart';
 import 'package:drop/driver/utils/Extensions/ResponsiveWidget.dart';
 import 'package:drop/driver/utils/Extensions/int_extensions.dart';
-import '../../main.dart';
+import '../main.dart';
 import '../model/UserDetailModel.dart';
 import '../network/RestApis.dart';
 import '../utils/Common.dart';

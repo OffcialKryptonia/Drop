@@ -6,8 +6,8 @@ import 'package:drop/driver/screens/PaymentScreen.dart';
 import 'package:drop/driver/screens/WithDrawScreen.dart';
 import 'package:drop/driver/utils/Extensions/dataTypeExtensions.dart';
 
-import '../../main.dart';
-import '../../network/RestApis.dart';
+import '../main.dart';
+import '../network/RestApis.dart';
 import '../model/UserDetailModel.dart';
 import '../model/VirtualAccountModel.dart';
 import '../model/WalletListModel.dart';

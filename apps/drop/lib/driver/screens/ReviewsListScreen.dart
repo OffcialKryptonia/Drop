@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_mobx/flutter_mobx.dart';
 import 'package:intl/intl.dart';
 import 'package:drop/driver/utils/Extensions/context_extensions.dart';
-import '../../main.dart';
-import '../../network/RestApis.dart';
-import '../../utils/Colors.dart';
-import '../../utils/Common.dart';
-import '../../utils/Extensions/app_common.dart';
+import '../main.dart';
+import '../network/RestApis.dart';
+import '../utils/Colors.dart';
+import '../utils/Common.dart';
+import '../utils/Extensions/app_common.dart';
 import '../model/ReviewsModel.dart';
 
 class ReviewsListScreen extends StatefulWidget {

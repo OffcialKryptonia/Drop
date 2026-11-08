@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../main.dart';
+import '../main.dart';
 
 Color primaryColor = Color(0xFFE5441A); // Drop orange
 const polyLineColor = Color.fromARGB(255, 33, 83, 229);

@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:drop/driver/utils/Extensions/dataTypeExtensions.dart';
-import '../../../main.dart';
+import '../../main.dart';
 import '../Constants.dart';
 
 TextStyle boldTextStyle({int? size, Color? color, FontWeight? weight}) {
