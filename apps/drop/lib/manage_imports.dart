@@ -23,7 +23,6 @@ export 'package:flutter_localizations/flutter_localizations.dart';
 export 'package:flutter_mobx/flutter_mobx.dart';
 export 'package:flutter_native_contact_picker/flutter_native_contact_picker.dart';
 export 'package:flutter_native_contact_picker/model/contact.dart';
-export 'package:flutter_paystack/flutter_paystack.dart';
 export 'package:flutter_paytabs_bridge/IOSThemeConfiguration.dart';
 export 'package:flutter_paytabs_bridge/PaymentSdkApms.dart';
 export 'package:flutter_paytabs_bridge/PaymentSdkConfigurationDetails.dart';
