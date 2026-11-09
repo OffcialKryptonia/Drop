@@ -1,9 +1,12 @@
 import 'dart:async';
 
 import 'package:drop/service/DriverApplicationApi.dart';
+import 'package:drop/components/DropMap.dart';
+import 'package:drop/service/MapConfig.dart';
 import 'package:drop/service/RideApi.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:latlong2/latlong.dart' show LatLng;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../components/DrawerComponent.dart';
@@ -34,6 +37,12 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
   List<Map<String, dynamic>> requests = [];
   Map<String, dynamic>? active;
   bool rideBusy = false;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  final DropMapController _map = DropMapController();
+  MapConfig mapConfig = const MapConfig();
+  bool mapLoaded = false;
+  LatLng? myPos;
+  String? _fitKey;
 
   bool get online => status['is_online'] == true;
   Map<String, dynamic> get wallet => Map<String, dynamic>.from((status['wallet'] ?? {}) as Map);
@@ -43,6 +52,13 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    MapConfig.load().then((c) {
+      if (mounted) setState(() {
+        mapConfig = c;
+        mapLoaded = true;
+      });
+    });
+    _locateMe();
     _load(resume: true);
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       _secs++;
@@ -87,6 +103,54 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     if (mounted) setState(() => loading = false);
   }
 
+  /// Puts the driver on the map as soon as the phone knows where it is (only if location is already allowed).
+  Future<void> _locateMe() async {
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) return;
+      final p = await Geolocator.checkPermission();
+      if (p == LocationPermission.denied || p == LocationPermission.deniedForever) return;
+      final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+      if (!mounted) return;
+      setState(() => myPos = LatLng(pos.latitude, pos.longitude));
+      _map.animateTo(myPos!, zoom: 15);
+    } catch (_) {}
+  }
+
+  LatLng _ll(dynamic p) {
+    final m = _asMap(p);
+    return LatLng(_num(m['lat']), _num(m['lng']));
+  }
+
+  /// Keeps the camera on what matters: the driver, plus the pickup or drop-off during a trip.
+  void _refit() {
+    final a = active;
+    final me = myPos;
+    final key = a == null ? 'idle' : '${a['id']}:${a['status']}';
+    if (key == _fitKey) return;
+    _fitKey = key;
+    if (a == null) {
+      if (me != null) _map.animateTo(me, zoom: 15);
+      return;
+    }
+    final target = a['status'] == 'in_progress' ? _ll(a['dropoff']) : _ll(a['pickup']);
+    _map.fitPoints([if (me != null) me, target]);
+  }
+
+  List<DropMarker> get _markers {
+    final out = <DropMarker>[];
+    final a = active;
+    if (a != null) {
+      if (a['status'] != 'in_progress') out.add(DropMarker(id: 'pickup', title: 'Pickup', color: Colors.green, point: _ll(a['pickup'])));
+      out.add(DropMarker(id: 'drop', title: 'Drop-off', color: Colors.red, point: _ll(a['dropoff'])));
+    } else if (online) {
+      for (final r in requests) {
+        out.add(DropMarker(id: 'req${r['id']}', title: 'Pickup', color: Colors.green, point: _ll(r['pickup'])));
+      }
+    }
+    if (myPos != null) out.add(DropMarker(id: 'me', title: 'You', color: Colors.blue, point: myPos!));
+    return out;
+  }
+
   Future<bool> _locationAllowed() async {
     if (!await Geolocator.isLocationServiceEnabled()) {
       _say('Turn on your phone location to go online.');
@@ -104,7 +168,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
   /// Foreground location only: the stream runs while the app is open and the driver is online.
   void _startSharing() {
     if (_positionSub != null) return;
-    _positionSub = Geolocator.getPositionStream(locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 50)).listen((pos) async {
+    _positionSub = Geolocator.getPositionStream(locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 15)).listen((pos) async {
+      if (mounted) setState(() => myPos = LatLng(pos.latitude, pos.longitude));
       if (DateTime.now().difference(_lastPing).inSeconds < 20) return;
       _lastPing = DateTime.now();
       try {
@@ -260,11 +325,23 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     await _rideAction(() => RideApi.driverCancel(id), thenSay: 'Trip cancelled.');
   }
 
+  /// Turn-by-turn navigation in the driver's own navigation app. Follows the admin map switch:
+  /// Google Maps in Google mode, otherwise any installed navigation app (or OpenStreetMap in the browser).
   Future<void> _openMaps(double lat, double lng) async {
     try {
-      await launchUrl(Uri.parse('https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving'), mode: LaunchMode.externalApplication);
+      if (mapConfig.isGoogle) {
+        await launchUrl(Uri.parse('https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving'), mode: LaunchMode.externalApplication);
+        return;
+      }
+      var opened = false;
+      try {
+        opened = await launchUrl(Uri.parse('geo:$lat,$lng?q=$lat,$lng'));
+      } catch (_) {}
+      if (!opened) {
+        await launchUrl(Uri.parse('https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=;$lat,$lng'), mode: LaunchMode.externalApplication);
+      }
     } catch (_) {
-      _say('Could not open Google Maps.');
+      _say('Could not open a navigation app.');
     }
   }
 
@@ -282,35 +359,6 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     if (e == null) return 0;
     final d = e.difference(DateTime.now().toUtc()).inSeconds;
     return d < 0 ? 0 : d;
-  }
-
-  Widget _ridesSection() {
-    final a = active;
-    if (a != null) return _activeTrip(a);
-    if (!online) {
-      return _card(
-        child: Column(children: [
-          Icon(Icons.local_taxi_outlined, size: 40, color: Colors.grey.shade500),
-          const SizedBox(height: 8),
-          const Text('Ride requests', style: TextStyle(fontWeight: FontWeight.w700)),
-          const SizedBox(height: 4),
-          Text('Go online to start receiving ride requests.', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey.shade700)),
-        ]),
-      );
-    }
-    final open = requests.where((r) => _secondsLeft(r) > 0).toList();
-    if (open.isEmpty) {
-      return _card(
-        child: Column(children: [
-          const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2)),
-          const SizedBox(height: 10),
-          const Text('Waiting for ride requests', style: TextStyle(fontWeight: FontWeight.w700)),
-          const SizedBox(height: 4),
-          Text('Requests near you will appear here. Keep this screen open.', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey.shade700)),
-        ]),
-      );
-    }
-    return Column(children: [for (final r in open) Padding(padding: const EdgeInsets.only(bottom: 12), child: _requestCard(r))]);
   }
 
   Widget _addrRow(IconData icon, Color color, String text) => Padding(
@@ -418,23 +466,35 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
 
   @override
   Widget build(BuildContext context) {
+    if (!loading) WidgetsBinding.instance.addPostFrameCallback((_) => _refit());
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F6F8),
+      key: _scaffoldKey,
+      backgroundColor: const Color(0xFFEFEFEF),
       drawer: DrawerComponent(),
-      appBar: AppBar(
-        title: const Text('DROP Driver'),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black87,
-        elevation: 0,
-      ),
-      body: SafeArea(child: _body()),
+      body: loading
+          ? const Center(child: CircularProgressIndicator())
+          : loadError != null
+              ? _errorView()
+              : Stack(children: [
+                  Positioned.fill(
+                    child: !mapLoaded
+                        ? const ColoredBox(color: Color(0xFFEFEFEF))
+                        : DropMap(
+                            provider: mapConfig.provider,
+                            tileUrl: mapConfig.tileUrl,
+                            attribution: mapConfig.attribution,
+                            initialCenter: myPos ?? const LatLng(9.0765, 7.3986),
+                            controller: _map,
+                            markers: _markers,
+                          ),
+                  ),
+                  SafeArea(child: Padding(padding: const EdgeInsets.all(12), child: _topBar())),
+                  Align(alignment: Alignment.bottomCenter, child: SafeArea(top: false, child: _bottomPanel())),
+                ]),
     );
   }
 
-  Widget _body() {
-    if (loading) return const Center(child: CircularProgressIndicator());
-    if (loadError != null) {
-      return Center(
+  Widget _errorView() => Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -444,64 +504,112 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
           ]),
         ),
       );
-    }
-    final w = wallet;
-    final b = block;
-    return RefreshIndicator(
-      onRefresh: _load,
-      child: ListView(padding: const EdgeInsets.all(16), children: [
-        _onlineCard(b),
-        const SizedBox(height: 12),
-        _walletCard(w),
-        if (b != null) ...[const SizedBox(height: 12), _blockCard(b)],
-        const SizedBox(height: 12),
-        _ridesSection(),
-      ]),
-    );
-  }
 
-  Widget _card({required Widget child}) => Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
-        child: child,
+  Widget _roundButton(IconData icon, VoidCallback onTap) => Material(
+        color: Colors.white,
+        shape: const CircleBorder(),
+        elevation: 3,
+        child: InkWell(customBorder: const CircleBorder(), onTap: onTap, child: Padding(padding: const EdgeInsets.all(10), child: Icon(icon, color: Colors.black87))),
       );
 
-  Widget _onlineCard(Map<String, dynamic>? b) {
-    return _card(
-      child: Row(children: [
-        Container(width: 12, height: 12, decoration: BoxDecoration(shape: BoxShape.circle, color: online ? Colors.green : Colors.grey)),
-        const SizedBox(width: 12),
+  /// Menu, online switch and wallet balance floating over the map.
+  Widget _topBar() {
+    final b = block;
+    return Column(mainAxisSize: MainAxisSize.min, children: [
+      Row(children: [
+        _roundButton(Icons.menu, () => _scaffoldKey.currentState?.openDrawer()),
+        const SizedBox(width: 10),
         Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(online ? 'You are online' : 'You are offline', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 2),
-            Text(online ? 'Sharing your location while this app is open.' : (b == null ? 'Go online to receive ride requests.' : 'Fix the issue below to go online.'),
-                style: TextStyle(color: Colors.grey.shade700, fontSize: 13)),
-          ]),
+          child: Material(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(28),
+            elevation: 3,
+            child: Padding(
+              padding: const EdgeInsets.only(left: 14, right: 6),
+              child: Row(children: [
+                Container(width: 10, height: 10, decoration: BoxDecoration(shape: BoxShape.circle, color: online ? Colors.green : Colors.grey)),
+                const SizedBox(width: 8),
+                Expanded(child: Text(online ? 'Online' : 'Offline', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16))),
+                busy
+                    ? const Padding(padding: EdgeInsets.all(14), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
+                    : Switch(
+                        value: online,
+                        activeColor: primaryColor,
+                        onChanged: active != null ? null : ((online || b == null) ? _toggle : (_) => _say(b['message']?.toString() ?? 'You cannot go online yet.')),
+                      ),
+              ]),
+            ),
+          ),
         ),
-        busy
-            ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
-            : Switch(value: online, activeColor: primaryColor, onChanged: (online || b == null) ? _toggle : (_) => _say(b['message']?.toString() ?? 'You cannot go online yet.')),
+        const SizedBox(width: 10),
+        Material(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          elevation: 3,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(20),
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => WalletScreen())).then((_) => _load()),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.account_balance_wallet_outlined, size: 18, color: primaryColor),
+                const SizedBox(width: 6),
+                Text(_naira(wallet['balance']), style: const TextStyle(fontWeight: FontWeight.w800)),
+              ]),
+            ),
+          ),
+        ),
       ]),
-    );
+      if (b != null && !online) Padding(padding: const EdgeInsets.only(top: 10), child: _blockCard(b)),
+    ]);
   }
 
-  String _money(dynamic v) => (v is num) ? v.toStringAsFixed(v == v.roundToDouble() ? 0 : 2) : '0';
-
-  Widget _walletCard(Map<String, dynamic> w) {
-    return _card(
-      child: Row(children: [
-        Icon(Icons.account_balance_wallet_outlined, color: primaryColor),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('Driver wallet', style: TextStyle(fontWeight: FontWeight.w700)),
-            Text('Balance ${_money(w['balance'])}  ·  needed to go online ${_money(w['minimum'])}', style: TextStyle(color: Colors.grey.shade700, fontSize: 13)),
+  /// What sits at the bottom of the map: the trip, the incoming requests, or the go-online prompt.
+  Widget _bottomPanel() {
+    final a = active;
+    Widget child;
+    if (a != null) {
+      child = _activeTrip(a);
+    } else if (!online) {
+      final b = block;
+      child = Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 10)]),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Text('You are offline', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 4),
+          Text(b == null ? 'Go online to start receiving ride requests.' : 'Fix the issue above to go online.', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey.shade700)),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: primaryColor, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14)),
+              onPressed: busy ? null : () => b == null ? _toggle(true) : _say(b['message']?.toString() ?? 'You cannot go online yet.'),
+              child: const Text('Go online', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+            ),
+          ),
+        ]),
+      );
+    } else {
+      final open = requests.where((r) => _secondsLeft(r) > 0).toList();
+      if (open.isEmpty) {
+        child = Container(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(28), boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 10)]),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+            const SizedBox(width: 12),
+            Text('Looking for ride requests\u2026', style: TextStyle(fontWeight: FontWeight.w700, color: Colors.grey.shade800)),
           ]),
-        ),
-        TextButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => WalletScreen())).then((_) => _load()), child: const Text('Top up')),
-      ]),
-    );
+        );
+      } else {
+        child = ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.55),
+          child: ListView(shrinkWrap: true, children: [for (final r in open) Padding(padding: const EdgeInsets.only(bottom: 10), child: _requestCard(r))]),
+        );
+      }
+    }
+    return Padding(padding: const EdgeInsets.fromLTRB(12, 0, 12, 12), child: child);
   }
 
   Widget _blockCard(Map<String, dynamic> b) {
