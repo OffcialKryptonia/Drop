@@ -90,6 +90,7 @@
   var PAGES = [
     { id: "driver-applications", label: "Driver applications", group: "People", perm: "driver_application list", render: pageDriverApplications },
     { id: "ride-types", label: "Ride types", group: "Operations", perm: "service list", render: pageRideTypes },
+    { id: "maps", label: "Maps", group: "Operations", perm: "map_settings list", render: pageMaps },
     { id: "regions", label: "Regions", group: "Operations", perm: "region list", render: pageRegions },
     { id: "ride-options", label: "Ride options", group: "Operations", perm: "service_option list", render: pageOptions },
     { id: "payment-methods", label: "Payment methods", group: "Financial", perm: "payment_gateway list", render: pagePayments },
@@ -475,6 +476,44 @@
       list.appendChild(card);
     });
     if (!pm.data.length) list.appendChild(h("div", { class: "empty", text: "No payment methods yet." }));
+  }
+
+  // ---------- Maps (Google / OpenStreetMap switch) ----------
+  function pageMaps(root) {
+    loading(root);
+    api("GET", "/admin/map-settings").then(function (r) {
+      var d = (r.body || {}).data;
+      if (!r.ok || !d) { root.textContent = ""; root.appendChild(head("Maps", "")); root.appendChild(h("p", { class: "msg", text: errText(r) })); return; }
+      root.textContent = "";
+      root.appendChild(head("Maps", "Choose which map service the apps and fare routing use. Google Maps stays available; OpenStreetMap needs no Google account."));
+
+      var status = h("div", { class: "card" });
+      status.appendChild(h("div", { class: "t", text: "Right now the apps use: " + (d.active === "google" ? "Google Maps" : "OpenStreetMap") }));
+      status.appendChild(h("p", { class: "muted", text: "Google server key: " + (d.google_server_key_set ? "set" : "not set") + (d.google_failed_recently ? " \u00B7 Google did not answer recently (" + d.google_failed_at + ")" : "") }));
+      root.appendChild(status);
+
+      var provider = select([["auto", "Automatic (Google when it works, otherwise OpenStreetMap)"], ["google", "Always Google Maps"], ["osm", "Always OpenStreetMap"]], d.provider);
+      var tiles = text(d.osm_tile_url, "https://tile.openstreetmap.org/{z}/{x}/{y}.png");
+      var routing = text(d.osm_routing_url, "https://router.project-osrm.org");
+      var out = h("p", { class: "msg" });
+      var card = h("div", { class: "card" },
+        field("Map service", provider, "Automatic switches to OpenStreetMap by itself when Google is not set up or stops answering. Pick one to force it."),
+        field("OpenStreetMap tile address", tiles, "Where map pictures come from. The free openstreetmap.org tiles are for light use only; for real traffic use a provider such as MapTiler or Stadia and paste its address here."),
+        field("OpenStreetMap route service", routing, "Used for road distance and time. The free public OSRM server is for light use; paste your own or a provider address for real traffic."));
+      if (can("map_settings edit")) {
+        var save = h("button", { text: "Save", class: "small", style: "margin-top:10px" });
+        save.addEventListener("click", function () {
+          save.disabled = true;
+          api("PUT", "/admin/map-settings", { provider: provider.value, osm_tile_url: tiles.value.trim(), osm_routing_url: routing.value.trim() }).then(function (x) {
+            save.disabled = false;
+            if (x.ok) { toast("Saved"); pageMaps(root); } else msg(out, errText(x));
+          });
+        });
+        card.appendChild(save);
+      }
+      card.appendChild(out);
+      root.appendChild(card);
+    });
   }
 
   // ---------- Driver wallets (commission) ----------
