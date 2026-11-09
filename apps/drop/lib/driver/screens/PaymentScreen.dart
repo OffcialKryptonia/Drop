@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_braintree_payment/flutter_braintree_payment.dart';
 import 'package:flutter_mobx/flutter_mobx.dart';
-import 'package:flutter_paystack/flutter_paystack.dart';
 import 'package:flutter_paytabs_bridge/BaseBillingShippingInfo.dart' as payTab;
 import 'package:flutter_paytabs_bridge/IOSThemeConfiguration.dart';
 import 'package:flutter_paytabs_bridge/PaymentSdkApms.dart';
@@ -46,7 +45,6 @@ class PaymentScreenState extends State<PaymentScreen> {
   String? selectedPaymentType,
       stripPaymentKey,
       stripPaymentPublishKey,
-      payStackPublicKey,
       payPalTokenizationKey,
       flutterWavePublicKey,
       flutterWaveSecretKey,
@@ -63,9 +61,7 @@ class PaymentScreenState extends State<PaymentScreen> {
   String? razorKey;
   bool isTestType = true;
   bool loading = false;
-  final plugin = PaystackPlugin();
   late Razorpay _razorpay;
-  CheckoutMethod method = CheckoutMethod.card;
 
   @override
   void initState() {
@@ -81,9 +77,6 @@ class PaymentScreenState extends State<PaymentScreen> {
       await Stripe.instance.applySettings().catchError((e) {
         log("${e.toString()}");
       });
-    }
-    if (paymentList.any((element) => element.type == PAYMENT_TYPE_PAYSTACK)) {
-      plugin.initialize(publicKey: payStackPublicKey.validate());
     }
     if (paymentList.any((element) => element.type == PAYMENT_TYPE_RAZORPAY)) {
       _razorpay = Razorpay();
@@ -104,9 +97,6 @@ class PaymentScreenState extends State<PaymentScreen> {
           if (element.type == PAYMENT_TYPE_STRIPE) {
             stripPaymentKey = element.isTest == 1 ? element.testValue!.secretKey : element.liveValue!.secretKey;
             stripPaymentPublishKey = element.isTest == 1 ? element.testValue!.publishableKey : element.liveValue!.publishableKey;
-          } else if (element.type == PAYMENT_TYPE_PAYSTACK) {
-            payStackPublicKey = element.isTest == 1 ? element.testValue!.publicKey : element.liveValue!.publicKey;
-            plugin.initialize(publicKey: payStackPublicKey.validate());
           } else if (element.type == PAYMENT_TYPE_RAZORPAY) {
             razorKey = element.isTest == 1 ? element.testValue!.keyId.validate() : element.liveValue!.keyId.validate();
           } else if (element.type == PAYMENT_TYPE_PAYPAL) {
@@ -264,50 +254,6 @@ class PaymentScreenState extends State<PaymentScreen> {
 
       log(error.toString());
     });
-  }
-
-  ///PayStack Payment
-  void payStackPayment(BuildContext context) async {
-    Charge charge = Charge()
-      ..amount = (widget.amount! * 100).round() // In base currency
-      ..email = sharedPref.getString(USER_EMAIL)
-      ..currency = appStore.currencyName.toUpperCase()
-      ..accessCode;
-
-    charge.reference = _getReference();
-
-    try {
-      CheckoutResponse response = await plugin.checkout(context, method: method, charge: charge, fullscreen: false);
-      payStackUpdateStatus(response.reference, response.message);
-      if (response.message == 'Success') {
-        toast(language.transactionSuccessful);
-        paymentConfirm();
-      } else {
-        toast(language.transactionFailed);
-      }
-    } catch (e) {
-      payStackShowMessage(language.checkConsoleForError);
-      rethrow;
-    }
-  }
-
-  payStackUpdateStatus(String? reference, String message) {
-    payStackShowMessage(message, Duration(seconds: 7));
-  }
-
-  void payStackShowMessage(String message, [Duration duration = const Duration(seconds: 4)]) {
-    toast(message);
-    log(message);
-  }
-
-  String _getReference() {
-    String platform;
-    if (Platform.isIOS) {
-      platform = 'iOS';
-    } else {
-      platform = 'Android';
-    }
-    return 'ChargedFrom${platform}_${DateTime.now().millisecondsSinceEpoch}';
   }
 
   /// Paypal Payment
@@ -586,8 +532,6 @@ class PaymentScreenState extends State<PaymentScreen> {
                 razorPayPayment();
               } else if (selectedPaymentType == PAYMENT_TYPE_STRIPE) {
                 stripePay();
-              } else if (selectedPaymentType == PAYMENT_TYPE_PAYSTACK) {
-                payStackPayment(context);
               } else if (selectedPaymentType == PAYMENT_TYPE_PAYPAL) {
                 payPalPayment();
               } else if (selectedPaymentType == PAYMENT_TYPE_FLUTTERWAVE) {
