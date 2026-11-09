@@ -131,7 +131,6 @@ dependency_overrides:
   stripe_android: 11.4.0
   meta: ^1.15.0
   intl: ^0.18.0
-  http: ^0.13.5
   device_info_plus: ^12.1.0
   firebase_core:
 
