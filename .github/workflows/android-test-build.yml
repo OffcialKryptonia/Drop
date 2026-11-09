@@ -1,6 +1,6 @@
 name: Android test build
 
-# Run from the Actions tab (works from the GitHub mobile site). Builds an APK signed with the test key
+# Run from the Actions tab (works from the GitHub mobile site). Builds a debug APK signed with the test key
 # and publishes it as a pre-release you can download straight onto an Android phone.
 on:
   workflow_dispatch:
@@ -72,7 +72,7 @@ jobs:
       - name: Build APK
         run: |
           for i in 1 2 3; do
-            if flutter build apk --release; then exit 0; fi
+            if flutter build apk --debug; then exit 0; fi
             echo "Build attempt $i failed, waiting before retrying..."
             sleep 45
           done
@@ -84,5 +84,5 @@ jobs:
         working-directory: .
         run: |
           TAG="test-${{ github.run_number }}"
-          cp apps/drop/build/app/outputs/flutter-apk/app-release.apk "drop-test-${{ github.run_number }}.apk"
-          gh release create "$TAG" "drop-test-${{ github.run_number }}.apk" --prerelease --title "Test build ${{ github.run_number }}" --notes "Internal test APK signed with the test key. Not for the Play Store."
+          cp apps/drop/build/app/outputs/flutter-apk/app-debug.apk "drop-test-${{ github.run_number }}.apk"
+          gh release create "$TAG" "drop-test-${{ github.run_number }}.apk" --prerelease --title "Test build ${{ github.run_number }}" --notes "Internal DEBUG test APK signed with the test key. Not for the Play Store."

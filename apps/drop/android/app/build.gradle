@@ -65,6 +65,13 @@ android {
     }
 
     buildTypes {
+        // Debug builds use the same test key as release builds, so the SHA-1 / SHA-256
+        // registered in Firebase and the Google Maps key stay valid.
+        debug {
+            if (keystorePropertiesFile.exists()) {
+                signingConfig signingConfigs.release
+            }
+        }
         release {
             signingConfig signingConfigs.release
             minifyEnabled true
