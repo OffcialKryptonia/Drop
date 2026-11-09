@@ -1,0 +1,59 @@
+name: Build Drop Debug APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/driver-map
+    paths:
+      - "apps/drop/**"
+      - ".github/workflows/drop-debug-apk.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-debug-apk:
+    name: Build Android debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out Drop
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: "3.47.9"
+          cache: true
+          cache-dependency-path: apps/drop/pubspec.lock
+
+      - name: Install Android NDK
+        run: sdkmanager "ndk;29.0.13113456"
+
+      - name: Get Flutter dependencies
+        working-directory: apps/drop
+        run: flutter pub get
+
+      - name: Build debug APK
+        working-directory: apps/drop
+        run: flutter build apk --debug
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: drop-debug-apk
+          path: apps/drop/build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
