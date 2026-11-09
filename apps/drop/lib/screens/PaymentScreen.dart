@@ -21,7 +21,6 @@ class PaymentScreenState extends State<PaymentScreen> {
   bool loading = false;
 
   late Razorpay _razorpay;
-  CheckoutMethod method = CheckoutMethod.card;
   bool is_myFatoorah_test = false;
   Map<String, dynamic> paypalValue = {
     "is_test": true,
