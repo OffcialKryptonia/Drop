@@ -3,11 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:latlong2/latlong.dart' show LatLng;
 import 'package:url_launcher/url_launcher.dart';
 
+import '../components/DropMap.dart';
 import '../components/drawer_component.dart';
 import '../service/DriverApplicationApi.dart' show ApiFailure;
+import '../service/MapConfig.dart';
 import '../service/RideApi.dart';
 import '../utils/Colors.dart';
 
@@ -38,7 +40,9 @@ class PassengerHomeScreen extends StatefulWidget {
 class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsBindingObserver {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final TextEditingController _search = TextEditingController();
-  GoogleMapController? _map;
+  final DropMapController _map = DropMapController();
+  MapConfig mapConfig = const MapConfig();
+  bool mapLoaded = false;
   Timer? _poll;
   Timer? _idle;
 
@@ -91,6 +95,8 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
   // ---------- startup ----------
 
   Future<void> _start() async {
+    mapConfig = await MapConfig.load();
+    if (mounted) setState(() => mapLoaded = true);
     await _locate();
     try {
       final r = _m((await RideApi.current())['data']);
@@ -114,7 +120,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
       pickup = LatLng(pos.latitude, pos.longitude);
       center = pickup!;
       pickupAddress = await _addressOf(pickup!, fallback: 'Your location');
-      _map?.animateCamera(CameraUpdate.newLatLngZoom(pickup!, 15));
+      _map.animateTo(pickup!, zoom: 15);
     } catch (_) {
       _say('Turn on location and allow DROP to use it, so we know where to pick you up.');
     }
@@ -142,11 +148,12 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
 
   // ---------- plan: choose the drop-off ----------
 
-  void _onCameraMove(CameraPosition p) {
-    center = p.target;
+  void _onCameraMove(LatLng p) {
+    center = p;
   }
 
-  void _onCameraIdle() {
+  void _onCameraIdle(LatLng p) {
+    center = p;
     _idle?.cancel();
     _idle = Timer(const Duration(milliseconds: 400), () async {
       final a = await _addressOf(center);
@@ -166,7 +173,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
       }
       final target = LatLng(found.first.latitude, found.first.longitude);
       center = target;
-      _map?.animateCamera(CameraUpdate.newLatLngZoom(target, 16));
+      _map.animateTo(target, zoom: 16);
     } catch (_) {
       _say('We could not find that place. Try a nearby landmark or move the pin yourself.');
     }
@@ -346,24 +353,14 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
 
   void _fitTrip() {
     final r = ride;
-    if (r == null || _map == null) return;
+    if (r == null) return;
     final pts = <LatLng>[
       LatLng(_d(_m(r['pickup'])['lat']), _d(_m(r['pickup'])['lng'])),
       LatLng(_d(_m(r['dropoff'])['lat']), _d(_m(r['dropoff'])['lng'])),
     ];
     final loc = _m(_m(r['driver'])['location']);
     if (loc.isNotEmpty) pts.add(LatLng(_d(loc['lat']), _d(loc['lng'])));
-    final south = pts.map((p) => p.latitude).reduce((a, b) => a < b ? a : b);
-    final north = pts.map((p) => p.latitude).reduce((a, b) => a > b ? a : b);
-    final west = pts.map((p) => p.longitude).reduce((a, b) => a < b ? a : b);
-    final east = pts.map((p) => p.longitude).reduce((a, b) => a > b ? a : b);
-    try {
-      if (south == north && west == east) {
-        _map!.animateCamera(CameraUpdate.newLatLngZoom(pts.first, 15));
-      } else {
-        _map!.animateCamera(CameraUpdate.newLatLngBounds(LatLngBounds(southwest: LatLng(south, west), northeast: LatLng(north, east)), 80));
-      }
-    } catch (_) {}
+    _map.fitPoints(pts);
   }
 
   void _newRide() {
@@ -378,30 +375,16 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
 
   // ---------- build ----------
 
-  Set<Marker> get _markers {
-    final out = <Marker>{};
+  List<DropMarker> get _markers {
+    final out = <DropMarker>[];
     if (phase == _Phase.trip && ride != null) {
       final r = ride!;
-      out.add(Marker(
-          markerId: const MarkerId('pickup'),
-          position: LatLng(_d(_m(r['pickup'])['lat']), _d(_m(r['pickup'])['lng'])),
-          infoWindow: const InfoWindow(title: 'Pickup'),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen)));
-      out.add(Marker(
-          markerId: const MarkerId('drop'),
-          position: LatLng(_d(_m(r['dropoff'])['lat']), _d(_m(r['dropoff'])['lng'])),
-          infoWindow: const InfoWindow(title: 'Drop-off'),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed)));
+      out.add(DropMarker(id: 'pickup', title: 'Pickup', color: Colors.green, point: LatLng(_d(_m(r['pickup'])['lat']), _d(_m(r['pickup'])['lng']))));
+      out.add(DropMarker(id: 'drop', title: 'Drop-off', color: Colors.red, point: LatLng(_d(_m(r['dropoff'])['lat']), _d(_m(r['dropoff'])['lng']))));
       final loc = _m(_m(r['driver'])['location']);
-      if (loc.isNotEmpty) {
-        out.add(Marker(
-            markerId: const MarkerId('driver'),
-            position: LatLng(_d(loc['lat']), _d(loc['lng'])),
-            infoWindow: const InfoWindow(title: 'Your driver'),
-            icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure)));
-      }
+      if (loc.isNotEmpty) out.add(DropMarker(id: 'driver', title: 'Your driver', color: Colors.blue, point: LatLng(_d(loc['lat']), _d(loc['lng']))));
     } else if (pickup != null) {
-      out.add(Marker(markerId: const MarkerId('pickup'), position: pickup!, infoWindow: const InfoWindow(title: 'Pickup'), icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen)));
+      out.add(DropMarker(id: 'pickup', title: 'Pickup', color: Colors.green, point: pickup!));
     }
     return out;
   }
@@ -414,16 +397,18 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
       drawer: DrawerComponent(),
       body: Stack(children: [
         Positioned.fill(
-          child: GoogleMap(
-            initialCameraPosition: CameraPosition(target: pickup ?? center, zoom: 15),
-            onMapCreated: (c) => _map = c,
-            myLocationEnabled: pickup != null,
-            myLocationButtonEnabled: false,
-            zoomControlsEnabled: false,
-            mapToolbarEnabled: false,
+          child: !mapLoaded
+              ? const ColoredBox(color: Color(0xFFEFEFEF))
+              : DropMap(
+            provider: mapConfig.provider,
+            tileUrl: mapConfig.tileUrl,
+            attribution: mapConfig.attribution,
+            initialCenter: pickup ?? center,
+            controller: _map,
+            showMyLocation: pickup != null,
             markers: _markers,
-            onCameraMove: planning ? _onCameraMove : null,
-            onCameraIdle: planning ? _onCameraIdle : null,
+            onMove: planning ? _onCameraMove : null,
+            onIdle: planning ? _onCameraIdle : null,
           ),
         ),
         if (planning) const Center(child: Padding(padding: EdgeInsets.only(bottom: 36), child: Icon(Icons.location_pin, size: 44, color: Color(0xFFE5441A)))),
@@ -576,7 +561,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: selected ? primaryColor : Colors.grey.shade300, width: selected ? 2 : 1),
-          color: selected ? primaryColor.withOpacity(0.06) : Colors.white,
+          color: selected ? primaryColor.withValues(alpha: 0.06) : Colors.white,
         ),
         child: Row(children: [
           Icon(Icons.local_taxi, color: selected ? primaryColor : Colors.grey.shade600),
@@ -627,7 +612,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
       if (driver.isNotEmpty) ...[
         const SizedBox(height: 12),
         Row(children: [
-          CircleAvatar(backgroundColor: primaryColor.withOpacity(0.12), child: Icon(Icons.person, color: primaryColor)),
+          CircleAvatar(backgroundColor: primaryColor.withValues(alpha: 0.12), child: Icon(Icons.person, color: primaryColor)),
           const SizedBox(width: 12),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

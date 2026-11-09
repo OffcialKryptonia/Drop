@@ -54,7 +54,7 @@ export async function quoteRide(db: Client, env: Bindings, pickup: LatLng, dropo
   const dropRegion = await regionAt(db, dropoff);
   if (!dropRegion || dropRegion.id !== region.id) return { ok: false, code: "dropoff_outside_area", message: "That drop-off is outside our service area." };
 
-  const route = await routeBetween(env, pickup, dropoff);
+  const route = await routeBetween(env, pickup, dropoff, db);
   if (route.distance_km < 0.05) return { ok: false, code: "same_place", message: "Pickup and drop-off are the same place." };
   const distance = Math.round(route.distance_km * (region.distance_unit === "mile" ? MILE_PER_KM : 1) * 1000) / 1000;
 

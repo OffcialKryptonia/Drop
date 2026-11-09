@@ -25,7 +25,7 @@ The old driver app (`com.kryptonia.dropdriver`) is retired: its code lives on in
 
 ## Before the first store build
 - Firebase: add SHA-1/SHA-256 fingerprints to `com.kryptonia.drop`; confirm `google-services.json` / `GoogleService-Info.plist` belong to that app ID; remove `com.kryptonia.dropdriver` afterwards.
-- Google Maps API key (Android manifest and iOS) is required for the passenger map; restricted to `com.kryptonia.drop`.
+- Maps: Admin → Maps switches Google / OpenStreetMap (see docs/maps-setup.md); Google keys are only needed for Google mode. Google Maps API key (Android manifest and iOS) is required for the passenger map in Google mode; restricted to `com.kryptonia.drop`.
 - Android: release keystore, versionCode, Play Console listing. Location permission declaration covers foreground use only.
 - iOS: Apple Developer bundle ID `com.kryptonia.drop`, location usage strings reviewed, push capability.
 - Run `flutter analyze` and a real-device pass through: sign-up, top-up, apply as driver, admin approves, switch mode, go online, switch back, then a full test trip: request, accept, arrive, start, complete (cash and wallet).
