@@ -68,8 +68,15 @@ jobs:
 
       - run: flutter pub get
 
+      # GitHub's download server sometimes answers 504 when Gradle is fetched, so a failed build is retried (3 attempts).
       - name: Build APK
-        run: flutter build apk --release
+        run: |
+          for i in 1 2 3; do
+            if flutter build apk --release; then exit 0; fi
+            echo "Build attempt $i failed, waiting before retrying..."
+            sleep 45
+          done
+          exit 1
 
       - name: Publish pre-release
         env:
