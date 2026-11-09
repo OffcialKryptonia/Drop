@@ -65,7 +65,7 @@ android {
     }
 
     buildTypes {
-        // Debug builds are signed with the same test key as release builds, so the SHA-1 / SHA-256
+        // Debug builds use the same test key as release builds, so the SHA-1 / SHA-256
         // registered in Firebase and the Google Maps key stay valid.
         debug {
             if (keystorePropertiesFile.exists()) {
