@@ -69,8 +69,19 @@ jobs:
       # Gradle cannot install the NDK until the Android SDK licences are accepted.
       - name: Accept Android licences and install NDK
         run: |
-          yes | sdkmanager --licenses > /dev/null || true
-          sdkmanager "ndk;29.0.13113456"
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER="$(command -v sdkmanager || true)"
+          if [ -z "$SDKMANAGER" ]; then
+            SDKMANAGER="$(find "$SDK_ROOT" -type f -name sdkmanager -path '*cmdline-tools*' 2>/dev/null | head -n 1)"
+          fi
+          echo "SDK root: $SDK_ROOT"
+          echo "sdkmanager: $SDKMANAGER"
+          if [ -z "$SDKMANAGER" ]; then
+            echo "::error::sdkmanager not found under $SDK_ROOT"
+            exit 1
+          fi
+          yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses > /dev/null || true
+          "$SDKMANAGER" --sdk_root="$SDK_ROOT" "ndk;29.0.13113456"
 
       - run: flutter pub get
 
