@@ -14,13 +14,12 @@ class PaymentScreen extends StatefulWidget {
 class PaymentScreenState extends State<PaymentScreen> {
   List<PaymentModel> paymentList = [];
 
-  String? selectedPaymentType, stripPaymentKey, stripPaymentPublishKey, payStackPublicKey, flutterWavePublicKey, flutterWaveSecretKey, flutterWaveEncryptionKey, payTabsProfileId, payTabsServerKey, payTabsClientKey, myFatoorahToken, paytmMerchantId, paytmMerchantKey;
+  String? selectedPaymentType, stripPaymentKey, stripPaymentPublishKey, flutterWavePublicKey, flutterWaveSecretKey, flutterWaveEncryptionKey, payTabsProfileId, payTabsServerKey, payTabsClientKey, myFatoorahToken, paytmMerchantId, paytmMerchantKey;
 
   String? razorKey;
   bool isTestType = true;
   bool loading = false;
 
-  final plugin = PaystackPlugin();
   late Razorpay _razorpay;
   CheckoutMethod method = CheckoutMethod.card;
   bool is_myFatoorah_test = false;
@@ -47,9 +46,6 @@ class PaymentScreenState extends State<PaymentScreen> {
         log("${e.toString()}");
       });
     }
-    if (paymentList.any((element) => element.type == PAYMENT_TYPE_PAYSTACK)) {
-      plugin.initialize(publicKey: payStackPublicKey.validate());
-    }
     if (paymentList.any((element) => element.type == PAYMENT_TYPE_RAZORPAY)) {
       _razorpay = Razorpay();
       _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, _handlePaymentSuccess);
@@ -64,14 +60,14 @@ class PaymentScreenState extends State<PaymentScreen> {
     await getPaymentList().then((value) {
       appStore.setLoading(false);
       paymentList.addAll(value.data!);
-      selectedPaymentType = paymentList.first.type;
+      // Hide the unsupported legacy Paystack gateway; keep all other payment methods.
+      paymentList.removeWhere((element) => element.type == PAYMENT_TYPE_PAYSTACK);
       if (paymentList.isNotEmpty) {
+        selectedPaymentType = paymentList.first.type;
         paymentList.forEach((element) {
           if (element.type == PAYMENT_TYPE_STRIPE) {
             stripPaymentKey = element.isTest == 1 ? element.testValue!.secretKey : element.liveValue!.secretKey;
             stripPaymentPublishKey = element.isTest == 1 ? element.testValue!.publishableKey : element.liveValue!.publishableKey;
-          } else if (element.type == PAYMENT_TYPE_PAYSTACK) {
-            payStackPublicKey = element.isTest == 1 ? element.testValue!.publicKey : element.liveValue!.publicKey;
           } else if (element.type == PAYMENT_TYPE_RAZORPAY) {
             razorKey = element.isTest == 1 ? element.testValue!.keyId.validate() : element.liveValue!.keyId.validate();
           } else if (element.type == PAYMENT_TYPE_PAYPAL) {
@@ -277,49 +273,6 @@ class PaymentScreenState extends State<PaymentScreen> {
 
       log(error.toString());
     });
-  }
-
-  ///PayStack Payment
-  void payStackPayment(BuildContext context) async {
-    Charge charge = Charge()
-      ..amount = (widget.amount! * 100).round() // In base currency
-      ..email = sharedPref.getString(USER_EMAIL)
-      ..currency = 'NGN';
-
-    charge.reference = _getReference();
-
-    try {
-      CheckoutResponse response = await plugin.checkout(context, method: method, charge: charge, fullscreen: false);
-      payStackUpdateStatus(response.reference, response.message);
-      if (response.message == 'Success') {
-        toast(language.transactionSuccessful);
-        paymentConfirm();
-      } else {
-        toast(language.paymentFailed);
-      }
-    } catch (e) {
-      payStackShowMessage(language.checkConsoleForError);
-      rethrow;
-    }
-  }
-
-  payStackUpdateStatus(String? reference, String message) {
-    payStackShowMessage(message, const Duration(seconds: 7));
-  }
-
-  void payStackShowMessage(String message, [Duration duration = const Duration(seconds: 4)]) {
-    toast(message);
-    log(message);
-  }
-
-  String _getReference() {
-    String platform;
-    if (Platform.isIOS) {
-      platform = 'iOS';
-    } else {
-      platform = 'Android';
-    }
-    return 'ChargedFrom${platform}_${DateTime.now().millisecondsSinceEpoch}';
   }
 
   Future<String?> getPaypalAccessToken() async {
@@ -603,8 +556,6 @@ class PaymentScreenState extends State<PaymentScreen> {
                 razorPayPayment();
               } else if (selectedPaymentType == PAYMENT_TYPE_STRIPE) {
                 stripePay();
-              } else if (selectedPaymentType == PAYMENT_TYPE_PAYSTACK) {
-                payStackPayment(context);
               } else if (selectedPaymentType == PAYMENT_TYPE_PAYPAL) {
                 payPalPayments();
               } else if (selectedPaymentType == PAYMENT_TYPE_FLUTTERWAVE) {
