@@ -73,9 +73,6 @@ dependencies:
   flutter_paytabs_bridge: ^2.6.17
   my_fatoorah_payment_flutter: ^1.1.3
   flutter_inappwebview:
-  flutter_paystack:
-    git:
-      url: https://github.com/appmeetmighty/flutter_paystack.git
   # PUSH NOTIFICATION
   onesignal_flutter: ^5.2.4
   # Social Login
