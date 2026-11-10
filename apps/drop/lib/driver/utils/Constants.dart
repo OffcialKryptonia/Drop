@@ -18,8 +18,8 @@ final GOOGLE_MAP_API_KEY = Platform.isAndroid ? 'ADD_YOUR_GOOGLE_MAP_KEY_ANDROID
 //endregion
 
 //region Currency & country code
-const currencySymbol = '\$';
-const currencyNameConst = 'usd';
+const currencySymbol = '₦';
+const currencyNameConst = 'ngn';
 const defaultCountry = 'IN';
 //endregion
 

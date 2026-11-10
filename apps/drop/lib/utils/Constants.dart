@@ -45,8 +45,8 @@ const USER_COLLECTION = PRODUCTION_MODE ? "users" : 'users_dev';
 //endregion
 
 //region Currency & country code
-const currencySymbol = '\$';
-const currencyNameConst = 'usd';
+const currencySymbol = '₦';
+const currencyNameConst = 'ngn';
 const defaultCountry = 'IN';
 const digitAfterDecimal = 2;
 //endregion
