@@ -26,6 +26,7 @@ dependencies:
   # UI
   scratcher: ^2.5.0
   lottie: ^3.3.1
+  video_player: ^2.9.2
   flutter_rating_bar: ^4.0.1
   flutter_staggered_animations: ^1.1.1
   country_code_picker: ^3.0.0
@@ -131,6 +132,8 @@ flutter:
     - images/app_images/
     - images/json_files/
     - images/icons/
+    - images/brand/
+    - assets/videos/
     - staticjson/
     - staticjson/keyword_list.json
     - assets/sounds/rideringtone.mp3

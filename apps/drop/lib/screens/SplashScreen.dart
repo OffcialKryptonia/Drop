@@ -1,4 +1,6 @@
 import '../manage_imports.dart';
+import '../drop/design/drop_design.dart';
+import '../drop/screens/drop_onboarding_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   @override
@@ -21,14 +23,14 @@ class SplashScreenState extends State<SplashScreen> {
     await Future.delayed(Duration(seconds: 1));
     if (sharedPref.getBool(IS_FIRST_TIME) ?? true) {
       await Geolocator.requestPermission().then((value) async {
-        launchScreen(context, WalkThroughScreen(),
+        launchScreen(context, const DropOnboardingScreen(),
             pageRouteAnimation: PageRouteAnimation.Slide, isNewTask: true);
         Geolocator.getCurrentPosition().then((value) {
           sharedPref.setDouble(LATITUDE, value.latitude);
           sharedPref.setDouble(LONGITUDE, value.longitude);
         });
       }).catchError((e) {
-        launchScreen(context, WalkThroughScreen(),
+        launchScreen(context, const DropOnboardingScreen(),
             pageRouteAnimation: PageRouteAnimation.Slide, isNewTask: true);
       });
     } else {
@@ -86,28 +88,18 @@ class SplashScreenState extends State<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: primaryColor,
-      appBar: AppBar(
-        toolbarHeight: 0,
-        backgroundColor: Colors.transparent,
-        systemOverlayStyle: SystemUiOverlayStyle(
-            statusBarIconBrightness: Brightness.dark,
-            statusBarColor: Colors.transparent,
-            statusBarBrightness: Brightness.dark),
-      ),
+      backgroundColor: DropColors.background(context),
       body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Image.asset(ic_logo_white,
-                fit: BoxFit.contain, height: 150, width: 150),
-            SizedBox(height: 16),
-            Text(mAppName, style: boldTextStyle(color: Colors.white, size: 22)),
-          ],
+        child: TweenAnimationBuilder<double>(
+          tween: Tween<double>(begin: 0, end: 1),
+          duration: const Duration(milliseconds: 600),
+          builder: (BuildContext context, double t, Widget? child) => Opacity(opacity: t, child: child),
+          child: const DropLogo(width: 96, markOnly: true),
         ),
       ),
     );
   }
+
 
   void _checkNotifyPermission() async {
     String versionNo =
