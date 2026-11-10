@@ -1,0 +1,85 @@
+
+name: Drop Onboarding Diagnostics
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnostics:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Run Drop diagnostics
+        shell: bash
+        run: |
+          set +e
+
+          cd "$GITHUB_WORKSPACE" || exit 1
+
+          echo "===== GIT DIAGNOSTICS ====="
+
+          git stash -u
+          git fetch origin
+          git checkout feat/drop-onboarding
+          git branch --show-current
+
+          echo "===== FLUTTER DEPENDENCIES ====="
+
+          cd apps/drop || exit 1
+
+          flutter pub get > /tmp/pub-get.txt 2>&1
+          PUB_STATUS=$?
+
+          tail -3 /tmp/pub-get.txt
+
+          echo "===== FLUTTER ANALYSIS ====="
+
+          flutter analyze > /tmp/analyze.txt 2>&1
+          ANALYZE_STATUS=$?
+
+          tail -2 /tmp/analyze.txt
+
+          echo "===== ANALYSIS ERRORS ====="
+
+          grep -E '^[[:space:]]*error •' \
+            /tmp/analyze.txt | cut -c1-250
+
+          if [ "$ANALYZE_STATUS" -ne 0 ] && \
+             ! grep -qE '^[[:space:]]*error •' /tmp/analyze.txt; then
+            echo "Analyzer exited with status $ANALYZE_STATUS; inspect full log."
+          fi
+
+          echo "===== EXIT STATUS ====="
+          echo "Flutter pub get: $PUB_STATUS"
+          echo "Flutter analyze: $ANALYZE_STATUS"
+
+          {
+            echo "PUB_GET_STATUS=$PUB_STATUS"
+            echo "ANALYZE_STATUS=$ANALYZE_STATUS"
+          } > /tmp/status.txt
+
+      - name: Upload diagnostic reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: drop-onboarding-diagnostics
+          path: |
+            /tmp/pub-get.txt
+            /tmp/analyze.txt
+            /tmp/status.txt
+          if-no-files-found: warn
+          retention-days: 7
