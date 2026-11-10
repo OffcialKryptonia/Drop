@@ -1,5 +1,3 @@
-import 'package:flutter/foundation.dart';
-
 /// Backend base URL (no trailing slash). Override per build with --dart-define=API_BASE_URL=https://example.com
 class AppServerConfig {
   static const String _defaultUrl = 'https://drop.officialkryptonia.workers.dev';
