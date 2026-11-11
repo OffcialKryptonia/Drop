@@ -99,13 +99,6 @@ class _DrawerComponentState extends State<DrawerComponent> {
                       launchScreen(context, WalletScreen(), pageRouteAnimation: PageRouteAnimation.Slide);
                     }),
                 DrawerWidget(
-                    title: language.bankInfo,
-                    iconData: ic_update_bank_info,
-                    onTap: () {
-                      Navigator.pop(context);
-                      launchScreen(context, BankInfoScreen(), pageRouteAnimation: PageRouteAnimation.Slide);
-                    }),
-                DrawerWidget(
                     title: language.emergencyContacts,
                     iconData: ic_emergency_contact,
                     onTap: () {

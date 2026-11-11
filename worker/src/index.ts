@@ -3,6 +3,8 @@ import type { AppEnv, Bindings } from "./env";
 import { connectDb } from "./db";
 import { authRoutes } from "./routes/auth";
 import { legacyRoutes } from "./routes/legacy";
+import { bankRoutes } from "./routes/banks";
+import { adminBankRoutes } from "./routes/admin-banks";
 import { userRoutes } from "./routes/users";
 import { adminRoutes } from "./routes/admin";
 import { adminCatalogRoutes } from "./routes/admin-catalog";
@@ -60,6 +62,8 @@ app.route("/api", driverRideRoutes);
 app.route("/api", driverApplicationRoutes);
 app.route("/api", adminDriverApplicationRoutes);
 app.route("/api", legacyRoutes);
+app.route("/api", bankRoutes);
+app.route("/api", adminBankRoutes);
 
 // Any other /api route that does not exist yet returns JSON, never HTML.
 app.all("/api/*", (c) =>
