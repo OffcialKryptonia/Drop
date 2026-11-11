@@ -59,7 +59,7 @@ for (const path of [
   "/complaintcomment-list", "/managezone-list", "/additional-fees-list", "/airport-list",
   "/earning-list", "/withdrawrequest-list", "/coin-wallet-list", "/driver-rating-list",
   "/rider-rating-list", "/cancelReason-list", "/language-table-list", "/document-list",
-  "/driver-document-list", "/driver-payout-document-list", "/sos-list",
+  "/driver-document-list", "/driver-payout-document-list",
 ]) {
   legacyRoutes.get(path, withDb, requireAuth, (c) => c.json(emptyPage(c)));
   legacyRoutes.post(path, withDb, requireAuth, (c) => c.json(emptyPage(c)));
@@ -119,4 +119,66 @@ legacyRoutes.post("/update-user-status", withDb, requireAuth, async (c) => {
   );
   const row = (await db.query(`select ${USER_COLUMNS} from app.users u where u.id = $1`, [me.id])).rows[0];
   return c.json({ message: "Status updated", data: { ...serializeUser(row), profile_image: null } });
+});
+
+const iso = (v: unknown) => (v instanceof Date ? v.toISOString() : v == null ? null : String(v));
+
+/** Ride history for the Rides screen (Completed / Cancelled tabs). */
+legacyRoutes.get("/riderequest-list", withDb, requireAuth, async (c) => {
+  const me = c.get("user");
+  const db = c.get("db");
+  const page = Math.max(Number(c.req.query("page")) || 1, 1);
+  const perPage = 20;
+  const status = c.req.query("status");
+  const statuses = status === "completed" ? ["completed"] : status === "cancelled" ? ["cancelled", "expired"] : ["completed", "cancelled", "expired"];
+  const total = (await db.query("select count(*)::int n from app.ride_requests where rider_id = $1 and status = any($2)", [me.id, statuses])).rows[0].n;
+  const rows = (await db.query(
+    `select r.*, du.first_name as df, du.last_name as dl from app.ride_requests r
+       left join app.users du on du.id = r.driver_id
+      where r.rider_id = $1 and r.status = any($2) order by r.id desc limit $3 offset $4`,
+    [me.id, statuses, perPage, (page - 1) * perPage])).rows;
+  const name = me.display_name ?? `${me.first_name ?? ""} ${me.last_name ?? ""}`.trim();
+  return c.json({
+    data: rows.map((r) => ({
+      id: Number(r.id), rider_id: me.id, rider_name: name, service_id: Number(r.service_id),
+      driver_id: r.driver_id == null ? null : Number(r.driver_id),
+      driver_name: r.driver_id ? [r.df, r.dl].filter(Boolean).join(" ") : null,
+      datetime: iso(r.created_at), start_time: iso(r.created_at), end_time: iso(r.completed_at),
+      start_address: r.pickup_address, end_address: r.dropoff_address,
+      start_latitude: String(r.pickup_lat), start_longitude: String(r.pickup_lng),
+      end_latitude: String(r.dropoff_lat), end_longitude: String(r.dropoff_lng),
+      distance: Number(r.distance), distance_unit: r.distance_unit, duration: Number(r.duration_minutes),
+      total_amount: Number(r.fare), subtotal: Number(r.fare), estimated_price: Number(r.fare),
+      cancelation_charges: Number(r.cancellation_fee ?? 0),
+      status: r.status === "expired" ? "canceled" : r.status === "cancelled" ? "canceled" : r.status,
+      reason: r.cancel_reason ?? null, is_schedule: 0, ride_has_bids: 0,
+    })),
+    pagination: { currentPage: page, per_page: perPage, totalPages: Math.max(Math.ceil(total / perPage), 1), total_items: total },
+  });
+});
+
+/** Emergency contacts. */
+const sosPage = async (c: any, page = 1) => {
+  const rows = (await c.get("db").query("select * from app.sos_contacts where user_id = $1 order by id", [c.get("user").id])).rows;
+  return {
+    data: rows.map((r: any) => ({ id: Number(r.id), added_by: c.get("user").id, title: r.title, contact_number: r.contact_number, region_id: null, status: 1, created_at: iso(r.created_at), updated_at: iso(r.created_at) })),
+    pagination: { currentPage: page, per_page: 50, totalPages: 1, total_items: rows.length },
+  };
+};
+legacyRoutes.get("/sos-list", withDb, requireAuth, async (c) => c.json(await sosPage(c, Number(c.req.query("page")) || 1)));
+legacyRoutes.post("/save-sos", withDb, requireAuth, async (c) => {
+  const b = await readBody(c);
+  const title = text(b.title, 100);
+  const number = text(b.contact_number, 30);
+  if (!title) return validationFailed(c, { title: ["Enter a name for this contact."] });
+  if (!number || number.replace(/\D/g, "").length < 7) return validationFailed(c, { contact_number: ["Enter a valid phone number."] });
+  const db = c.get("db");
+  const n = (await db.query("select count(*)::int n from app.sos_contacts where user_id = $1", [c.get("user").id])).rows[0].n;
+  if (n >= 5) return validationFailed(c, { contact_number: ["You can save up to 5 emergency contacts."] });
+  await db.query("insert into app.sos_contacts (user_id, title, contact_number) values ($1, $2, $3)", [c.get("user").id, title, number]);
+  return c.json({ message: "Emergency contact added" });
+});
+legacyRoutes.post("/sos-delete/:id", withDb, requireAuth, async (c) => {
+  await c.get("db").query("delete from app.sos_contacts where id = $1 and user_id = $2", [c.req.param("id"), c.get("user").id]);
+  return c.json(await sosPage(c));
 });
