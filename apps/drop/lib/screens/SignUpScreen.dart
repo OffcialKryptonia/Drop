@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 
 import '../drop/data/drop_countries.dart';
 import '../drop/design/drop_design.dart';
@@ -6,7 +5,6 @@ import '../drop/services/drop_biometric.dart';
 import '../drop/services/drop_session.dart';
 import '../drop/widgets/drop_phone_field.dart';
 import '../manage_imports.dart';
-import 'SignInScreen.dart';
 
 /// DROP passenger sign-up: first name, last name, phone number and a password. Email is optional
 /// and the username is generated for you.
