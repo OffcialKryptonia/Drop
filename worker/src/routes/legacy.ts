@@ -140,7 +140,7 @@ legacyRoutes.get("/riderequest-list", withDb, requireAuth, async (c) => {
   const name = me.display_name ?? `${me.first_name ?? ""} ${me.last_name ?? ""}`.trim();
   return c.json({
     data: rows.map((r) => ({
-      id: Number(r.id), rider_id: me.id, rider_name: name, service_id: Number(r.service_id),
+      id: Number(r.id), rider_id: Number(me.id), rider_name: name, service_id: Number(r.service_id),
       driver_id: r.driver_id == null ? null : Number(r.driver_id),
       driver_name: r.driver_id ? [r.df, r.dl].filter(Boolean).join(" ") : null,
       datetime: iso(r.created_at), start_time: iso(r.created_at), end_time: iso(r.completed_at),
@@ -161,7 +161,7 @@ legacyRoutes.get("/riderequest-list", withDb, requireAuth, async (c) => {
 const sosPage = async (c: any, page = 1) => {
   const rows = (await c.get("db").query("select * from app.sos_contacts where user_id = $1 order by id", [c.get("user").id])).rows;
   return {
-    data: rows.map((r: any) => ({ id: Number(r.id), added_by: c.get("user").id, title: r.title, contact_number: r.contact_number, region_id: null, status: 1, created_at: iso(r.created_at), updated_at: iso(r.created_at) })),
+    data: rows.map((r: any) => ({ id: Number(r.id), added_by: Number(c.get("user").id), title: r.title, contact_number: r.contact_number, region_id: null, status: 1, created_at: iso(r.created_at), updated_at: iso(r.created_at) })),
     pagination: { currentPage: page, per_page: 50, totalPages: 1, total_items: rows.length },
   };
 };
