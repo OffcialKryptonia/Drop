@@ -5,6 +5,7 @@ import 'package:mighty_core/utils/core_enum.dart';
 import '../../manage_imports.dart';
 import '../design/drop_design.dart';
 import '../services/drop_api.dart';
+import 'drop_pin_screen.dart';
 import '../widgets/drop_phone_field.dart';
 
 /// Send money from your DROP wallet to another passenger using their username, confirmed with a PIN.
@@ -61,7 +62,7 @@ class _DropTransferScreenState extends State<DropTransferScreen> {
   }
 
   /// Asks for a 4-digit PIN in a small dialog. Returns null if cancelled.
-  Future<String?> _askPin(String title, {String? subtitle}) {
+  Future<String?> _askPin(String title, {String? subtitle, bool forgot = false}) {
     final TextEditingController c = TextEditingController();
     return showDialog<String>(
       context: context,
@@ -86,7 +87,17 @@ class _DropTransferScreenState extends State<DropTransferScreen> {
             ),
           ],
         ),
-        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel'))],
+        actions: [
+          if (forgot)
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const DropPinScreen()));
+              },
+              child: const Text('Forgot PIN?'),
+            ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+        ],
       ),
     );
   }
@@ -126,7 +137,7 @@ class _DropTransferScreenState extends State<DropTransferScreen> {
         if (mounted) setState(() => _sending = false);
         return;
       }
-      final String? pin = await _askPin('Enter your PIN', subtitle: 'Send $currencySymbol${amount.toStringAsFixed(2)} to @$_recipientUsername');
+      final String? pin = await _askPin('Enter your PIN', forgot: true, subtitle: 'Send $currencySymbol${amount.toStringAsFixed(2)} to @$_recipientUsername');
       if (pin == null) {
         if (mounted) setState(() => _sending = false);
         return;
@@ -168,7 +179,18 @@ class _DropTransferScreenState extends State<DropTransferScreen> {
     final TextStyle input = TextStyle(color: DropColors.text(context), fontSize: 16);
     return Scaffold(
       backgroundColor: DropColors.background(context),
-      appBar: AppBar(title: const Text('Send money'), backgroundColor: DropColors.primary, foregroundColor: Colors.white, elevation: 0),
+      appBar: AppBar(
+        title: const Text('Send money'),
+        backgroundColor: DropColors.primary,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const DropPinScreen())),
+            child: const Text('PIN', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(DropSpacing.lg),
         child: Column(
