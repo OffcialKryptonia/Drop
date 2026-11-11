@@ -94,6 +94,7 @@
     { id: "regions", label: "Regions", group: "Operations", perm: "region list", render: pageRegions },
     { id: "ride-options", label: "Ride options", group: "Operations", perm: "service_option list", render: pageOptions },
     { id: "payment-methods", label: "Payment methods", group: "Financial", perm: "payment_gateway list", render: pagePayments },
+    { id: "transfers", label: "Wallet transfers", group: "Financial", perm: "wallet_transfer list", render: pageTransfers },
     { id: "banks", label: "Banks", group: "Financial", perm: "bank list", render: pageBanks },
     { id: "driver-wallets", label: "Driver wallets", group: "Financial", perm: "driver_wallet list", render: pageDriverWallets },
     { id: "roles", label: "Roles", group: "System", perm: "role list", render: pageRoles },
@@ -514,6 +515,37 @@
       }
       card.appendChild(out);
       root.appendChild(card);
+    });
+  }
+
+  // ---------- Wallet transfers (passenger to passenger) ----------
+  var tr = { page: 1 };
+  function pageTransfers(root) {
+    loading(root);
+    api("GET", "/admin/wallet-transfers?page=" + tr.page).then(function (r) {
+      var b = r.body || {}, s = b.settings || {}, list = b.data || [], pg = b.pagination || { page: 1, total_pages: 1, total: 0 };
+      root.textContent = "";
+      root.appendChild(head("Wallet transfers", "Passengers can send trip money to another passenger's wallet with their username and 4-digit PIN. Money moves at once; these limits keep it safe."));
+      var enabled = select([["1", "On"], ["0", "Off"]], s.enabled === false ? "0" : "1");
+      var min = num(s.min), max = num(s.max), daily = num(s.daily_limit), out = h("p", { class: "msg" });
+      var card = h("div", { class: "card" }, field("Transfers", enabled), field("Smallest transfer (\u20A6)", min), field("Largest single transfer (\u20A6)", max), field("Daily limit per passenger (\u20A6)", daily));
+      if (can("wallet_transfer edit")) {
+        var save = h("button", { text: "Save", class: "small", style: "margin-top:10px" });
+        save.addEventListener("click", function () {
+          save.disabled = true;
+          api("PUT", "/admin/wallet-transfers/settings", { enabled: enabled.value === "1", min: nn(min), max: nn(max), daily_limit: nn(daily) }).then(function (x) { save.disabled = false; if (x.ok) { toast("Saved"); pageTransfers(root); } else msg(out, errText(x)); });
+        });
+        card.appendChild(save);
+      }
+      card.appendChild(out); root.appendChild(card);
+      var hist = h("div", { class: "card" }, h("div", { class: "t", text: pg.total + " transfer" + (pg.total === 1 ? "" : "s") }));
+      if (!list.length) hist.appendChild(h("div", { class: "empty", text: "No transfers yet." }));
+      list.forEach(function (t) {
+        hist.appendChild(h("div", { class: "row", style: "padding:8px 0;border-top:1px solid var(--line,#eee)" },
+          h("div", { class: "t", text: "\u20A6" + Number(t.amount).toLocaleString() + " \u00B7 @" + t.sender + " \u2192 @" + t.recipient }),
+          h("div", { class: "s", text: String(t.created_at).slice(0, 16).replace("T", " ") + (t.note ? " \u00B7 " + t.note : "") })));
+      });
+      root.appendChild(hist);
     });
   }
 
