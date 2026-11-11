@@ -1,8 +1,10 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../env";
 import { withDb } from "../db";
-import { requireAuth } from "../auth/middleware";
-import { serializeService } from "../serializers/user";
+import { requireAuth, USER_COLUMNS } from "../auth/middleware";
+import { UNIQUE_VIOLATION } from "../db";
+import { MESSAGES, readBody, validationFailed } from "../lib/legacy";
+import { serializeService, serializeUser } from "../serializers/user";
 
 /**
  * Compatibility endpoints for the screens that still call the old (Mighty-era) API names.
@@ -57,8 +59,64 @@ for (const path of [
   "/complaintcomment-list", "/managezone-list", "/additional-fees-list", "/airport-list",
   "/earning-list", "/withdrawrequest-list", "/coin-wallet-list", "/driver-rating-list",
   "/rider-rating-list", "/cancelReason-list", "/language-table-list", "/document-list",
-  "/driver-document-list", "/driver-payout-document-list",
+  "/driver-document-list", "/driver-payout-document-list", "/sos-list",
 ]) {
   legacyRoutes.get(path, withDb, requireAuth, (c) => c.json(emptyPage(c)));
   legacyRoutes.post(path, withDb, requireAuth, (c) => c.json(emptyPage(c)));
 }
+
+/** Nearby drivers for the map. Live matching happens through /ride/request, so this is empty. */
+legacyRoutes.get("/near-by-driver", withDb, requireAuth, (c) => c.json({ data: [] }));
+
+const text = (v: unknown, max: number): string | null => (typeof v === "string" && v.trim() ? v.trim().slice(0, max) : null);
+
+/**
+ * Profile update. Used after login to link the chat (Firebase) uid, to save the push id, and from the
+ * edit-profile screen. Only the fields that arrive are changed; an empty value never wipes a field.
+ */
+legacyRoutes.post("/update-profile", withDb, requireAuth, async (c) => {
+  const me = c.get("user");
+  const db = c.get("db");
+  const b = await readBody(c);
+  const sets: string[] = [];
+  const args: unknown[] = [me.id];
+  const add = (col: string, value: unknown) => { if (value !== null && value !== undefined) { args.push(value); sets.push(`${col} = $${args.length}`); } };
+
+  const first = text(b.first_name, 100), last = text(b.last_name, 100);
+  add("first_name", first); add("last_name", last);
+  if (first || last) add("display_name", `${first ?? me.first_name ?? ""} ${last ?? me.last_name ?? ""}`.trim());
+  add("uid", text(b.uid, 200)); add("player_id", text(b.player_id, 200)); add("fcm_token", text(b.fcm_token, 1000));
+  add("address", text(b.address, 500));
+  const gender = text(b.gender, 10); if (gender && ["male", "female", "other"].includes(gender)) add("gender", gender);
+  const email = text(b.email, 255)?.toLowerCase(); if (email && email !== me.email) {
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return validationFailed(c, { email: ["The email must be a valid email address."] });
+    add("email", email);
+  }
+  const phone = text(b.contact_number, 30)?.replace(/\D/g, "").replace(/^0+/, "");
+  if (phone && phone !== String(me.contact_number ?? "").replace(/\D/g, "").replace(/^0+/, "")) {
+    if (phone.length < 6 || phone.length > 13) return validationFailed(c, { contact_number: ["Enter a valid phone number."] });
+    add("contact_number", phone);
+  }
+  try {
+    if (sets.length) await db.query(`update app.users set ${sets.join(", ")} where id = $1`, args);
+  } catch (err) {
+    const e = err as { code?: string; constraint?: string };
+    if (e.code === UNIQUE_VIOLATION) return validationFailed(c, e.constraint?.includes("phone") ? { contact_number: ["This phone number already has an account."] } : { email: ["The email has already been taken."] });
+    throw err;
+  }
+  const row = (await db.query(`select ${USER_COLUMNS} from app.users u where u.id = $1`, [me.id])).rows[0];
+  return c.json({ message: "Profile has been updated successfully", data: { ...serializeUser(row), profile_image: null } });
+});
+
+/** The app tells us its push id (and sometimes a status). Accepts the push fields only. */
+legacyRoutes.post("/update-user-status", withDb, requireAuth, async (c) => {
+  const me = c.get("user");
+  const db = c.get("db");
+  const b = await readBody(c);
+  await db.query(
+    "update app.users set player_id = coalesce($2, player_id), fcm_token = coalesce($3, fcm_token), last_actived_at = now() where id = $1",
+    [me.id, text(b.player_id, 200), text(b.fcm_token, 1000)],
+  );
+  const row = (await db.query(`select ${USER_COLUMNS} from app.users u where u.id = $1`, [me.id])).rows[0];
+  return c.json({ message: "Status updated", data: { ...serializeUser(row), profile_image: null } });
+});
