@@ -34,8 +34,8 @@ class EmergencyContactScreenState extends State<EmergencyContactScreen> {
     afterBuildCreated(() => appStore.setLoading(true));
   }
 
-  void init() async {
-    appStore.setLoading(true);
+  void init({bool silent = false}) async {
+    if (!silent) appStore.setLoading(true);
     await getSosList(page: currentPage).then((value) {
       appStore.setLoading(false);
       currentPage = value.pagination!.currentPage!;
@@ -54,31 +54,34 @@ class EmergencyContactScreenState extends State<EmergencyContactScreen> {
   }
 
   Future<void> addContact({String? name, String? contactNumber}) async {
-    appStore.setLoading(true);
     Map req = {
       "title": name,
       "contact_number": contactNumber,
     };
+    // Show the contact straight away; the server list replaces it when it answers.
+    final ContactModel pending = ContactModel(title: name, contactNumber: contactNumber);
+    this.contactNumber.add(pending);
+    setState(() {});
     await saveSOS(req).then((value) {
-      appStore.setLoading(false);
-      init();
+      init(silent: true);
       toast(value.message);
     }).catchError((error) {
-      appStore.setLoading(false);
+      this.contactNumber.remove(pending);
+      setState(() {});
       log(error.toString());
     });
   }
 
   Future<void> delete({required int id}) async {
-    appStore.setLoading(true);
+    // Remove it from the screen first; put it back only if the server refuses.
+    final int at = contactNumber.indexWhere((e) => e.id == id);
+    final ContactModel? removed = at >= 0 ? contactNumber.removeAt(at) : null;
+    setState(() {});
     await deleteSosList(id: id).then((value) {
-      contactNumber.removeWhere((e) => e.id == id);
-      setState(() {});
-      init();
-      appStore.setLoading(false);
+      init(silent: true);
     }).catchError((error) {
-      appStore.setLoading(false);
-
+      if (removed != null) contactNumber.insert(at, removed);
+      setState(() {});
       log(error.toString());
     });
   }
