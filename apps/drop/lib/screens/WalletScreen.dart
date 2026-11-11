@@ -1,5 +1,7 @@
 import '../manage_imports.dart';
 
+const bool kPassengerCanWithdraw = false;
+
 class WalletScreen extends StatefulWidget {
   @override
   WalletScreenState createState() => WalletScreenState();
@@ -337,7 +339,8 @@ class WalletScreenState extends State<WalletScreen> {
         padding: EdgeInsets.all(16),
         child: Row(
           children: [
-            if (totalAmount > 0)
+            // Passengers are not paid out, so there is no withdraw button here (drivers withdraw in Driver mode).
+            if (kPassengerCanWithdraw && totalAmount > 0)
               Expanded(
                 child: AppButtonWidget(
                   text: language.withDraw,
@@ -364,7 +367,7 @@ class WalletScreenState extends State<WalletScreen> {
                   },
                 ),
               ),
-            if (totalAmount > 0) SizedBox(width: 16),
+            if (kPassengerCanWithdraw && totalAmount > 0) SizedBox(width: 16),
             Expanded(
               child: AppButtonWidget(
                 text: language.addMoney,

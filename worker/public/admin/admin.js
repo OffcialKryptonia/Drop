@@ -94,6 +94,7 @@
     { id: "regions", label: "Regions", group: "Operations", perm: "region list", render: pageRegions },
     { id: "ride-options", label: "Ride options", group: "Operations", perm: "service_option list", render: pageOptions },
     { id: "payment-methods", label: "Payment methods", group: "Financial", perm: "payment_gateway list", render: pagePayments },
+    { id: "banks", label: "Banks", group: "Financial", perm: "bank list", render: pageBanks },
     { id: "driver-wallets", label: "Driver wallets", group: "Financial", perm: "driver_wallet list", render: pageDriverWallets },
     { id: "roles", label: "Roles", group: "System", perm: "role list", render: pageRoles },
     { id: "sub-admins", label: "Sub-admins", group: "System", perm: "subadmin list", render: pageSubAdmins }
@@ -512,6 +513,52 @@
         card.appendChild(save);
       }
       card.appendChild(out);
+      root.appendChild(card);
+    });
+  }
+
+  // ---------- Banks (driver payout accounts) ----------
+  var KIND_LABEL = { bank: "Bank", mfb: "Microfinance bank", mmo: "Mobile money / wallet" };
+  function pageBanks(root) {
+    loading(root);
+    api("GET", "/admin/banks").then(function (r) {
+      var list = (r.body || {}).data || [];
+      root.textContent = "";
+      root.appendChild(head("Banks", "Nigerian banks, microfinance banks and mobile money operators drivers can choose for payouts. Account names are checked through Korapay once its keys are saved under Payment methods."));
+      var out = h("p", { class: "msg" });
+      if (can("bank edit")) {
+        var name = text("", "Bank name"), code = text("", "Bank code, e.g. 058"), kind = select([["bank", "Bank"], ["mfb", "Microfinance bank"], ["mmo", "Mobile money / wallet"]], "bank");
+        var add = h("button", { text: "Add bank", class: "small", style: "margin-top:10px" });
+        add.addEventListener("click", function () {
+          add.disabled = true;
+          api("POST", "/admin/banks", { name: name.value, code: code.value, kind: kind.value }).then(function (x) { add.disabled = false; if (x.ok) { toast("Bank added"); pageBanks(root); } else msg(out, errText(x)); });
+        });
+        var sync = h("button", { text: "Fetch logos from public list", class: "small secondary", style: "margin:10px 0 0 8px" });
+        sync.addEventListener("click", function () {
+          sync.disabled = true;
+          api("POST", "/admin/banks/sync-logos").then(function (x) { sync.disabled = false; toast(x.ok ? x.body.message : errText(x), !x.ok); if (x.ok) pageBanks(root); });
+        });
+        root.appendChild(h("div", { class: "card" }, h("div", { class: "t", text: "Add a bank" }), field("Name", name), field("Code", code, "Use the code Korapay expects for this bank."), field("Type", kind), add, sync, out));
+      }
+      var card = h("div", { class: "card" }, h("div", { class: "t", text: list.length + " banks" }));
+      list.forEach(function (b) {
+        var row = h("div", { class: "row", style: "display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line,#eee)" });
+        row.appendChild(b.logo_url ? h("img", { src: b.logo_url, alt: "", style: "width:28px;height:28px;border-radius:6px;object-fit:contain" }) : h("div", { style: "width:28px;height:28px;border-radius:6px;background:#f3e3dc;display:flex;align-items:center;justify-content:center;font-weight:700", text: b.name.charAt(0) }));
+        row.appendChild(h("div", { style: "flex:1" }, h("div", { class: "t", text: b.name }), h("div", { class: "s", text: b.code + " \u00B7 " + (KIND_LABEL[b.kind] || b.kind) + (b.active ? "" : " \u00B7 hidden") })));
+        if (can("bank edit")) {
+          var tog = h("button", { text: b.active ? "Hide" : "Show", class: "small secondary" });
+          tog.addEventListener("click", function () { api("PUT", "/admin/banks/" + b.id, { active: !b.active }).then(function (x) { if (x.ok) pageBanks(root); else toast(errText(x), true); }); });
+          var ed = h("button", { text: "Edit", class: "small secondary" });
+          ed.addEventListener("click", function () {
+            var n = window.prompt("Bank name", b.name); if (n === null) return;
+            var c2 = window.prompt("Bank code", b.code); if (c2 === null) return;
+            var l = window.prompt("Logo image address (leave empty for none)", b.logo_url || ""); if (l === null) return;
+            api("PUT", "/admin/banks/" + b.id, { name: n, code: c2, logo_url: l }).then(function (x) { if (x.ok) { toast("Saved"); pageBanks(root); } else toast(errText(x), true); });
+          });
+          row.appendChild(tog); row.appendChild(ed);
+        }
+        card.appendChild(row);
+      });
       root.appendChild(card);
     });
   }
