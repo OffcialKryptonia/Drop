@@ -1,3 +1,4 @@
+import '../drop/screens/drop_transfer_screen.dart';
 import '../manage_imports.dart';
 
 const bool kPassengerCanWithdraw = false;
@@ -368,6 +369,17 @@ class WalletScreenState extends State<WalletScreen> {
                 ),
               ),
             if (kPassengerCanWithdraw && totalAmount > 0) SizedBox(width: 16),
+            Expanded(
+              child: AppButtonWidget(
+                text: 'Send money',
+                width: MediaQuery.of(context).size.width,
+                onTap: () async {
+                  await launchScreen(context, DropTransferScreen(balance: totalAmount.toDouble()));
+                  init();
+                },
+              ),
+            ),
+            SizedBox(width: 16),
             Expanded(
               child: AppButtonWidget(
                 text: language.addMoney,

@@ -6,7 +6,7 @@ type Post = {
   userId: number;
   direction: "credit" | "debit";
   amount: string; // decimal string with at most 2 places, e.g. "5000.00"
-  kind: "topup" | "ride_payment" | "ride_earning" | "commission" | "withdrawal" | "refund" | "adjustment" | "legacy_import";
+  kind: "topup" | "ride_payment" | "ride_earning" | "commission" | "withdrawal" | "refund" | "adjustment" | "legacy_import" | "transfer_out" | "transfer_in";
   idempotencyKey: string;
   /** Which of the person's two wallets: the rider wallet (default) or the driver/commission wallet. */
   wallet?: "rider" | "driver";
