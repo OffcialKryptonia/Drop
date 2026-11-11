@@ -52,6 +52,8 @@
 	<string>Drop app requires access to the Camera to upload your profile photo.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Looking for local tcp Bonjour service</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>DROP uses Face ID so you can log in quickly without typing your password.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Drop  App uses your location to pick origins, destinations, and predict ride times</string>
 	<key>NSLocationAlwaysUsageDescription</key>
