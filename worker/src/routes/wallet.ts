@@ -85,7 +85,7 @@ walletRoutes.get("/wallet/virtual-account", withDb, requireAuth, async (c) => {
   if (!me.first_name || !me.last_name || !me.email) return c.json({ message: "Complete your name and email in your profile first.", status: 422 }, 422);
 
   const base = pocketfiBase(gw.isTest, c.env.POCKETFI_BASE_URL);
-  const acct = await createStaticAccount(base, gw.creds, { first_name: String(me.first_name), last_name: String(me.last_name), phone, email: String(me.email) });
+  const acct = await createStaticAccount(base, gw.creds, { first_name: String(me.first_name), last_name: String(me.last_name), phone, email: me.email ? String(me.email) : `${me.username}@users.drop.ng` });
   if (!acct) return c.json({ message: "Could not create your account number right now. Please try again shortly.", status: 502 }, 502);
 
   try {

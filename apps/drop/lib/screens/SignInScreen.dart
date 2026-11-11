@@ -1,446 +1,215 @@
-import '../manage_imports.dart';
+import 'package:flutter/material.dart';
 
+import '../drop/data/drop_countries.dart';
+import '../drop/design/drop_design.dart';
+import '../drop/services/drop_biometric.dart';
+import '../drop/services/drop_session.dart';
+import '../drop/widgets/drop_phone_field.dart';
+import '../manage_imports.dart';
+import 'SignUpScreen.dart';
+
+/// DROP log in: phone number or username, with a password, and fingerprint where available.
 class SignInScreen extends StatefulWidget {
+  const SignInScreen({super.key});
+
   @override
   SignInScreenState createState() => SignInScreenState();
 }
 
 class SignInScreenState extends State<SignInScreen> {
-  GlobalKey<FormState> formKey = GlobalKey<FormState>();
-  final FirebaseAuth auth = FirebaseAuth.instance;
-  UserModel userModel = UserModel();
+  final GlobalKey<FormState> _form = GlobalKey<FormState>();
+  final TextEditingController _phone = TextEditingController();
+  final TextEditingController _username = TextEditingController();
+  final TextEditingController _password = TextEditingController();
 
-  GoogleAuthServices googleAuthService = GoogleAuthServices();
-
-  AuthServices authService = AuthServices();
-
-  TextEditingController emailController = TextEditingController();
-  TextEditingController passController = TextEditingController();
-
-  FocusNode emailFocus = FocusNode();
-  FocusNode passFocus = FocusNode();
-
-  // String? privacyPolicy;
-  // String? termsCondition;
-
-  bool mIsRemember = false;
-  bool isAcceptTermsNPrivacy = false;
+  DropCountry _country = defaultDropCountry;
+  bool _usePhone = true;
+  bool _hidePassword = true;
+  bool _busy = false;
+  bool _bioReady = false;
 
   @override
   void initState() {
     super.initState();
-    init();
-    checkAndShowFirebasePopup();
+    saveOneSignalPlayerId().then((_) {}).catchError((_) {});
+    _checkBiometric();
   }
 
-  void init() async {
-    // await appSetting();
-    await saveOneSignalPlayerId().then((value) {});
-    mIsRemember = sharedPref.getBool(REMEMBER_ME) ?? false;
-    if (mIsRemember) {
-      emailController.text = sharedPref.getString(USER_EMAIL).validate();
-      passController.text = sharedPref.getString(USER_PASSWORD).validate();
-      setState(() {});
-    }
+  Future<void> _checkBiometric() async {
+    final bool ready = await DropBiometric.deviceSupported() && await DropBiometric.isEnabled();
+    if (!mounted) return;
+    setState(() => _bioReady = ready);
   }
 
-  Future<void> checkAndShowFirebasePopup() async {
+  String get _identifier => _usePhone ? '${_country.dial}${dropNationalNumber(_phone.text)}' : _username.text.trim();
+
+  Future<void> _login({String? identifier, String? password, bool offerBiometric = true}) async {
+    hideKeyboard(context);
+    if (identifier == null && !_form.currentState!.validate()) return;
+    final String id = identifier ?? _identifier;
+    final String pw = password ?? _password.text;
+    setState(() => _busy = true);
     try {
-      final docRef = FirebaseFirestore.instance.collection('show_popup').doc('config'); // single config document
-      final doc = await docRef.get();
-      if (!doc.exists) {
-        // Create default document
-        await docRef.set({
-          "show_popup": false,
-          "message": "",
-          "title": "",
-        });
+      final res = await logInApi({
+        'identifier': id,
+        'password': pw,
+        'player_id': sharedPref.getString(PLAYER_ID).validate(),
+        'user_type': RIDER,
+      });
+      if (res.data == null) {
+        toast(res.message.validate().isNotEmpty ? res.message : 'Wrong phone number, username or password');
         return;
       }
-      bool showPopup = doc.data()?['show_popup'] ?? false;
-      String message = doc.data()?['message'] ?? "";
-      String title = doc.data()?['title'] ?? "";
-
-      if (showPopup) {
-        Future.delayed(Duration(milliseconds: 500), () {
-          showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (context) {
-              return popupDialog(title, message, context);
-            },
-          );
-        });
+      if (offerBiometric && await DropBiometric.deviceSupported() && !await DropBiometric.isEnabled() && mounted) {
+        final bool? yes = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Log in with fingerprint?'),
+            content: const Text('Next time you can open DROP with your fingerprint instead of typing your password.'),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Not now')),
+              TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Turn on')),
+            ],
+          ),
+        );
+        if (yes == true) await DropBiometric.enable(identifier: id, password: pw);
       }
+      if (!mounted) return;
+      await dropFinishSignIn(context, res.data!, pw);
     } catch (e) {
-      print("Popup Error: $e");
+      toast(e.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
-  // Future<void> appSetting() async {
-  //   await getAppSettingApi().then((value) {
-  //     print(value.termsCondition!.value);
-  //     print(value.privacyPolicyModel!.value);
-  //     if (value.privacyPolicyModel!.value != null) privacyPolicy = value.privacyPolicyModel!.value;
-  //     if (value.termsCondition!.value != null) termsCondition = value.termsCondition!.value;
-  //   }).catchError((error) {
-  //     log(error.toString());
-  //   });
-  // }
-
-  Future<void> logIn() async {
-    hideKeyboard(context);
-    if (formKey.currentState!.validate()) {
-      formKey.currentState!.save();
-      if (isAcceptTermsNPrivacy) {
-        appStore.setLoading(true);
-
-        Map req = {
-          'email': emailController.text.trim(),
-          'password': passController.text.trim(),
-          "player_id": sharedPref.getString(PLAYER_ID).validate(),
-          'user_type': RIDER,
-        };
-        log(req);
-        await logInApi(req).then((value) {
-          if (value.data != null) {
-            userModel = value.data!;
-            auth.signInWithEmailAndPassword(email: emailController.text, password: passController.text).then((value) async {
-              sharedPref.setString(UID, value.user!.uid);
-              updateProfileUid();
-              await checkPermission().then((value) async {
-                await Geolocator.getCurrentPosition().then((value) {
-                  sharedPref.setDouble(LATITUDE, value.latitude);
-                  sharedPref.setDouble(LONGITUDE, value.longitude);
-                });
-              });
-              appStore.setLoading(false);
-              launchScreen(context, DashBoardScreen(), isNewTask: true, pageRouteAnimation: PageRouteAnimation.Slide);
-            }).catchError((e) {
-              appStore.setLoading(false);
-              if (e.toString().contains('user-not-found') || e.toString().contains('invalid')) {
-                authService.signUpWithEmailPassword(
-                  context,
-                  mobileNumber: userModel.contactNumber,
-                  email: userModel.email,
-                  fName: userModel.firstName,
-                  lName: userModel.lastName,
-                  userName: userModel.username,
-                  password: passController.text,
-                  userType: RIDER,
-                );
-              } else {
-                launchScreen(context, DashBoardScreen(), isNewTask: true, pageRouteAnimation: PageRouteAnimation.Slide);
-              }
-              log(e.toString());
-            });
-            // appStore.setLoading(false);
-          } else {
-            appStore.isLoading = false;
-            toast(value.message);
-          }
-        }).catchError((error) {
-          appStore.isLoading = false;
-          toast(error.toString());
-        });
-      } else {
-        toast(language.pleaseAcceptTermsOfServicePrivacyPolicy);
-      }
-    }
-  }
-
-  void googleSignIn() async {
-    hideKeyboard(context);
-    appStore.setLoading(true);
-
-    await googleAuthService.signInWithGoogle(context).then((value) async {
-      appStore.setLoading(false);
-    }).catchError((e) {
-      appStore.setLoading(false);
-      toast(e.toString());
-    });
-  }
-
-  appleLoginApi() async {
-    hideKeyboard(context);
-    appStore.setLoading(true);
-    await appleLogIn(context).then((value) {
-      appStore.setLoading(false);
-    }).catchError((e) {
-      appStore.setLoading(false);
-      toast(e.toString());
-    });
+  Future<void> _fingerprint() async {
+    final saved = await DropBiometric.unlock();
+    if (saved == null) return;
+    await _login(identifier: saved.identifier, password: saved.password, offerBiometric: false);
   }
 
   @override
-  void setState(fn) {
-    if (mounted) super.setState(fn);
+  void dispose() {
+    _phone.dispose();
+    _username.dispose();
+    _password.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Stack(
-        children: [
-          Form(
-            key: formKey,
-            child: SingleChildScrollView(
-              padding: EdgeInsets.all(16.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  SizedBox(height: context.statusBarHeight + 16),
-                  ClipRRect(borderRadius: radius(50), child: Image.asset(ic_app_logo, width: 100, height: 100)),
-                  SizedBox(height: 16),
-                  InkWell(
-                      onTap: () {
-                        throw Exception("CHECKING  EXCEPTION::::");
-                      },
-                      child: Text(language.welcome, style: boldTextStyle(size: 22))),
-                  RichText(
-                    text: TextSpan(
+      backgroundColor: DropColors.background(context),
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: DropSpacing.lg, vertical: DropSpacing.lg),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 440),
+              child: Form(
+                key: _form,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Center(child: DropLogo(width: 170)),
+                    const SizedBox(height: DropSpacing.xl),
+                    Text('Welcome back', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: DropColors.text(context))),
+                    const SizedBox(height: 6),
+                    Text('Log in to book your next ride.', style: TextStyle(fontSize: 15, color: DropColors.mutedText(context))),
+                    const SizedBox(height: DropSpacing.lg),
+                    _Toggle(usePhone: _usePhone, onChanged: (v) => setState(() => _usePhone = v)),
+                    const SizedBox(height: DropSpacing.md),
+                    if (_usePhone)
+                      DropPhoneField(
+                        controller: _phone,
+                        country: _country,
+                        onCountryChanged: (c) => setState(() => _country = c),
+                        textInputAction: TextInputAction.next,
+                      )
+                    else
+                      TextFormField(
+                        controller: _username,
+                        textInputAction: TextInputAction.next,
+                        autocorrect: false,
+                        style: TextStyle(color: DropColors.text(context), fontSize: 16),
+                        decoration: dropInputDecoration(context, label: 'Username', prefix: const Icon(Icons.alternate_email)),
+                        validator: (v) => (v ?? '').trim().isEmpty ? 'Enter your username' : null,
+                      ),
+                    const SizedBox(height: DropSpacing.md),
+                    TextFormField(
+                      controller: _password,
+                      obscureText: _hidePassword,
+                      textInputAction: TextInputAction.done,
+                      onFieldSubmitted: (_) => _login(),
+                      style: TextStyle(color: DropColors.text(context), fontSize: 16),
+                      decoration: dropInputDecoration(
+                        context,
+                        label: 'Password',
+                        prefix: const Icon(Icons.lock_outline),
+                        suffix: IconButton(
+                          icon: Icon(_hidePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+                          onPressed: () => setState(() => _hidePassword = !_hidePassword),
+                        ),
+                      ),
+                      validator: (v) => (v ?? '').isEmpty ? 'Enter your password' : null,
+                    ),
+                    const SizedBox(height: DropSpacing.lg),
+                    DropPrimaryButton(label: 'Log in', loading: _busy, onPressed: _login),
+                    if (_bioReady) ...[
+                      const SizedBox(height: DropSpacing.md),
+                      DropSecondaryButton(label: 'Use fingerprint', onPressed: _busy ? null : _fingerprint),
+                    ],
+                    const SizedBox(height: DropSpacing.lg),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        TextSpan(text: '${language.signContinue} ', style: primaryTextStyle(size: 14)),
-                        TextSpan(text: '🚗', style: primaryTextStyle(size: 20)),
+                        Text("New to DROP? ", style: TextStyle(color: DropColors.mutedText(context))),
+                        GestureDetector(
+                          onTap: () => launchScreen(context, const SignUpScreen(), pageRouteAnimation: PageRouteAnimation.Slide),
+                          child: Text('Create an account', style: TextStyle(color: DropColors.primary, fontWeight: FontWeight.w700)),
+                        ),
                       ],
                     ),
-                  ),
-                  SizedBox(height: 40),
-                  AppTextField(
-                    controller: emailController,
-                    nextFocus: passFocus,
-                    autoFocus: false,
-                    textFieldType: TextFieldType.EMAIL,
-                    keyboardType: TextInputType.emailAddress,
-                    errorThisFieldRequired: language.thisFieldRequired,
-                    decoration: inputDecoration(context, label: language.email),
-                  ),
-                  SizedBox(height: 16),
-                  AppTextField(
-                    controller: passController,
-                    focus: passFocus,
-                    autoFocus: false,
-                    textFieldType: TextFieldType.PASSWORD,
-                    errorThisFieldRequired: language.thisFieldRequired,
-                    decoration: inputDecoration(context, label: language.password),
-                  ),
-                  SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          SizedBox(
-                            height: 18.0,
-                            width: 18.0,
-                            child: Checkbox(
-                              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              activeColor: primaryColor,
-                              value: mIsRemember,
-                              shape: RoundedRectangleBorder(borderRadius: radius(4)),
-                              onChanged: (v) async {
-                                mIsRemember = v!;
-                                if (!mIsRemember) {
-                                  sharedPref.remove(REMEMBER_ME);
-                                } else {
-                                  await sharedPref.setBool(REMEMBER_ME, mIsRemember);
-                                  await sharedPref.setString(USER_EMAIL, emailController.text);
-                                  await sharedPref.setString(USER_PASSWORD, passController.text);
-                                }
-
-                                setState(() {});
-                              },
-                            ),
-                          ),
-                          SizedBox(width: 8),
-                          inkWellWidget(
-                            onTap: () async {
-                              mIsRemember = !mIsRemember;
-                              setState(() {});
-                            },
-                            child: Text(language.rememberMe, style: primaryTextStyle(size: 14)),
-                          ),
-                        ],
-                      ),
-                      inkWellWidget(
-                        onTap: () {
-                          launchScreen(context, ForgotPasswordScreen(), pageRouteAnimation: PageRouteAnimation.SlideBottomTop);
-                        },
-                        child: Text(language.forgotPassword, style: primaryTextStyle()),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 16),
-                  Row(
-                    children: [
-                      SizedBox(
-                        height: 18,
-                        width: 18,
-                        child: Checkbox(
-                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          activeColor: primaryColor,
-                          value: isAcceptTermsNPrivacy,
-                          shape: RoundedRectangleBorder(borderRadius: radius(4)),
-                          onChanged: (v) async {
-                            isAcceptTermsNPrivacy = v!;
-                            setState(() {});
-                          },
-                        ),
-                      ),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: RichText(
-                          text: TextSpan(
-                            children: [
-                              TextSpan(text: language.iAgreeToThe + " ", style: primaryTextStyle(size: 12)),
-                              TextSpan(
-                                text: language.termsConditions.splitBefore(' &'),
-                                style: boldTextStyle(color: primaryColor, size: 14),
-                                recognizer: TapGestureRecognizer()
-                                  ..onTap = () {
-                                    if (TNC_URL.isNotEmpty) {
-                                      launchScreen(context, TermsConditionScreen(title: language.termsConditions, subtitle: TNC_URL), pageRouteAnimation: PageRouteAnimation.Slide);
-                                    } else {
-                                      toast(language.txtURLEmpty);
-                                    }
-                                  },
-                              ),
-                              TextSpan(text: ' & ', style: primaryTextStyle(size: 12)),
-                              TextSpan(
-                                text: language.privacyPolicy,
-                                style: boldTextStyle(color: primaryColor, size: 14),
-                                recognizer: TapGestureRecognizer()
-                                  ..onTap = () {
-                                    if (PRIVACY_URL.isNotEmpty) {
-                                      launchScreen(context, TermsConditionScreen(title: language.privacyPolicy, subtitle: PRIVACY_URL), pageRouteAnimation: PageRouteAnimation.Slide);
-                                    } else {
-                                      toast(language.txtURLEmpty);
-                                    }
-                                  },
-                              ),
-                            ],
-                          ),
-                          textAlign: TextAlign.left,
-                        ),
-                      )
-                    ],
-                  ),
-                  SizedBox(height: 32),
-                  AppButtonWidget(
-                    width: MediaQuery.of(context).size.width,
-                    text: language.logIn,
-                    onTap: () async {
-                      logIn();
-                    },
-                  ),
-                  SizedBox(height: 16),
-                  socialWidget(),
-                  SizedBox(height: 16),
-                ],
-              ),
-            ),
-          ),
-          Observer(
-            builder: (context) {
-              return Visibility(
-                visible: appStore.isLoading,
-                child: loaderWidget(),
-              );
-            },
-          ),
-        ],
-      ),
-      bottomNavigationBar: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(language.donHaveAnAccount, style: primaryTextStyle()),
-                SizedBox(width: 8),
-                inkWellWidget(
-                  onTap: () {
-                    hideKeyboard(context);
-                    launchScreen(context, SignUpScreen());
-                  },
-                  child: Text(language.signUp, style: boldTextStyle(size: 18)),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
-          SizedBox(height: 16),
-        ],
+        ),
       ),
     );
   }
+}
 
-  Widget socialWidget() {
-    return Column(
-      children: [
-        Padding(
-          padding: EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Expanded(child: Divider(color: dividerColor)),
-              Padding(
-                padding: EdgeInsets.only(left: 16, right: 16),
-                child: Text(language.orLogInWith, style: primaryTextStyle()),
+class _Toggle extends StatelessWidget {
+  const _Toggle({required this.usePhone, required this.onChanged});
+
+  final bool usePhone;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget tab(String label, bool selected, VoidCallback onTap) => Expanded(
+          child: GestureDetector(
+            onTap: onTap,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(
+                color: selected ? DropColors.background(context) : Colors.transparent,
+                borderRadius: BorderRadius.circular(DropRadius.field - 2),
+                boxShadow: selected ? const [BoxShadow(color: Color(0x14000000), blurRadius: 6, offset: Offset(0, 2))] : null,
               ),
-              Expanded(child: Divider(color: dividerColor)),
-            ],
+              alignment: Alignment.center,
+              child: Text(label, style: TextStyle(fontWeight: FontWeight.w700, color: selected ? DropColors.primary : DropColors.mutedText(context))),
+            ),
           ),
-        ),
-        SizedBox(height: 16),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            inkWellWidget(
-              onTap: () async {
-                googleSignIn();
-              },
-              child: socialWidgetComponent(img: ic_google),
-            ),
-            SizedBox(width: 12),
-            inkWellWidget(
-              onTap: () async {
-                showDialog(
-                  context: context,
-                  builder: (_) {
-                    return AlertDialog(
-                      contentPadding: EdgeInsets.all(16),
-                      content: OTPDialog(),
-                    );
-                  },
-                );
-                appStore.setLoading(false);
-              },
-              child: Container(
-                padding: EdgeInsets.all(4),
-                decoration: BoxDecoration(border: Border.all(color: dividerColor), borderRadius: radius(defaultRadius)),
-                child: Image.asset(ic_mobile, fit: BoxFit.cover, height: 30, width: 30),
-              ),
-            ),
-            if (Platform.isIOS) SizedBox(width: 12),
-            if (Platform.isIOS)
-              inkWellWidget(
-                onTap: () async {
-                  appleLoginApi();
-                },
-                child: socialWidgetComponent(img: ic_apple),
-              ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget socialWidgetComponent({required String img}) {
+        );
     return Container(
-      padding: EdgeInsets.all(4),
-      decoration: BoxDecoration(border: Border.all(color: dividerColor), borderRadius: radius(defaultRadius)),
-      child: Image.asset(img, fit: BoxFit.cover, height: 30, width: 30),
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(color: DropColors.surface(context), borderRadius: BorderRadius.circular(DropRadius.field)),
+      child: Row(children: [tab('Phone', usePhone, () => onChanged(true)), tab('Username', !usePhone, () => onChanged(false))]),
     );
   }
 }
