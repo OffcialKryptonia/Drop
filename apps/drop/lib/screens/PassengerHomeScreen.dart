@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart' show LatLng;
+import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../components/DropMap.dart';
@@ -342,6 +343,18 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
     if (mounted) setState(() => busy = false);
   }
 
+  /// Shares a link that lets a friend or family member follow this trip live.
+  Future<void> _share() async {
+    try {
+      final res = await RideApi.shareTrip();
+      await SharePlus.instance.share(ShareParams(text: res['message']?.toString() ?? res['url'].toString()));
+    } on ApiFailure catch (e) {
+      _say(e.message);
+    } catch (_) {
+      _say('Could not create the share link. Please try again.');
+    }
+  }
+
   Future<void> _call(String? number) async {
     if (number == null || number.isEmpty) return;
     try {
@@ -623,6 +636,16 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
           IconButton(onPressed: () => _call(driver['contact_number']?.toString()), icon: Icon(Icons.call, color: primaryColor)),
         ]),
       ],
+      if (driver.isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: OutlinedButton.icon(
+            onPressed: _share,
+            icon: const Icon(Icons.share_outlined, size: 18),
+            label: const Text('Share trip for safety'),
+            style: OutlinedButton.styleFrom(foregroundColor: primaryColor, side: BorderSide(color: primaryColor), minimumSize: const Size.fromHeight(44)),
+          ),
+        ),
       const SizedBox(height: 10),
       Row(children: [
         const Icon(Icons.payments_outlined, size: 18),

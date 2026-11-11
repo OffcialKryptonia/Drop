@@ -95,6 +95,11 @@ class RideApi {
 
   static Future<Map<String, dynamic>> history() => _get('ride/history');
 
+  /// A link someone can open to follow this trip live.
+  static Future<Map<String, dynamic>> shareTrip() => _post('ride/share');
+
+  static Future<Map<String, dynamic>> stopSharing() => _post('ride/share/stop');
+
   // ---- Driver ----
 
   /// The open ride (`active`) or nearby requests (`requests`).
