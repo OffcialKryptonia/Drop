@@ -14,6 +14,12 @@ import { serializeService, serializeUser } from "../serializers/user";
  */
 export const legacyRoutes = new Hono<AppEnv>();
 
+// Lists must always be fresh: never let a client or proxy reuse an old answer.
+legacyRoutes.use("*", async (c, next) => {
+  await next();
+  c.header("Cache-Control", "no-store");
+});
+
 const CURRENCY = { name: "Nigerian Naira", code: "NGN", symbol: "₦", position: "left" };
 
 const emptyPage = (c: { req: { query: (k: string) => string | undefined } }) => ({
