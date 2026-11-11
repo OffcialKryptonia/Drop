@@ -72,6 +72,8 @@ class EmergencyContactScreenState extends State<EmergencyContactScreen> {
   Future<void> delete({required int id}) async {
     appStore.setLoading(true);
     await deleteSosList(id: id).then((value) {
+      contactNumber.removeWhere((e) => e.id == id);
+      setState(() {});
       init();
       appStore.setLoading(false);
     }).catchError((error) {
