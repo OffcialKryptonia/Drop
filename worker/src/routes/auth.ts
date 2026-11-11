@@ -23,7 +23,9 @@ const optId = z.preprocess(
 );
 
 const loginSchema = z.object({
-  email: z.string({ error: "The email field is required." }).trim().min(1, "The email field is required.").max(255),
+  // New apps send "identifier" (phone, username or email); the old field name "email" still works.
+  identifier: z.string().trim().max(255).optional(),
+  email: z.string().trim().max(255).optional(),
   password: z.string({ error: "The password field is required." }).min(1, "The password field is required.").max(200),
   user_type: z.enum(["rider", "driver", "admin", "fleet"]).optional(),
   player_id: opt(),
@@ -40,15 +42,28 @@ function issues(err: z.ZodError): Record<string, string[]> {
 authRoutes.post("/login", withDb, async (c) => {
   const parsed = loginSchema.safeParse(await readBody(c));
   if (!parsed.success) return validationFailed(c, issues(parsed.error));
-  const { email, password, player_id, fcm_token, login_api } = parsed.data;
+  const { password, player_id, fcm_token, login_api } = parsed.data;
+  const identifier = (parsed.data.identifier || parsed.data.email || "").trim();
+  if (!identifier) return validationFailed(c, { identifier: ["Enter your phone number or username."] });
   const userType = parsed.data.user_type;
   const db = c.get("db");
 
+  // Phone, email or username: decide which column to match.
+  let where: string;
+  let arg: string;
+  if (identifier.includes("@")) { where = "u.email = $1"; arg = identifier; }
+  else if (/^[+\d][\d\s()-]{6,}$/.test(identifier)) {
+    const digits = identifier.replace(/\D/g, "");
+    // No country code typed: assume Nigeria. A leading 0 is the local trunk prefix.
+    const full = identifier.startsWith("+") ? digits : digits.startsWith("234") && digits.length >= 12 ? digits : "234" + digits.replace(/^0+/, "");
+    where = "app.phone_digits(u.country_code, u.contact_number) = $1"; arg = full;
+  } else { where = "u.username = $1"; arg = identifier; }
+
   const found = await db.query(
     `select u.password_hash, ${USER_COLUMNS} from app.users u
-      where u.email = $1 and u.deleted_at is null ${userType ? "and u.user_type = $2" : ""}
+      where ${where} and u.deleted_at is null ${userType ? "and u.user_type = $2" : ""}
       limit 1`,
-    userType ? [email, userType] : [email],
+    userType ? [arg, userType] : [arg],
   );
   const row = found.rows[0];
   const ok = await verifyPassword(db, password, row?.password_hash ?? null);
@@ -79,8 +94,9 @@ const required = (name: string) => `The ${name} field is required.`;
 const registerSchema = z.object({
   first_name: z.string({ error: required("first name") }).trim().min(1, required("first name")).max(100),
   last_name: z.string({ error: required("last name") }).trim().min(1, required("last name")).max(100),
-  email: z.string({ error: required("email") }).trim().toLowerCase().email("The email must be a valid email address.").max(255),
-  username: z.string({ error: required("username") }).trim().min(1, required("username")).max(100),
+  // Email is optional: riders sign up with a phone number.
+  email: z.preprocess((v) => (v === "" || v == null ? null : v), z.string().trim().toLowerCase().email("The email must be a valid email address.").max(255).nullable()),
+  username: z.preprocess((v) => (v === "" || v == null ? null : v), z.string().trim().min(3, "The username must be at least 3 characters.").max(100).nullable()),
   password: z.string({ error: required("password") }).min(8, "The password must be at least 8 characters.").max(72, "The password must not be greater than 72 characters."),
   user_type: z.enum(["rider", "driver"], { error: "The selected user type is invalid." }).default("rider"),
   contact_number: opt(30),
@@ -112,6 +128,18 @@ authRoutes.post("/register", withDb, async (c) => {
   if (!parsed.success) return validationFailed(c, issues(parsed.error));
   const d = parsed.data;
   const db = c.get("db");
+  if (!d.email && !d.contact_number) return validationFailed(c, { contact_number: ["Enter your phone number."] });
+  if (d.contact_number) {
+    const national = d.contact_number.replace(/\D/g, "").replace(/^0+/, "");
+    if (national.length < 6 || national.length > 13) return validationFailed(c, { contact_number: ["Enter a valid phone number."] });
+    d.contact_number = national; // stored without the country code or leading 0
+    d.country_code = (d.country_code ?? "+234").replace(/[^\d+]/g, "") || "+234";
+    if (!d.country_code.startsWith("+")) d.country_code = "+" + d.country_code;
+  }
+  // No username typed: make a friendly one, e.g. ada4821.
+  const baseName = (d.username ?? `${d.first_name}${d.last_name}`).toLowerCase().replace(/[^a-z0-9_.]/g, "").slice(0, 20) || "user";
+  const usernameGiven = d.username != null;
+  d.username = usernameGiven ? d.username : `${baseName}${Math.floor(1000 + Math.random() * 9000)}`;
 
   // Clients never choose their own role or status: only riders and drivers can self-register,
   // riders are active at once, drivers wait for admin approval.
@@ -162,8 +190,11 @@ authRoutes.post("/register", withDb, async (c) => {
     await db.query("rollback").catch(() => undefined);
     const e = err as { code?: string; constraint?: string };
     if (e.code === UNIQUE_VIOLATION) {
-      const field = e.constraint?.includes("username") ? "username" : "email";
-      return validationFailed(c, { [field]: [`The ${field} has already been taken.`] });
+      if (e.constraint?.includes("phone")) return validationFailed(c, { contact_number: ["This phone number already has an account. Please log in instead."] });
+      if (e.constraint?.includes("username")) {
+        return validationFailed(c, { username: [usernameGiven ? "The username has already been taken." : "Please try again."] });
+      }
+      return validationFailed(c, { email: ["The email has already been taken."] });
     }
     if (e.code === FOREIGN_KEY_VIOLATION) {
       return validationFailed(c, { service_id: ["The selected service id is invalid."] });

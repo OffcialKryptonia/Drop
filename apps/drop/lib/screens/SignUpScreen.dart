@@ -1,383 +1,218 @@
+import 'package:flutter/material.dart';
+
+import '../drop/data/drop_countries.dart';
+import '../drop/design/drop_design.dart';
+import '../drop/services/drop_biometric.dart';
+import '../drop/services/drop_session.dart';
+import '../drop/widgets/drop_phone_field.dart';
 import '../manage_imports.dart';
+import 'SignInScreen.dart';
 
+/// DROP passenger sign-up: first name, last name, phone number and a password. Email is optional
+/// and the username is generated for you.
 class SignUpScreen extends StatefulWidget {
-  final bool socialLogin;
-  final String? userName;
-  final bool isOtp;
-  final String? countryCode;
-  // final String? privacyPolicyUrl;
-  // final String? termsConditionUrl;
+  /// The old phone-OTP dialog still passes these; they are accepted and ignored.
+  const SignUpScreen({super.key, this.countryCode, this.userName, this.socialLogin = false});
 
-  SignUpScreen({
-    this.socialLogin = false,
-    this.userName,
-    this.isOtp = false,
-    this.countryCode,
-  });
+  final String? countryCode;
+  final String? userName;
+  final bool socialLogin;
 
   @override
   SignUpScreenState createState() => SignUpScreenState();
 }
 
 class SignUpScreenState extends State<SignUpScreen> {
-  final GlobalKey<FormState> formKey = GlobalKey<FormState>();
-  AuthServices authService = AuthServices();
+  final GlobalKey<FormState> _form = GlobalKey<FormState>();
+  final TextEditingController _first = TextEditingController();
+  final TextEditingController _last = TextEditingController();
+  final TextEditingController _phone = TextEditingController();
+  final TextEditingController _email = TextEditingController();
+  final TextEditingController _password = TextEditingController();
 
-  TextEditingController firstController = TextEditingController();
-  TextEditingController lastNameController = TextEditingController();
-  TextEditingController emailController = TextEditingController();
-  TextEditingController userNameController = TextEditingController();
-  TextEditingController phoneController = TextEditingController();
-  TextEditingController passController = TextEditingController();
-  TextEditingController confirmPassController = TextEditingController();
-  TextEditingController referralController = TextEditingController();
-
-  FocusNode firstNameFocus = FocusNode();
-  FocusNode lastNameFocus = FocusNode();
-  FocusNode userNameFocus = FocusNode();
-  FocusNode emailFocus = FocusNode();
-  FocusNode phoneFocus = FocusNode();
-  FocusNode passFocus = FocusNode();
-  FocusNode confirmPass = FocusNode();
-  FocusNode refralFocus = FocusNode();
-
-  bool mIsCheck = false;
-  bool isAcceptedTc = false;
-
-  String countryCode = defaultCountryCode;
+  DropCountry _country = defaultDropCountry;
+  bool _hidePassword = true;
+  bool _busy = false;
 
   @override
   void initState() {
     super.initState();
-    init();
+    saveOneSignalPlayerId().then((_) {}).catchError((_) {});
   }
 
-  void init() async {
-    await saveOneSignalPlayerId().then((value) {});
-  }
-
-  @override
-  void setState(fn) {
-    if (mounted) super.setState(fn);
-  }
-
-  Future<void> register() async {
-    if (formKey.currentState!.validate()) {
-      formKey.currentState!.save();
-      hideKeyboard(context);
-      if (isAcceptedTc) {
-        appStore.setLoading(true);
-        Map req = {
-          'first_name': firstController.text.trim(),
-          'last_name': lastNameController.text.trim(),
-          'username': widget.socialLogin ? widget.userName : userNameController.text.trim(),
-          'email': emailController.text.trim(),
-          "user_type": "rider",
-          "contact_number": widget.socialLogin ? '${widget.userName}' : '${phoneController.text.trim()}',
-          "country_code": widget.socialLogin ? '${widget.countryCode}' : '$countryCode',
-          'password': widget.socialLogin ? widget.userName : passController.text.trim(),
-          'partner_referral_code': referralController.text.trim(),
-          "player_id": sharedPref.getString(PLAYER_ID).validate(),
-          if (widget.socialLogin) 'login_type': 'mobile',
-        };
-
-        await signUpApi(req).then((value) {
-          authService
-              .signUpWithEmailPassword(getContext,
-                  mobileNumber: widget.socialLogin ? '${widget.countryCode}${widget.userName}' : '$countryCode${phoneController.text.trim()}',
-                  email: emailController.text.trim(),
-                  fName: firstController.text.trim(),
-                  lName: lastNameController.text.trim(),
-                  userName: widget.socialLogin ? widget.userName : userNameController.text.trim(),
-                  password: widget.socialLogin ? widget.userName : passController.text.trim(),
-                  userType: RIDER,
-                  isOtpLogin: widget.socialLogin)
-              .then((res) async {
-            //
-          }).catchError((e) {
-            appStore.setLoading(false);
-            toast('${e.toString()}');
-          });
-        }).catchError((error) {
-          appStore.setLoading(false);
-          toast('${error.toString()}');
-        });
-      } else {
-        toast(language.pleaseAcceptTermsOfServicePrivacyPolicy);
+  Future<void> _submit() async {
+    hideKeyboard(context);
+    if (!_form.currentState!.validate()) return;
+    setState(() => _busy = true);
+    final String id = '${_country.dial}${dropNationalNumber(_phone.text)}';
+    final String pw = _password.text;
+    try {
+      await signUpApi({
+        'first_name': _first.text.trim(),
+        'last_name': _last.text.trim(),
+        'contact_number': dropNationalNumber(_phone.text),
+        'country_code': _country.dial,
+        'email': _email.text.trim(),
+        'password': pw,
+        'user_type': RIDER,
+        'player_id': sharedPref.getString(PLAYER_ID).validate(),
+      });
+      // The server created the account; log in to get the session.
+      final res = await logInApi({'identifier': id, 'password': pw, 'player_id': sharedPref.getString(PLAYER_ID).validate(), 'user_type': RIDER});
+      if (res.data == null) {
+        toast(res.message.validate().isNotEmpty ? res.message : 'Account created. Please log in.');
+        if (mounted) launchScreen(context, const SignInScreen(), isNewTask: true);
+        return;
       }
+      if (await DropBiometric.deviceSupported() && !await DropBiometric.isEnabled() && mounted) {
+        final bool? yes = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Log in with fingerprint?'),
+            content: const Text('Next time you can open DROP with your fingerprint instead of typing your password.'),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Not now')),
+              TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Turn on')),
+            ],
+          ),
+        );
+        if (yes == true) await DropBiometric.enable(identifier: id, password: pw);
+      }
+      if (!mounted) return;
+      await dropFinishSignIn(context, res.data!, pw);
+    } catch (e) {
+      toast(e.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
   @override
+  void dispose() {
+    _first.dispose();
+    _last.dispose();
+    _phone.dispose();
+    _email.dispose();
+    _password.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final TextStyle input = TextStyle(color: DropColors.text(context), fontSize: 16);
     return Scaffold(
-      body: Stack(
-        children: [
-          SingleChildScrollView(
-            padding: EdgeInsets.all(16),
-            child: Form(
-              key: formKey,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  SizedBox(height: context.statusBarHeight + 16),
-                  ClipRRect(borderRadius: radius(50), child: Image.asset(ic_app_logo, width: 100, height: 100)),
-                  SizedBox(height: 16),
-                  Text(language.createAccount, style: boldTextStyle(size: 22)),
-                  RichText(
-                    text: TextSpan(
-                      children: [
-                        TextSpan(text: 'Sign up to get started ', style: primaryTextStyle(size: 14)),
-                        TextSpan(text: '🚗', style: primaryTextStyle(size: 20)),
-                      ],
-                    ),
-                  ),
-                  SizedBox(height: 32),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: AppTextField(
-                          controller: firstController,
-                          focus: firstNameFocus,
-                          nextFocus: lastNameFocus,
-                          autoFocus: false,
-                          textFieldType: TextFieldType.NAME,
-                          errorThisFieldRequired: errorThisFieldRequired,
-                          decoration: inputDecoration(context, label: language.firstName),
-                        ),
-                      ),
-                      SizedBox(width: 20),
-                      Expanded(
-                        child: AppTextField(
-                          controller: lastNameController,
-                          focus: lastNameFocus,
-                          nextFocus: userNameFocus,
-                          autoFocus: false,
-                          textFieldType: TextFieldType.OTHER,
-                          errorThisFieldRequired: errorThisFieldRequired,
-                          decoration: inputDecoration(context, label: language.lastName),
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (widget.socialLogin != true) SizedBox(height: 20),
-                  if (widget.socialLogin != true)
-                    AppTextField(
-                      controller: userNameController,
-                      focus: userNameFocus,
-                      nextFocus: emailFocus,
-                      autoFocus: false,
-                      textFieldType: TextFieldType.USERNAME,
-                      errorThisFieldRequired: errorThisFieldRequired,
-                      decoration: inputDecoration(context, label: language.userName),
-                    ),
-                  SizedBox(height: 20),
-                  AppTextField(
-                    controller: emailController,
-                    focus: emailFocus,
-                    nextFocus: phoneFocus,
-                    autoFocus: false,
-                    textFieldType: TextFieldType.EMAIL,
-                    keyboardType: TextInputType.emailAddress,
-                    errorThisFieldRequired: errorThisFieldRequired,
-                    decoration: inputDecoration(context, label: language.email),
-                  ),
-                  if (widget.socialLogin != true) SizedBox(height: 20),
-                  if (widget.socialLogin != true)
-                    AppTextField(
-                      controller: phoneController,
-                      textFieldType: TextFieldType.PHONE,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      focus: phoneFocus,
-                      nextFocus: passFocus,
-                      decoration: inputDecoration(
-                        context,
-                        label: language.phoneNumber,
-                        prefixIcon: IntrinsicHeight(
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              CountryCodePicker(
-                                padding: EdgeInsets.zero,
-                                initialSelection: countryCode,
-                                showCountryOnly: false,
-                                dialogSize: Size(MediaQuery.of(context).size.width - 60, MediaQuery.of(context).size.height * 0.6),
-                                showFlag: true,
-                                showFlagDialog: true,
-                                showOnlyCountryWhenClosed: false,
-                                alignLeft: false,
-                                textStyle: primaryTextStyle(),
-                                dialogBackgroundColor: Theme.of(context).cardColor,
-                                barrierColor: Colors.black12,
-                                dialogTextStyle: primaryTextStyle(),
-                                searchDecoration: InputDecoration(
-                                  focusColor: primaryColor,
-                                  iconColor: Theme.of(context).dividerColor,
-                                  enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Theme.of(context).dividerColor)),
-                                  focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: primaryColor)),
-                                ),
-                                searchStyle: primaryTextStyle(),
-                                onInit: (c) {
-                                  countryCode = c!.dialCode!;
-                                },
-                                onChanged: (c) {
-                                  countryCode = c.dialCode!;
-                                },
-                              ),
-                              VerticalDivider(color: Colors.grey.withValues(alpha: 0.5)),
-                            ],
-                          ),
-                        ),
-                      ),
-                      validator: (value) {
-                        if (value!.trim().isEmpty) return errorThisFieldRequired;
-                        return null;
-                      },
-                    ),
-                  if (widget.socialLogin != true) SizedBox(height: 20),
-                  if (widget.socialLogin != true)
+      backgroundColor: DropColors.background(context),
+      appBar: AppBar(
+        backgroundColor: DropColors.background(context),
+        elevation: 0,
+        iconTheme: IconThemeData(color: DropColors.text(context)),
+      ),
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: DropSpacing.lg),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 440),
+              child: Form(
+                key: _form,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Center(child: DropLogo(width: 150)),
+                    const SizedBox(height: DropSpacing.lg),
+                    Text('Create your account', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: DropColors.text(context))),
+                    const SizedBox(height: 6),
+                    Text('It takes less than a minute.', style: TextStyle(fontSize: 15, color: DropColors.mutedText(context))),
+                    const SizedBox(height: DropSpacing.lg),
                     Row(
                       children: [
                         Expanded(
-                          child: AppTextField(
-                            controller: passController,
-                            focus: passFocus,
-                            autoFocus: false,
-                            nextFocus: confirmPass,
-                            textFieldType: TextFieldType.PASSWORD,
-                            errorThisFieldRequired: errorThisFieldRequired,
-                            decoration: inputDecoration(context, label: language.password),
-                            validator: (String? value) {
-                              if (value!.isEmpty) return errorThisFieldRequired;
-                              if (value.length < passwordLengthGlobal) return language.passwordLength;
-                              return null;
-                            },
+                          child: TextFormField(
+                            controller: _first,
+                            textCapitalization: TextCapitalization.words,
+                            textInputAction: TextInputAction.next,
+                            style: input,
+                            decoration: dropInputDecoration(context, label: 'First name'),
+                            validator: (v) => (v ?? '').trim().isEmpty ? 'Required' : null,
                           ),
                         ),
-                        if (widget.socialLogin != true) SizedBox(width: 16),
-                        if (widget.socialLogin != true)
-                          Expanded(
-                            child: AppTextField(
-                              controller: confirmPassController,
-                              focus: confirmPass,
-                              autoFocus: false,
-                              textFieldType: TextFieldType.PASSWORD,
-                              errorThisFieldRequired: errorThisFieldRequired,
-                              decoration: inputDecoration(context, label: language.confirmPassword),
-                              validator: (String? value) {
-                                if (value!.isEmpty) return errorThisFieldRequired;
-                                if (value.length < passwordLengthGlobal) return language.passwordLength;
-                                if (value.trim() != passController.text.trim()) return language.bothPasswordNotMatch;
-                                return null;
-                              },
-                            ),
+                        const SizedBox(width: DropSpacing.sm),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _last,
+                            textCapitalization: TextCapitalization.words,
+                            textInputAction: TextInputAction.next,
+                            style: input,
+                            decoration: dropInputDecoration(context, label: 'Last name'),
+                            validator: (v) => (v ?? '').trim().isEmpty ? 'Required' : null,
                           ),
+                        ),
                       ],
                     ),
-                  SizedBox(height: 20),
-                  AppTextField(
-                    controller: referralController,
-                    autoFocus: false,
-                    textFieldType: TextFieldType.OTHER,
-                    errorThisFieldRequired: errorThisFieldRequired,
-                    decoration: inputDecoration(context, label: "Referral Code"),
-                  ),
-                  SizedBox(height: 16),
-                  Row(
-                    children: [
-                      SizedBox(
-                        height: 18,
-                        width: 18,
-                        child: Checkbox(
-                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          activeColor: primaryColor,
-                          value: isAcceptedTc,
-                          shape: RoundedRectangleBorder(borderRadius: radius(4)),
-                          onChanged: (v) async {
-                            isAcceptedTc = v!;
-                            setState(() {});
-                          },
+                    const SizedBox(height: DropSpacing.md),
+                    DropPhoneField(
+                      controller: _phone,
+                      country: _country,
+                      onCountryChanged: (c) => setState(() => _country = c),
+                      textInputAction: TextInputAction.next,
+                    ),
+                    const SizedBox(height: DropSpacing.md),
+                    TextFormField(
+                      controller: _email,
+                      keyboardType: TextInputType.emailAddress,
+                      textInputAction: TextInputAction.next,
+                      style: input,
+                      decoration: dropInputDecoration(context, label: 'Email (optional)', prefix: const Icon(Icons.mail_outline)),
+                      validator: (v) {
+                        final String t = (v ?? '').trim();
+                        if (t.isEmpty) return null;
+                        return RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(t) ? null : 'Enter a valid email';
+                      },
+                    ),
+                    const SizedBox(height: DropSpacing.md),
+                    TextFormField(
+                      controller: _password,
+                      obscureText: _hidePassword,
+                      textInputAction: TextInputAction.done,
+                      onFieldSubmitted: (_) => _submit(),
+                      style: input,
+                      decoration: dropInputDecoration(
+                        context,
+                        label: 'Password',
+                        prefix: const Icon(Icons.lock_outline),
+                        suffix: IconButton(
+                          icon: Icon(_hidePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+                          onPressed: () => setState(() => _hidePassword = !_hidePassword),
                         ),
                       ),
-                      SizedBox(width: 16),
-                      Expanded(
-                        child: RichText(
-                          text: TextSpan(children: [
-                            TextSpan(text: '${language.iAgreeToThe} ', style: secondaryTextStyle()),
-                            TextSpan(
-                              text: language.termsConditions,
-                              style: boldTextStyle(color: primaryColor, size: 14),
-                              recognizer: TapGestureRecognizer()
-                                ..onTap = () {
-                                  if (TNC_URL.isNotEmpty) {
-                                    launchScreen(context, TermsConditionScreen(title: language.termsConditions, subtitle: TNC_URL), pageRouteAnimation: PageRouteAnimation.Slide);
-                                  } else {
-                                    toast(language.txtURLEmpty);
-                                  }
-                                },
-                            ),
-                            TextSpan(text: ' & ', style: secondaryTextStyle()),
-                            TextSpan(
-                              text: language.privacyPolicy,
-                              style: boldTextStyle(color: primaryColor, size: 14),
-                              recognizer: TapGestureRecognizer()
-                                ..onTap = () {
-                                  if (PRIVACY_URL.isNotEmpty) {
-                                    launchScreen(context, TermsConditionScreen(title: language.privacyPolicy, subtitle: PRIVACY_URL), pageRouteAnimation: PageRouteAnimation.Slide);
-                                  } else {
-                                    toast(language.txtURLEmpty);
-                                  }
-                                },
-                            ),
-                          ]),
-                          textAlign: TextAlign.left,
+                      validator: (v) => (v ?? '').length < 8 ? 'Use at least 8 characters' : null,
+                    ),
+                    const SizedBox(height: DropSpacing.md),
+                    Text(
+                      'By continuing you agree to the DROP Terms of Service and Privacy Policy.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 12.5, color: DropColors.mutedText(context)),
+                    ),
+                    const SizedBox(height: DropSpacing.md),
+                    DropPrimaryButton(label: 'Create account', loading: _busy, onPressed: _submit),
+                    const SizedBox(height: DropSpacing.lg),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text('Already have an account? ', style: TextStyle(color: DropColors.mutedText(context))),
+                        GestureDetector(
+                          onTap: () => launchScreen(context, const SignInScreen(), pageRouteAnimation: PageRouteAnimation.Slide),
+                          child: Text('Log in', style: TextStyle(color: DropColors.primary, fontWeight: FontWeight.w700)),
                         ),
-                      )
-                    ],
-                  ),
-                  SizedBox(height: 32),
-                  AppButtonWidget(
-                    width: MediaQuery.of(context).size.width,
-                    text: language.signUp,
-                    onTap: () async {
-                      register();
-                    },
-                  ),
-                  SizedBox(height: 20),
-                ],
+                      ],
+                    ),
+                    const SizedBox(height: DropSpacing.xl),
+                  ],
+                ),
               ),
             ),
           ),
-          Positioned(top: context.statusBarHeight + 4, child: BackButton()),
-          Observer(builder: (context) {
-            return Visibility(
-              visible: appStore.isLoading,
-              child: loaderWidget(),
-            );
-          })
-        ],
-      ),
-      bottomNavigationBar: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Align(
-            alignment: Alignment.center,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(language.alreadyHaveAnAccount, style: primaryTextStyle()),
-                SizedBox(width: 8),
-                inkWellWidget(
-                  onTap: () {
-                    Navigator.pop(context);
-                  },
-                  child: Text(language.logIn, style: boldTextStyle(color: primaryColor)),
-                ),
-              ],
-            ),
-          ),
-          SizedBox(height: 16)
-        ],
+        ),
       ),
     );
   }
