@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../components/DropMap.dart';
 import '../components/drawer_component.dart';
+import '../drop/services/drop_money.dart';
 import '../drop/widgets/drop_email_prompt.dart';
 import '../service/DriverApplicationApi.dart' show ApiFailure;
 import '../service/MapConfig.dart';
@@ -18,13 +19,7 @@ import '../utils/Colors.dart';
 Map<String, dynamic> _m(dynamic v) => v is Map ? Map<String, dynamic>.from(v) : <String, dynamic>{};
 List<dynamic> _l(dynamic v) => v is List ? v : <dynamic>[];
 double _d(dynamic v) => v is num ? v.toDouble() : (double.tryParse(v?.toString() ?? '') ?? 0);
-String _money(dynamic v) {
-  final n = _d(v);
-  final s = n.toStringAsFixed(n == n.roundToDouble() ? 0 : 2);
-  final parts = s.split('.');
-  final whole = parts[0].replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (m) => ',');
-  return '₦$whole${parts.length > 1 ? '.${parts[1]}' : ''}';
-}
+String _money(dynamic v, [dynamic currency]) => DropMoney.format(v, currency);
 
 enum _Phase { loading, plan, choose, trip, done }
 
@@ -99,6 +94,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
   Future<void> _start() async {
     mapConfig = await MapConfig.load();
     if (mounted) setState(() => mapLoaded = true);
+    DropMoney.load();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) DropEmailPrompt.maybeShow(context);
     });
@@ -339,7 +335,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
       _poll?.cancel();
       ride = null;
       phase = _Phase.plan;
-      _say(fee > 0 ? 'Ride cancelled. A cancellation fee of ${_money(fee)} was charged to your wallet.' : 'Ride cancelled.');
+      _say(fee > 0 ? 'Ride cancelled. A cancellation fee of ${_money(fee, ride?['currency'])} was charged to your wallet.' : 'Ride cancelled.');
     } on ApiFailure catch (e) {
       _say(e.message);
       _tick();
@@ -549,7 +545,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
               Wrap(spacing: 8, children: [
                 for (final o in options)
                   FilterChip(
-                    label: Text('${o['name']}  +${_money(o['price'])}'),
+                    label: Text('${o['name']}  +${_money(o['price'], quote['currency'])}'),
                     selected: extras.contains((o['id'] as num).toInt()),
                     onSelected: (v) => setState(() => v ? extras.add((o['id'] as num).toInt()) : extras.remove((o['id'] as num).toInt())),
                   ),
@@ -570,7 +566,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
             onPressed: (busy || t.isEmpty) ? null : _requestRide,
             child: busy
                 ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : Text(t.isEmpty ? 'Choose a ride' : 'Request ${t['name']} · ${_money(_total)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                : Text(t.isEmpty ? 'Choose a ride' : 'Request ${t['name']} · ${_money(_total, quote['currency'])}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
           ),
         ),
       ]),
@@ -601,7 +597,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
               Text(nearby > 0 ? '${eta ?? '-'} min away · $nearby driver${nearby == 1 ? '' : 's'} nearby' : 'No drivers nearby right now', style: TextStyle(color: nearby > 0 ? Colors.grey.shade700 : Colors.orange.shade800, fontSize: 12)),
             ]),
           ),
-          Text(_money(x['fare']), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+          Text(_money(x['fare'], quote['currency']), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
         ]),
       ),
     );
@@ -635,7 +631,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
       Row(children: [
         if (status == 'searching') const Padding(padding: EdgeInsets.only(right: 12), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))),
         Expanded(child: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800))),
-        Text(_money(r['fare']), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+        Text(_money(r['fare'], r['currency']), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
       ]),
       if (sub.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text(sub, style: TextStyle(color: Colors.grey.shade700))),
       if (driver.isNotEmpty) ...[
@@ -691,13 +687,13 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
     final title = done ? 'You have arrived' : (expired ? 'No driver found' : 'Ride cancelled');
     final sub = done
         ? (f['paid_with'] == 'wallet' ? 'Paid from your wallet.' : 'Pay the driver in cash.')
-        : (expired ? 'No driver accepted in time. Please try again.' : (_d(f['cancellation_fee']) > 0 ? 'A cancellation fee of ${_money(f['cancellation_fee'])} was charged.' : 'No charge was made.'));
+        : (expired ? 'No driver accepted in time. Please try again.' : (_d(f['cancellation_fee']) > 0 ? 'A cancellation fee of ${_money(f['cancellation_fee'], f['currency'])} was charged.' : 'No charge was made.'));
     return _sheet(Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
         Icon(done ? Icons.check_circle : Icons.info_outline, color: done ? Colors.green : Colors.orange.shade800),
         const SizedBox(width: 10),
         Expanded(child: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800))),
-        if (done) Text(_money(f['fare']), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+        if (done) Text(_money(f['fare'], f['currency']), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
       ]),
       const SizedBox(height: 6),
       Text(sub, style: TextStyle(color: Colors.grey.shade700)),

@@ -1,3 +1,4 @@
+import { currencyInfo, userCurrency } from "../lib/currency";
 import { Hono } from "hono";
 import type { AppEnv } from "../env";
 import { UNIQUE_VIOLATION, withDb } from "../db";
@@ -22,7 +23,7 @@ walletRoutes.get("/wallet-detail", withDb, requireAuth, async (c) => {
   // Drivers below this balance cannot take new trips (the driver app reads this legacy field).
   const minToGetRide = kindOf(me) === "driver" ? await getGlobalMinBalance(c.get("db")) : 0;
   return c.json({
-    wallet_data: { id: w?.id ?? 0, user_id: me.id, total_amount: balance, total_withdrawn: 0, currency: w?.currency ?? "NGN", created_at: w?.created_at ?? null, updated_at: w?.updated_at ?? null },
+    wallet_data: { id: w?.id ?? 0, user_id: me.id, total_amount: balance, total_withdrawn: 0, currency: w?.currency ?? (await userCurrency(c.get("db"), me.id)), created_at: w?.created_at ?? null, updated_at: w?.updated_at ?? null },
     min_amount_to_get_ride: minToGetRide,
     total_amount: balance,
   });
@@ -76,6 +77,7 @@ walletRoutes.get("/wallet/virtual-account", withDb, requireAuth, async (c) => {
 
   const existing = (await db.query("select provider, bank_name, account_number, account_name from app.virtual_accounts where user_id = $1 and wallet_kind = $2 and provider = 'pocketfi' and status = 'active' limit 1", [me.id, kind])).rows[0];
   if (existing) return c.json(shape(existing));
+  if ((await userCurrency(db, me.id)) !== "NGN") return c.json({ message: "Adding money by bank transfer is not available in your country yet." }, 422);
 
   const gw = await loadGateway(db, "pocketfi", c.env.SETTINGS_ENCRYPTION_KEY).catch(() => null);
   if (!gw || !gw.enabled || !gw.creds.api_token || !gw.creds.business_id) {
@@ -163,4 +165,11 @@ walletRoutes.post("/webhooks/pocketfi", withDb, async (c) => {
     console.error("pocketfi webhook failed", (e as Error).message);
     return c.json({ message: "Temporary error, please retry" }, 500); // Pocketfi retries up to 5 times
   }
+});
+
+/** The currency this user's money is shown in (set by their phone country). */
+walletRoutes.get("/account/currency", withDb, requireAuth, async (c) => {
+  const code = await userCurrency(c.get("db"), c.get("user").id);
+  const i = currencyInfo(code);
+  return c.json({ code: i.code, name: i.name, symbol: i.symbol, decimals: i.decimals });
 });

@@ -331,7 +331,7 @@
         } } }));
         card.appendChild(h("div", { class: "item" },
           h("div", { class: "main" }, h("div", { class: "t", text: g.name || "Region " + g.id }),
-            h("div", { class: "s", text: g.ride_types + " ride type" + (g.ride_types === 1 ? "" : "s") + " · " + g.timezone + " · " + g.distance_unit + (g.coordinates ? " · boundary set" : " · no boundary") }),
+            h("div", { class: "s", text: g.ride_types + " ride type" + (g.ride_types === 1 ? "" : "s") + " · " + String(g.currency || "NGN").trim() + " · " + g.timezone + " · " + g.distance_unit + (g.coordinates ? " · boundary set" : " · no boundary") }),
             h("div", { style: "margin-top:8px" }, acts)),
           h("span", { class: "pill " + (g.status ? "on" : ""), text: g.status ? "On" : "Off" })));
       });
@@ -342,7 +342,7 @@
     var pts = (g && g.coordinates || []).map(function (p) { return p.lat + ", " + p.lng; }).join("\n");
     var f = {
       name: text(g && g.name), unit: select([["km", "Kilometres"], ["mile", "Miles"]], g ? g.distance_unit : "km"),
-      tz: text(g ? g.timezone : "Africa/Lagos"), poly: h("textarea", { placeholder: "9.0765, 7.3986\n9.1000, 7.4500\n9.0400, 7.5000" }),
+      tz: text(g ? g.timezone : "Africa/Lagos"), cur: select(CURRENCY_OPTIONS, g ? String(g.currency || "NGN").trim() : "NGN"), poly: h("textarea", { placeholder: "9.0765, 7.3986\n9.1000, 7.4500\n9.0400, 7.5000" }),
       status: h("input", { type: "checkbox", checked: g ? g.status : true })
     };
     f.poly.value = pts;
@@ -350,7 +350,7 @@
     root.textContent = "";
     root.appendChild(head(g ? "Edit region" : "Add region", null, h("button", { class: "ghost", text: "Back", on: { click: function () { pageRegions(root); } } })));
     var card = h("div", { class: "card" },
-      field("Name", f.name), h("div", { class: "grid2" }, field("Distance unit", f.unit), field("Time zone", f.tz)),
+      field("Name", f.name), h("div", { class: "grid2" }, field("Distance unit", f.unit), field("Time zone", f.tz)), field("Currency", f.cur, "Fares in this region are in this currency. Enter the ride type prices in it. Passengers pay from their wallet only when their wallet is in the same currency; otherwise they pay cash."),
       field("Boundary points (optional)", f.poly, "One point per line as latitude, longitude. At least 3. Drawing the boundary on a map comes with the Google Maps step."),
       h("div", { class: "row" }, h("div", { text: "Region is active" }), h("label", { class: "switch" }, f.status, h("span"))), out);
     var save = h("button", { text: "Save", style: "width:100%;margin-top:14px" });
@@ -362,7 +362,7 @@
       }
       if (!f.name.value.trim()) return msg(out, "Enter a name.");
       save.disabled = true; msg(out, "");
-      api(g ? "PUT" : "POST", "/admin/regions" + (g ? "/" + g.id : ""), { name: f.name.value.trim(), distance_unit: f.unit.value, timezone: f.tz.value.trim(), status: f.status.checked, coordinates: coords })
+      api(g ? "PUT" : "POST", "/admin/regions" + (g ? "/" + g.id : ""), { name: f.name.value.trim(), distance_unit: f.unit.value, timezone: f.tz.value.trim(), currency: f.cur.value, status: f.status.checked, coordinates: coords })
         .then(function (r) { save.disabled = false; if (r.ok) { toast("Saved"); pageRegions(root); } else msg(out, errText(r)); });
     });
     card.appendChild(save); root.appendChild(card);
@@ -552,10 +552,11 @@
   }
 
   // ---------- PayMyRide (someone else pays a passenger's fare) ----------
-  var pm = { page: 1 };
+  var CURRENCY_OPTIONS = [["NGN", "Nigerian naira (NGN)"], ["GHS", "Ghanaian cedi (GHS)"], ["XOF", "West African CFA franc (XOF)"], ["XAF", "Central African CFA franc (XAF)"], ["GMD", "Gambian dalasi (GMD)"], ["GNF", "Guinean franc (GNF)"], ["LRD", "Liberian dollar (LRD)"], ["SLE", "Sierra Leonean leone (SLE)"], ["MRU", "Mauritanian ouguiya (MRU)"], ["CVE", "Cape Verdean escudo (CVE)"], ["KES", "Kenyan shilling (KES)"], ["ZAR", "South African rand (ZAR)"], ["USD", "US dollar (USD)"], ["GBP", "British pound (GBP)"], ["EUR", "Euro (EUR)"]];
+  var pmr = { page: 1 };
   function pagePayMyRide(root) {
     loading(root);
-    api("GET", "/admin/paymyride?page=" + pm.page).then(function (r) {
+    api("GET", "/admin/paymyride?page=" + pmr.page).then(function (r) {
       var b = r.body || {}, s = b.settings || {}, list = b.data || [], pg = b.pagination || { page: 1, total_pages: 1, total: 0 };
       root.textContent = "";
       root.appendChild(head("PayMyRide", "A passenger can share a link so a friend, family member or employer pays the ride fare through Korapay or bank transfer. The money lands in the passenger's wallet and the ride is paid from it."));

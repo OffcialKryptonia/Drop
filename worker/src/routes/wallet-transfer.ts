@@ -4,6 +4,7 @@ import type { AppEnv } from "../env";
 import { withDb } from "../db";
 import { requireAuth } from "../auth/middleware";
 import { hashPassword, verifyPassword } from "../auth/password";
+import { userCurrency } from "../lib/currency";
 import { InsufficientFunds, postToWallet, toMoney } from "../lib/wallet";
 import { readBody, validationFailed } from "../lib/legacy";
 
@@ -119,6 +120,8 @@ walletTransferRoutes.post("/wallet/transfer", withDb, requireAuth, async (c) => 
 
   const to = await findRecipient(db, String(b.username ?? ""), me.id);
   if (!to) return validationFailed(c, { username: ["We could not find that username."] });
+
+  if ((await userCurrency(db, me.id)) !== (await userCurrency(db, to.id))) return validationFailed(c, { username: ["That person's wallet is in a different currency, so you cannot send them money."] });
 
   const bad = await checkPin(db, me.id, String(b.pin ?? ""));
   if (bad) return c.json({ message: bad.message, code: bad.code }, bad.code === "pin_not_set" ? 409 : 422);

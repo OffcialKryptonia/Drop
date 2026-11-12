@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { AppEnv } from "../env";
 import { withDb } from "../db";
 import { requireAuth } from "../auth/middleware";
+import { currencyInfo, userCurrency } from "../lib/currency";
 import { readBody, validationFailed } from "../lib/legacy";
 import { quoteRide } from "../lib/ride-pricing";
 import { computeFare } from "../lib/fare";
@@ -46,6 +47,7 @@ const ride = (r: Row) => ({
   distance_unit: r.distance_unit,
   duration_minutes: Number(r.duration_minutes),
   fare: Number(r.fare),
+  currency: currencyInfo(r.currency as string),
   fare_breakdown: r.fare_breakdown,
   options: r.options,
   payment_method: r.payment_method,
@@ -96,6 +98,7 @@ rideRoutes.post("/ride/estimate", ...mw, async (c) => {
   return c.json({
     status: true,
     region: { id: q.region.id, name: q.region.name },
+    currency: currencyInfo(q.region.currency),
     distance: q.distance,
     distance_unit: q.region.distance_unit,
     duration_minutes: q.route.duration_minutes,
@@ -129,6 +132,7 @@ rideRoutes.post("/ride/request", ...mw, async (c) => {
   const fare = computeFare(svc, q.distance, q.route.duration_minutes, optionsTotal);
 
   if (p.data.payment_method === "wallet") {
+    if ((await userCurrency(db, me.id)) !== q.region.currency) return c.json({ status: false, code: "wallet_currency", message: `Your wallet is in ${await userCurrency(db, me.id)}, but this ride is priced in ${q.region.currency}. Choose cash.` }, 422);
     const bal = Number((await db.query("select balance from app.wallets where user_id = $1 and kind = 'rider'", [me.id])).rows[0]?.balance ?? 0);
     if (bal < fare.total) return c.json({ status: false, code: "insufficient_wallet", message: `Your wallet balance is too low for this ride. Fare ${fare.total}, balance ${bal}.`, fare: fare.total, balance: bal }, 422);
   }
@@ -137,11 +141,11 @@ rideRoutes.post("/ride/request", ...mw, async (c) => {
   try {
     const ins = await db.query(
       `insert into app.ride_requests (rider_id, service_id, region_id, pickup_lat, pickup_lng, pickup_address, dropoff_lat, dropoff_lng, dropoff_address,
-              distance, distance_unit, duration_minutes, route_source, fare, fare_breakdown, options, payment_method, expires_at)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17, now() + make_interval(secs => $18))
+              distance, distance_unit, duration_minutes, route_source, fare, fare_breakdown, options, payment_method, expires_at, currency)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17, now() + make_interval(secs => $18), $19)
        returning id`,
       [me.id, type.id, q.region.id, p.data.pickup.lat, p.data.pickup.lng, p.data.pickup.address ?? null, p.data.dropoff.lat, p.data.dropoff.lng, p.data.dropoff.address ?? null,
-        q.distance, q.region.distance_unit, q.route.duration_minutes, q.route.source, fare.total, JSON.stringify(fare), JSON.stringify(options), p.data.payment_method, expiry],
+        q.distance, q.region.distance_unit, q.route.duration_minutes, q.route.source, fare.total, JSON.stringify(fare), JSON.stringify(options), p.data.payment_method, expiry, q.region.currency],
     );
     const row = (await db.query(`${RIDE_SELECT} where r.id = $1`, [ins.rows[0].id])).rows[0];
     return c.json({ status: true, data: ride(row) }, 201);
