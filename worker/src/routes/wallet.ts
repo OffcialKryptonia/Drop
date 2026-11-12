@@ -57,7 +57,7 @@ walletRoutes.get("/wallet-list", withDb, requireAuth, async (c) => {
 /** Legacy "payment-gateway-list": which methods to show. Never includes keys. */
 walletRoutes.get("/payment-gateway-list", withDb, requireAuth, async (c) => {
   const rows = (await c.get("db").query(
-    "select id, type, title, status, is_test, created_at, updated_at from app.payment_gateways where status = true order by sort_order, id")).rows;
+    "select id, type, title, status, is_test, created_at, updated_at from app.payment_gateways where status = true and type <> 'resend' order by sort_order, id")).rows;
   return c.json({
     data: rows.map((g) => ({ id: g.id, type: g.type, title: g.title, status: 1, is_test: g.is_test ? 1 : 0, gateway_image: null, live_value: null, test_value: null, created_at: g.created_at, updated_at: g.updated_at })),
     pagination: { currentPage: 1, per_page: rows.length, totalPages: 1, total_items: rows.length },

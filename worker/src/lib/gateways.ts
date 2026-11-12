@@ -20,6 +20,10 @@ export const GATEWAY_FIELDS: Record<string, GatewayField[]> = {
     { key: "secret_key", label: "Secret key", secret: true },
     { key: "secret_hash", label: "Webhook secret hash", secret: true },
   ],
+  resend: [
+    { key: "api_key", label: "Resend API key", secret: true, hint: "Resend dashboard > API Keys. Sends the password-reset codes." },
+    { key: "from_email", label: "From address", secret: false, hint: "e.g. DROP <no-reply@yourdomain.com>. Needs a domain verified in Resend." },
+  ],
   wallet: [],
   cash: [],
 };

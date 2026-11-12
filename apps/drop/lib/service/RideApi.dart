@@ -103,6 +103,13 @@ class RideApi {
   /// A payment link so someone else can pay this ride's fare (PayMyRide).
   static Future<Map<String, dynamic>> payLink() => _post('ride/pay-link');
 
+  // ---- Forgot password (no login needed) ----
+
+  static Future<Map<String, dynamic>> forgotPassword(String identifier) => _post('forgot-password', {'identifier': identifier});
+
+  static Future<Map<String, dynamic>> resetPassword(String identifier, String code, String password) =>
+      _post('reset-password', {'identifier': identifier, 'code': code, 'password': password});
+
   // ---- Driver ----
 
   /// The open ride (`active`) or nearby requests (`requests`).
