@@ -13,6 +13,7 @@ import { adminTransferRoutes } from "./routes/admin-transfers";
 import { adminPayMyRideRoutes } from "./routes/admin-paymyride";
 import { adminUserRoutes } from "./routes/admin-users";
 import { adminDocumentRoutes } from "./routes/admin-documents";
+import { payoutRoutes, adminPayoutRoutes } from "./routes/payouts";
 import { adminBankRoutes } from "./routes/admin-banks";
 import { userRoutes } from "./routes/users";
 import { adminRoutes } from "./routes/admin";
@@ -83,6 +84,8 @@ app.route("/api", adminTransferRoutes);
 app.route("/api", adminPayMyRideRoutes);
 app.route("/api", adminUserRoutes);
 app.route("/api", adminDocumentRoutes);
+app.route("/api", payoutRoutes);
+app.route("/api", adminPayoutRoutes);
 app.route("/api", adminBankRoutes);
 
 // Any other /api route that does not exist yet returns JSON, never HTML.

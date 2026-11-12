@@ -13,6 +13,7 @@ export const MODULES: { key: string; label: string; actions: string[] }[] = [
   { key: "driver_wallet", label: "Driver wallets", actions: ["list", "edit"] },
   { key: "wallet_transfer", label: "Wallet transfers", actions: ["list", "edit"] },
   { key: "paymyride", label: "PayMyRide", actions: ["list", "edit"] },
+  { key: "payout", label: "Driver payouts", actions: ["list", "edit"] },
   { key: "document", label: "Driver document types", actions: ["list", "edit"] },
   { key: "user_account", label: "User accounts (password reset)", actions: ["list", "edit"] },
   { key: "bank", label: "Banks", actions: ["list", "edit"] },

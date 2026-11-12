@@ -63,7 +63,7 @@ legacyRoutes.get("/service-list", withDb, requireAuth, async (c) => {
 for (const path of [
   "/faq-list", "/coupon-list", "/notification-list", "/reward-list", "/reference-list",
   "/complaintcomment-list", "/managezone-list", "/additional-fees-list", "/airport-list",
-  "/earning-list", "/withdrawrequest-list", "/coin-wallet-list", "/driver-rating-list",
+  "/earning-list", "/coin-wallet-list", "/driver-rating-list",
   "/rider-rating-list", "/cancelReason-list", "/language-table-list", "/document-list",
   "/driver-document-list", "/driver-payout-document-list",
 ]) {
