@@ -131,6 +131,8 @@ class _DropForgotPasswordScreenState extends State<DropForgotPasswordScreen> {
                     const SizedBox(height: DropSpacing.md),
                     Text(_error!, style: const TextStyle(color: Colors.red, fontSize: 14)),
                   ],
+                  const SizedBox(height: DropSpacing.md),
+                  Text('Did support give you a temporary password? Do not enter it here. Go back and type it on the Log in screen, then change it from your profile.', style: TextStyle(color: DropColors.mutedText(context), fontSize: 12)),
                   const SizedBox(height: DropSpacing.lg),
                   DropPrimaryButton(label: _codeStep ? 'Change password' : 'Send code', loading: _busy, onPressed: _codeStep ? _reset : _sendCode),
                   if (_codeStep)
