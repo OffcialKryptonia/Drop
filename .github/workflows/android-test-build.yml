@@ -24,7 +24,10 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
+          # Pinned: Flutter 3.50 needs Gradle 9.3.1, but this project's Android setup (Gradle 8.14, AGP 8.11) is on 3.47.
+          # Move to 3.50 only together with a Gradle/AGP upgrade.
           channel: stable
+          flutter-version: 3.47.x
           cache: true
 
       - name: Fingerprints of the test key
