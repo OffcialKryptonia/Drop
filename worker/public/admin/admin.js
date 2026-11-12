@@ -88,6 +88,7 @@
 
   // ---------- shell ----------
   var PAGES = [
+    { id: "documents", label: "Document types", group: "People", perm: "document list", render: pageDocuments },
     { id: "driver-applications", label: "Driver applications", group: "People", perm: "driver_application list", render: pageDriverApplications },
     { id: "ride-types", label: "Ride types", group: "Operations", perm: "service list", render: pageRideTypes },
     { id: "maps", label: "Maps", group: "Operations", perm: "map_settings list", render: pageMaps },
@@ -623,6 +624,80 @@
     q.addEventListener("keydown", function (e) { if (e.key === "Enter") search(); });
     root.appendChild(h("div", { class: "card" }, field("Find a user", q), go));
     root.appendChild(h("div", { class: "card" }, out));
+  }
+
+  // ---------- Driver document types and rules ----------
+  var pd = { edit: null };
+  function pageDocuments(root) {
+    loading(root);
+    api("GET", "/admin/documents").then(function (r) {
+      var b = r.body || {}, docs = b.data || [], services = b.services || [], rules = b.rules || {};
+      root.textContent = "";
+      root.appendChild(head("Document types", "The papers a driver must upload before approval (licence, vehicle papers, insurance...). A document can apply to every ride type or only to chosen ones."));
+
+      // Age and licence rules
+      var age = num(rules.min_age), yrs = num(rules.min_licence_years), rout = h("p", { class: "msg" });
+      var rc = h("div", { class: "card" }, h("div", { class: "t", text: "Driver rules" }), field("Minimum age", age), field("Minimum years holding a licence", yrs));
+      if (can("document edit")) {
+        var rs = h("button", { text: "Save rules", class: "small", style: "margin-top:10px" });
+        rs.addEventListener("click", function () {
+          rs.disabled = true;
+          api("PUT", "/admin/driver-rules", { min_age: nn(age), min_licence_years: nn(yrs) }).then(function (x) { rs.disabled = false; if (x.ok) toast("Saved"); else msg(rout, errText(x)); });
+        });
+        rc.appendChild(rs);
+      }
+      rc.appendChild(rout); root.appendChild(rc);
+
+      // Add / edit form
+      if (can("document edit")) {
+        var e = pd.edit;
+        var name = text(e ? e.name : "", "e.g. Driver's licence");
+        var req = h("input", { type: "checkbox" }); req.checked = e ? e.is_required : true;
+        var exp = h("input", { type: "checkbox" }); exp.checked = e ? e.has_expiry_date : false;
+        var act = h("input", { type: "checkbox" }); act.checked = e ? e.status : true;
+        var boxes = services.map(function (s) {
+          var cb = h("input", { type: "checkbox" }); cb.checked = !!(e && e.service_ids.indexOf(s.id) >= 0);
+          return { id: s.id, cb: cb, el: h("label", { style: "display:flex;gap:6px;align-items:center;margin:4px 0" }, cb, h("span", { text: s.name })) };
+        });
+        var fout = h("p", { class: "msg" });
+        var save = h("button", { text: e ? "Save changes" : "Add document type", class: "small", style: "margin-top:10px" });
+        save.addEventListener("click", function () {
+          save.disabled = true;
+          var body = { name: name.value, is_required: req.checked, has_expiry_date: exp.checked, status: act.checked, service_ids: boxes.filter(function (x) { return x.cb.checked; }).map(function (x) { return x.id; }) };
+          api(e ? "PUT" : "POST", "/admin/documents" + (e ? "/" + e.id : ""), body).then(function (x) { save.disabled = false; if (x.ok) { toast("Saved"); pd.edit = null; pageDocuments(root); } else msg(fout, errText(x)); });
+        });
+        var fc = h("div", { class: "card" }, h("div", { class: "t", text: e ? "Edit " + e.name : "Add a document type" }), field("Name", name),
+          h("label", { style: "display:flex;gap:6px;align-items:center;margin:8px 0" }, req, h("span", { text: "Required before approval" })),
+          h("label", { style: "display:flex;gap:6px;align-items:center;margin:8px 0" }, exp, h("span", { text: "Has an expiry date (driver enters it)" })),
+          h("label", { style: "display:flex;gap:6px;align-items:center;margin:8px 0" }, act, h("span", { text: "Active (shown to applicants)" })),
+          h("div", { class: "s", text: "Applies to these ride types (tick none = every ride type):" }));
+        boxes.forEach(function (x) { fc.appendChild(x.el); });
+        fc.appendChild(save);
+        if (e) { var cancel = h("button", { text: "Cancel", class: "small secondary", style: "margin:10px 0 0 8px" }); cancel.addEventListener("click", function () { pd.edit = null; pageDocuments(root); }); fc.appendChild(cancel); }
+        fc.appendChild(fout); root.appendChild(fc);
+      }
+
+      // List
+      var lc = h("div", { class: "card" }, h("div", { class: "t", text: docs.length + " document type" + (docs.length === 1 ? "" : "s") }));
+      if (!docs.length) lc.appendChild(h("div", { class: "empty", text: "None yet. Until you add some, drivers are not asked for any documents." }));
+      docs.forEach(function (d) {
+        var names = d.service_ids.length ? d.service_ids.map(function (id) { var s = services.filter(function (x) { return x.id === id; })[0]; return s ? s.name : "#" + id; }).join(", ") : "all ride types";
+        var row = h("div", { class: "row", style: "display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line,#eee)" },
+          h("div", { style: "flex:1" }, h("div", { class: "t", text: d.name + (d.status ? "" : " (off)") }),
+            h("div", { class: "s", text: (d.is_required ? "Required" : "Optional") + (d.has_expiry_date ? " \u00B7 has expiry" : "") + " \u00B7 " + names + " \u00B7 " + d.uploads + " upload" + (d.uploads === 1 ? "" : "s") })));
+        if (can("document edit")) {
+          var eb = h("button", { text: "Edit", class: "small secondary" }); eb.addEventListener("click", function () { pd.edit = d; pageDocuments(root); window.scrollTo(0, 0); });
+          var db2 = h("button", { text: "Delete", class: "small secondary" });
+          db2.addEventListener("click", function () {
+            if (!window.confirm("Delete " + d.name + "?")) return;
+            api("DELETE", "/admin/documents/" + d.id).then(function (x) { if (x.ok) { toast(x.body.message || "Deleted"); pageDocuments(root); } else toast(errText(x), true); });
+          });
+          row.appendChild(eb); row.appendChild(db2);
+        }
+        lc.appendChild(row);
+      });
+      root.appendChild(lc);
+    });
   }
 
   // ---------- Banks (driver payout accounts) ----------
