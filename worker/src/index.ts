@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { AppEnv, Bindings } from "./env";
 import { connectDb } from "./db";
 import { authRoutes } from "./routes/auth";
+import { accountRoutes } from "./routes/account";
 import { passwordResetRoutes } from "./routes/password-reset";
 import { legacyRoutes } from "./routes/legacy";
 import { bankRoutes } from "./routes/banks";
@@ -56,6 +57,7 @@ app.get("/api/health/db", async (c) => {
 });
 
 app.route("/api", authRoutes);
+app.route("/api", accountRoutes);
 app.route("/api", passwordResetRoutes);
 app.route("/api", userRoutes);
 app.route("/api", adminRoutes);
