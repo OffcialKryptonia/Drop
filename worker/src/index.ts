@@ -10,6 +10,7 @@ import { payMyRideRoutes, payPage } from "./routes/paymyride";
 import { walletTransferRoutes } from "./routes/wallet-transfer";
 import { adminTransferRoutes } from "./routes/admin-transfers";
 import { adminPayMyRideRoutes } from "./routes/admin-paymyride";
+import { adminUserRoutes } from "./routes/admin-users";
 import { adminBankRoutes } from "./routes/admin-banks";
 import { userRoutes } from "./routes/users";
 import { adminRoutes } from "./routes/admin";
@@ -77,6 +78,7 @@ app.route("/", tripShareRoutes);
 app.route("/api", walletTransferRoutes);
 app.route("/api", adminTransferRoutes);
 app.route("/api", adminPayMyRideRoutes);
+app.route("/api", adminUserRoutes);
 app.route("/api", adminBankRoutes);
 
 // Any other /api route that does not exist yet returns JSON, never HTML.

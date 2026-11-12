@@ -98,6 +98,7 @@
     { id: "paymyride", label: "PayMyRide", group: "Financial", perm: "paymyride list", render: pagePayMyRide },
     { id: "banks", label: "Banks", group: "Financial", perm: "bank list", render: pageBanks },
     { id: "driver-wallets", label: "Driver wallets", group: "Financial", perm: "driver_wallet list", render: pageDriverWallets },
+    { id: "user-accounts", label: "User accounts", group: "People", perm: "user_account list", render: pageUserAccounts },
     { id: "roles", label: "Roles", group: "System", perm: "role list", render: pageRoles },
     { id: "sub-admins", label: "Sub-admins", group: "System", perm: "subadmin list", render: pageSubAdmins }
   ];
@@ -579,6 +580,48 @@
       });
       root.appendChild(hist);
     });
+  }
+
+  // ---------- User accounts (support: temporary password) ----------
+  function pageUserAccounts(root) {
+    root.textContent = "";
+    root.appendChild(head("User accounts", "Find a rider or driver who cannot reset their password by email, and give them a temporary password. Tell them to change it after logging in. All their devices are signed out."));
+    var q = text("", "Name, username, phone or email"), out = h("div");
+    var go = h("button", { text: "Search", class: "small", style: "margin-top:10px" });
+    function search() {
+      var term = q.value.trim();
+      if (term.length < 2) { toast("Type at least 2 characters", true); return; }
+      go.disabled = true;
+      api("GET", "/admin/users?q=" + encodeURIComponent(term)).then(function (r) {
+        go.disabled = false; out.textContent = "";
+        var list = (r.body || {}).data || [];
+        if (!r.ok) { out.appendChild(h("p", { class: "msg err", text: errText(r) })); return; }
+        if (!list.length) out.appendChild(h("div", { class: "empty", text: "No matching rider or driver." }));
+        list.forEach(function (u) {
+          var row = h("div", { class: "row", style: "display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line,#eee)" });
+          row.appendChild(h("div", { style: "flex:1" }, h("div", { class: "t", text: (u.display_name || u.username) + " \u00B7 " + u.user_type }),
+            h("div", { class: "s", text: [u.username ? "@" + u.username : "", u.contact_number ? (u.country_code || "") + u.contact_number : "", u.email || "no email", u.status].filter(Boolean).join(" \u00B7 ") })));
+          if (can("user_account edit")) {
+            var b = h("button", { text: "Set temporary password", class: "small secondary" });
+            b.addEventListener("click", function () {
+              if (!window.confirm("Set a new temporary password for " + (u.display_name || u.username) + "? Their current password stops working and they are signed out.")) return;
+              b.disabled = true;
+              api("POST", "/admin/users/" + u.id + "/reset-password").then(function (x) {
+                b.disabled = false;
+                if (!x.ok) { toast(errText(x), true); return; }
+                window.prompt("Temporary password for " + (x.body.name || "this user") + " (shown once). Copy it and send it to them privately:", x.body.temporary_password);
+              });
+            });
+            row.appendChild(b);
+          }
+          out.appendChild(row);
+        });
+      });
+    }
+    go.addEventListener("click", search);
+    q.addEventListener("keydown", function (e) { if (e.key === "Enter") search(); });
+    root.appendChild(h("div", { class: "card" }, field("Find a user", q), go));
+    root.appendChild(h("div", { class: "card" }, out));
   }
 
   // ---------- Banks (driver payout accounts) ----------
