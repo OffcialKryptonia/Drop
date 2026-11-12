@@ -5,6 +5,7 @@ import 'package:mighty_core/utils/core_enum.dart';
 import '../../manage_imports.dart';
 import '../design/drop_design.dart';
 import '../services/drop_api.dart';
+import '../services/drop_money.dart';
 import 'drop_pin_screen.dart';
 import '../widgets/drop_phone_field.dart';
 
@@ -125,7 +126,7 @@ class _DropTransferScreenState extends State<DropTransferScreen> {
     hideKeyboard(context);
     final double? amount = double.tryParse(_amount.text.replaceAll(',', '').trim());
     if (_recipientUsername == null) return setState(() => _error = 'Find the person you want to pay first.');
-    if (amount == null || amount < _min) return setState(() => _error = 'Enter at least $currencySymbol${_min.toStringAsFixed(0)}.');
+    if (amount == null || amount < _min) return setState(() => _error = 'Enter at least ${DropMoney.symbol}${_min.toStringAsFixed(0)}.');
     if (amount > widget.balance) return setState(() => _error = 'You do not have enough balance for this.');
     setState(() {
       _sending = true;
@@ -137,7 +138,7 @@ class _DropTransferScreenState extends State<DropTransferScreen> {
         if (mounted) setState(() => _sending = false);
         return;
       }
-      final String? pin = await _askPin('Enter your PIN', forgot: true, subtitle: 'Send $currencySymbol${amount.toStringAsFixed(2)} to @$_recipientUsername');
+      final String? pin = await _askPin('Enter your PIN', forgot: true, subtitle: 'Send ${DropMoney.symbol}${amount.toStringAsFixed(2)} to @$_recipientUsername');
       if (pin == null) {
         if (mounted) setState(() => _sending = false);
         return;
@@ -154,7 +155,7 @@ class _DropTransferScreenState extends State<DropTransferScreen> {
         builder: (ctx) => AlertDialog(
           icon: const Icon(Icons.check_circle, color: DropColors.success, size: 48),
           title: const Text('Money sent'),
-          content: Text('${r['message']}\nNew balance: $currencySymbol${(r['balance'] as num).toStringAsFixed(2)}'),
+          content: Text('${r['message']}\nNew balance: ${DropMoney.symbol}${(r['balance'] as num).toStringAsFixed(2)}'),
           actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Done'))],
         ),
       );
@@ -198,7 +199,7 @@ class _DropTransferScreenState extends State<DropTransferScreen> {
           children: [
             Text('Help a friend pay for a trip. Money leaves your wallet straight away.', style: TextStyle(color: DropColors.mutedText(context), fontSize: 15)),
             const SizedBox(height: DropSpacing.sm),
-            Text('Available: $currencySymbol${widget.balance.toStringAsFixed(2)}', style: TextStyle(color: DropColors.text(context), fontWeight: FontWeight.w700)),
+            Text('Available: ${DropMoney.symbol}${widget.balance.toStringAsFixed(2)}', style: TextStyle(color: DropColors.text(context), fontWeight: FontWeight.w700)),
             const SizedBox(height: DropSpacing.lg),
             TextField(
               controller: _username,
@@ -237,7 +238,7 @@ class _DropTransferScreenState extends State<DropTransferScreen> {
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
               style: input,
-              decoration: dropInputDecoration(context, label: 'Amount', prefix: Padding(padding: const EdgeInsets.all(14), child: Text(currencySymbol, style: input))),
+              decoration: dropInputDecoration(context, label: 'Amount', prefix: Padding(padding: const EdgeInsets.all(14), child: Text(DropMoney.symbol, style: input))),
             ),
             const SizedBox(height: DropSpacing.md),
             TextField(

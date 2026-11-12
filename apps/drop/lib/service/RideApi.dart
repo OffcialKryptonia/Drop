@@ -110,6 +110,15 @@ class RideApi {
   static Future<Map<String, dynamic>> resetPassword(String identifier, String code, String password) =>
       _post('reset-password', {'identifier': identifier, 'code': code, 'password': password});
 
+  /// The signed-in user's currency (code, symbol, decimals).
+  static Future<Map<String, dynamic>> currency() => _get('account/currency');
+
+  // ---- Recovery email ----
+
+  static Future<Map<String, dynamic>> emailStatus() => _get('account/email');
+
+  static Future<Map<String, dynamic>> saveEmail(String email, String password) => _post('account/email', {'email': email, 'password': password});
+
   // ---- Driver ----
 
   /// The open ride (`active`) or nearby requests (`requests`).

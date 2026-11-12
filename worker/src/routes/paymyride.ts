@@ -4,6 +4,7 @@ import type { AppEnv } from "../env";
 import { withDb } from "../db";
 import { requireAuth } from "../auth/middleware";
 import { loadGateway, loadSecrets } from "../lib/gateway-creds";
+import { userCurrency } from "../lib/currency";
 import { creditPaidLink, getPayLinkSettings } from "../lib/paymyride";
 import { postToWallet, toMoney } from "../lib/wallet";
 import { readBody, validationFailed } from "../lib/legacy";
@@ -24,9 +25,10 @@ payMyRideRoutes.post("/ride/pay-link", withDb, requireAuth, async (c) => {
   const me = c.get("user");
   const settings = await getPayLinkSettings(db);
   if (!settings.enabled) return c.json({ message: "PayMyRide is switched off for now." }, 403);
-  const ride = (await db.query("select id, fare, payment_method from app.ride_requests where rider_id = $1 and status = any($2) order by id desc limit 1", [me.id, OPEN])).rows[0];
+  const ride = (await db.query("select id, fare, currency, payment_method from app.ride_requests where rider_id = $1 and status = any($2) order by id desc limit 1", [me.id, OPEN])).rows[0];
   if (!ride) return c.json({ message: "Once a driver accepts your ride, you can ask someone to pay for it." }, 409);
   if (ride.payment_method === "wallet") return c.json({ message: "This ride is already set to be paid from your wallet." }, 409);
+  if (String(ride.currency).trim() !== "NGN" || (await userCurrency(db, me.id)) !== "NGN") return c.json({ message: "PayMyRide is only available for rides paid in naira for now." }, 409);
   const amount = toMoney(ride.fare);
   if (!amount) return c.json({ message: "This ride has no fare to pay." }, 409);
 

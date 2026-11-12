@@ -1,4 +1,5 @@
 import type { Client } from "pg";
+import { userCurrency } from "./currency";
 import { InsufficientFunds, postToWallet, toMoney } from "./wallet";
 import { computeCommission, settleDriverForRide } from "./commission";
 
@@ -26,6 +27,7 @@ export async function completeRide(db: Client, rideId: number, driverId: number)
     }
     const fare = Number(r.fare);
     let paidWith: "cash" | "wallet" = r.payment_method === "wallet" ? "wallet" : "cash";
+    if (paidWith === "wallet" && (await userCurrency(db, Number(r.rider_id))) !== String(r.currency ?? "NGN").trim()) paidWith = "cash"; // wallet is in another currency
     if (paidWith === "wallet") {
       const amount = toMoney(fare);
       try {
@@ -67,6 +69,7 @@ export async function chargeCancellationFee(db: Client, ride: Row, graceSeconds:
   const waited = ride.accepted_at ? (Date.now() - new Date(ride.accepted_at as string).getTime()) / 1000 : 0;
   if (ride.status_before !== "arrived" && waited <= graceSeconds) return 0;
 
+  if ((await userCurrency(db, Number(ride.rider_id))) !== String(ride.currency ?? "NGN").trim()) return 0; // wallet is in another currency
   const bal = Number((await db.query("select balance from app.wallets where user_id = $1 and kind = 'rider'", [ride.rider_id])).rows[0]?.balance ?? 0);
   const charge = Math.min(fee, bal);
   const amount = toMoney(charge);

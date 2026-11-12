@@ -1,3 +1,4 @@
+import { CURRENCIES } from "../lib/currency";
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
@@ -56,6 +57,7 @@ const regionSchema = z.object({
   distance_unit: z.enum(["km", "mile"]),
   timezone: z.string().trim().min(1).max(60),
   status: z.boolean(),
+  currency: z.string().trim().toUpperCase().refine((v) => v in CURRENCIES, "Choose a listed currency.").default("NGN"),
   coordinates: z.array(point).min(3).max(500).nullable(),
 });
 
@@ -69,7 +71,7 @@ function polygonWkt(points: { lat: number; lng: number }[] | null): string | nul
 
 adminCatalogRoutes.get("/admin/regions", ...guard("region list"), async (c) => {
   const r = await c.get("db").query(
-    `select r.id, r.name, r.distance_unit, r.timezone, r.status, r.coordinates, r.created_at,
+    `select r.id, r.name, r.distance_unit, r.timezone, r.status, r.currency, r.coordinates, r.created_at,
             (select count(*)::int from app.services s where s.region_id = r.id and s.deleted_at is null) as ride_types
        from app.regions r order by r.name nulls last, r.id`);
   return c.json({ data: r.rows });
@@ -80,9 +82,9 @@ adminCatalogRoutes.post("/admin/regions", ...guard("region add"), async (c) => {
   if (!p.success) return validationFailed(c, zodErrors(p.error));
   const d = p.data;
   const r = await c.get("db").query(
-    `insert into app.regions (name, distance_unit, timezone, status, coordinates, boundary)
-     values ($1,$2,$3,$4,$5::jsonb, case when $6::text is null then null else extensions.st_geogfromtext($6) end) returning id`,
-    [d.name, d.distance_unit, d.timezone, d.status, d.coordinates ? JSON.stringify(d.coordinates) : null, polygonWkt(d.coordinates)]);
+    `insert into app.regions (name, distance_unit, timezone, status, coordinates, boundary, currency)
+     values ($1,$2,$3,$4,$5::jsonb, case when $6::text is null then null else extensions.st_geogfromtext($6) end, $7) returning id`,
+    [d.name, d.distance_unit, d.timezone, d.status, d.coordinates ? JSON.stringify(d.coordinates) : null, polygonWkt(d.coordinates), d.currency]);
   await audit(c, "region_add", String(r.rows[0].id), { name: d.name });
   return c.json({ message: "Region added", id: r.rows[0].id }, 201);
 });
@@ -94,8 +96,8 @@ adminCatalogRoutes.put("/admin/regions/:id", ...guard("region edit"), async (c) 
   const d = p.data;
   const r = await c.get("db").query(
     `update app.regions set name=$2, distance_unit=$3, timezone=$4, status=$5, coordinates=$6::jsonb,
-            boundary = case when $7::text is null then null else extensions.st_geogfromtext($7) end where id=$1`,
-    [id, d.name, d.distance_unit, d.timezone, d.status, d.coordinates ? JSON.stringify(d.coordinates) : null, polygonWkt(d.coordinates)]);
+            boundary = case when $7::text is null then null else extensions.st_geogfromtext($7) end, currency=$8 where id=$1`,
+    [id, d.name, d.distance_unit, d.timezone, d.status, d.coordinates ? JSON.stringify(d.coordinates) : null, polygonWkt(d.coordinates), d.currency]);
   if (!r.rowCount) return notFound(c);
   await audit(c, "region_edit", String(id), { name: d.name });
   return c.json({ message: "Saved" });

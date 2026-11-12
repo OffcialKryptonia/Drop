@@ -28,7 +28,7 @@ export type Quote =
   | { ok: false; code: "outside_service_area" | "dropoff_outside_area" | "same_place"; message: string }
   | {
       ok: true;
-      region: { id: number; name: string | null; distance_unit: "km" | "mile"; timezone: string };
+      region: { id: number; name: string | null; distance_unit: "km" | "mile"; timezone: string; currency: string };
       route: Route;
       distance: number;
       options: { id: number; name: string; price: number }[];
@@ -39,12 +39,12 @@ async function regionAt(db: Client, p: LatLng) {
   // A region with a drawn boundary must contain the point; one without a boundary covers everywhere (used last).
   return (
     await db.query(
-      `select id, name, distance_unit, timezone from app.regions
+      `select id, name, distance_unit, timezone, currency from app.regions
         where status and (boundary is null or extensions.st_covers(boundary, ${POINT(1, 2)}))
         order by (boundary is null), id limit 1`,
       [p.lat, p.lng],
     )
-  ).rows[0] as { id: number; name: string | null; distance_unit: "km" | "mile"; timezone: string } | undefined;
+  ).rows[0] as { id: number; name: string | null; distance_unit: "km" | "mile"; timezone: string; currency: string } | undefined;
 }
 
 /** Everything the app needs to show prices for a trip, all from admin data. The server is the only place fares are computed. */
@@ -115,5 +115,5 @@ export async function quoteRide(db: Client, env: Bindings, pickup: LatLng, dropo
     };
   });
 
-  return { ok: true, region: { id: Number(region.id), name: region.name, distance_unit: region.distance_unit, timezone: region.timezone }, route, distance, options, ride_types };
+  return { ok: true, region: { id: Number(region.id), name: region.name, distance_unit: region.distance_unit, timezone: region.timezone, currency: String(region.currency).trim() }, route, distance, options, ride_types };
 }
