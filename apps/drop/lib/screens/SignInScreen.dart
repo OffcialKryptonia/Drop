@@ -3,6 +3,7 @@ import '../drop/data/drop_countries.dart';
 import '../drop/design/drop_design.dart';
 import '../drop/services/drop_biometric.dart';
 import '../drop/services/drop_session.dart';
+import '../drop/screens/drop_forgot_password_screen.dart';
 import '../drop/widgets/drop_phone_field.dart';
 import '../manage_imports.dart';
 
@@ -152,7 +153,14 @@ class SignInScreenState extends State<SignInScreen> {
                       ),
                       validator: (v) => (v ?? '').isEmpty ? 'Enter your password' : null,
                     ),
-                    const SizedBox(height: DropSpacing.lg),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: _busy ? null : () => launchScreen(context, const DropForgotPasswordScreen(), pageRouteAnimation: PageRouteAnimation.Slide),
+                        child: Text('Forgot password?', style: TextStyle(color: DropColors.primary, fontWeight: FontWeight.w600)),
+                      ),
+                    ),
+                    const SizedBox(height: DropSpacing.sm),
                     DropPrimaryButton(label: 'Log in', loading: _busy, onPressed: _login),
                     if (_bioReady) ...[
                       const SizedBox(height: DropSpacing.md),
