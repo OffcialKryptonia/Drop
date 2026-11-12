@@ -45,7 +45,7 @@ class _DropPinScreenState extends State<DropPinScreen> {
   }
 
   Future<void> _save() async {
-    hideKeyboard(context);
+  FocusScope.of(context).unfocus();
     if (_hasPin && !_usePassword && _current.text.length != 4) return setState(() => _error = 'Enter your current PIN.');
     if (_hasPin && _usePassword && _password.text.isEmpty) return setState(() => _error = 'Enter your account password.');
     if (_new.text.length != 4) return setState(() => _error = 'Your new PIN must be 4 digits.');
