@@ -100,6 +100,9 @@ class RideApi {
 
   static Future<Map<String, dynamic>> stopSharing() => _post('ride/share/stop');
 
+  /// A payment link so someone else can pay this ride's fare (PayMyRide).
+  static Future<Map<String, dynamic>> payLink() => _post('ride/pay-link');
+
   // ---- Driver ----
 
   /// The open ride (`active`) or nearby requests (`requests`).
