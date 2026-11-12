@@ -1,3 +1,4 @@
+import { nationalNumber } from "../lib/phone";
 import { Hono } from "hono";
 import type { AppEnv } from "../env";
 import { withDb } from "../db";
@@ -95,8 +96,10 @@ legacyRoutes.post("/update-profile", withDb, requireAuth, async (c) => {
   add("address", text(b.address, 500));
   const gender = text(b.gender, 10); if (gender && ["male", "female", "other"].includes(gender)) add("gender", gender);
   // The email is not changed here: it can reset the password, so changing it needs the password (POST /account/email).
-  const phone = text(b.contact_number, 30)?.replace(/\D/g, "").replace(/^0+/, "");
-  if (phone && phone !== String(me.contact_number ?? "").replace(/\D/g, "").replace(/^0+/, "")) {
+  const rawPhone = text(b.contact_number, 30);
+  const myCc = String(me.country_code ?? "");
+  const phone = rawPhone ? nationalNumber(myCc, nationalNumber(text(b.country_code, 10) ?? myCc, rawPhone)) : null;
+  if (phone && phone !== nationalNumber(myCc, String(me.contact_number ?? ""))) {
     if (phone.length < 6 || phone.length > 13) return validationFailed(c, { contact_number: ["Enter a valid phone number."] });
     add("contact_number", phone);
   }

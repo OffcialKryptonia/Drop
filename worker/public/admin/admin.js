@@ -612,7 +612,7 @@
               api("POST", "/admin/users/" + u.id + "/reset-password").then(function (x) {
                 b.disabled = false;
                 if (!x.ok) { toast(errText(x), true); return; }
-                window.prompt("Temporary password for " + (x.body.name || "this user") + " (shown once). Copy it and send it to them privately:", x.body.temporary_password);
+                window.prompt("Temporary password for " + (x.body.name || "this user") + " (shown once). Copy it and send it to them privately. They type it on the normal Log in screen (not on Reset password), then change it in their profile:", x.body.temporary_password);
               });
             });
             row.appendChild(b);

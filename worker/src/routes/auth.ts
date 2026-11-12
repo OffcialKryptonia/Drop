@@ -1,3 +1,4 @@
+import { nationalNumber } from "../lib/phone";
 import { Hono } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
@@ -130,7 +131,7 @@ authRoutes.post("/register", withDb, async (c) => {
   const db = c.get("db");
   if (!d.email && !d.contact_number) return validationFailed(c, { contact_number: ["Enter your phone number."] });
   if (d.contact_number) {
-    const national = d.contact_number.replace(/\D/g, "").replace(/^0+/, "");
+    const national = nationalNumber(d.country_code ?? "+234", d.contact_number);
     if (national.length < 6 || national.length > 13) return validationFailed(c, { contact_number: ["Enter a valid phone number."] });
     d.contact_number = national; // stored without the country code or leading 0
     d.country_code = (d.country_code ?? "+234").replace(/[^\d+]/g, "") || "+234";
