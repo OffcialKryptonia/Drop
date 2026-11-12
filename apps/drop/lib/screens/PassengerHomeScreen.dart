@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../components/DropMap.dart';
 import '../components/drawer_component.dart';
+import '../drop/widgets/drop_email_prompt.dart';
 import '../service/DriverApplicationApi.dart' show ApiFailure;
 import '../service/MapConfig.dart';
 import '../service/RideApi.dart';
@@ -98,6 +99,9 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
   Future<void> _start() async {
     mapConfig = await MapConfig.load();
     if (mounted) setState(() => mapLoaded = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) DropEmailPrompt.maybeShow(context);
+    });
     await _locate();
     try {
       final r = _m((await RideApi.current())['data']);

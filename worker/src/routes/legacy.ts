@@ -94,10 +94,7 @@ legacyRoutes.post("/update-profile", withDb, requireAuth, async (c) => {
   add("uid", text(b.uid, 200)); add("player_id", text(b.player_id, 200)); add("fcm_token", text(b.fcm_token, 1000));
   add("address", text(b.address, 500));
   const gender = text(b.gender, 10); if (gender && ["male", "female", "other"].includes(gender)) add("gender", gender);
-  const email = text(b.email, 255)?.toLowerCase(); if (email && email !== me.email) {
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return validationFailed(c, { email: ["The email must be a valid email address."] });
-    add("email", email);
-  }
+  // The email is not changed here: it can reset the password, so changing it needs the password (POST /account/email).
   const phone = text(b.contact_number, 30)?.replace(/\D/g, "").replace(/^0+/, "");
   if (phone && phone !== String(me.contact_number ?? "").replace(/\D/g, "").replace(/^0+/, "")) {
     if (phone.length < 6 || phone.length > 13) return validationFailed(c, { contact_number: ["Enter a valid phone number."] });

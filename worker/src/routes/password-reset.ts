@@ -1,7 +1,9 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../env";
 import { withDb } from "../db";
-import { hashPassword } from "../auth/password";
+import { hashPassword, verifyPassword } from "../auth/password";
+import { requireAuth } from "../auth/middleware";
+import { UNIQUE_VIOLATION } from "../db";
 import { readBody, validationFailed } from "../lib/legacy";
 import { sendEmail } from "../lib/email";
 
@@ -85,4 +87,27 @@ passwordResetRoutes.post("/reset-password", withDb, async (c) => {
     throw e;
   }
   return c.json({ message: "Password changed. Log in with your new password." });
+});
+
+/** Does this account have an email for password resets? */
+passwordResetRoutes.get("/account/email", withDb, requireAuth, async (c) => {
+  const e = (await c.get("db").query("select email from app.users where id = $1", [c.get("user").id])).rows[0]?.email as string | null;
+  return c.json({ has_email: !!e, email: e ?? null });
+});
+
+/** Adds or changes the email used for password resets. Needs the current password, so a stolen session cannot redirect resets. */
+passwordResetRoutes.post("/account/email", withDb, requireAuth, async (c) => {
+  const db = c.get("db");
+  const b = await readBody(c);
+  const email = String(b.email ?? "").trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || email.length > 255) return validationFailed(c, { email: ["Enter a valid email address."] });
+  const row = (await db.query("select password_hash from app.users where id = $1", [c.get("user").id])).rows[0];
+  if (!(await verifyPassword(db, String(b.password ?? ""), row?.password_hash ?? null))) return validationFailed(c, { password: ["Your password is not correct."] });
+  try {
+    await db.query("update app.users set email = $2 where id = $1", [c.get("user").id, email]);
+  } catch (err) {
+    if ((err as { code?: string }).code === UNIQUE_VIOLATION) return validationFailed(c, { email: ["This email is already used by another account."] });
+    throw err;
+  }
+  return c.json({ message: "Email saved. We will send password reset codes there." });
 });
