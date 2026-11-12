@@ -60,6 +60,8 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
   Map<String, dynamic>? ride; // the open ride
   int? lastRideId;
   Map<String, dynamic>? finished; // completed / cancelled / expired ride to show once
+  int _stars = 0; // rating given for the finished ride
+  bool _rated = false;
 
   @override
   void initState() {
@@ -388,8 +390,24 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
     _map.fitPoints(pts);
   }
 
+  Future<void> _rate(int stars) async {
+    final id = finished?['id'];
+    if (id == null || _rated) return;
+    setState(() => _stars = stars);
+    try {
+      await RideApi.rate(id, stars);
+      if (mounted) setState(() => _rated = true);
+    } on ApiFailure catch (e) {
+      _say(e.message);
+    } catch (_) {
+      _say('Could not save your rating.');
+    }
+  }
+
   void _newRide() {
     setState(() {
+      _stars = 0;
+      _rated = false;
       finished = null;
       ride = null;
       quote = {};
@@ -700,6 +718,21 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
       if (done) ...[
         const SizedBox(height: 6),
         Text('${_m(f['pickup'])['address'] ?? ''}  →  ${_m(f['dropoff'])['address'] ?? ''}', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+      ],
+      if (done && f['id'] != null) ...[
+        const SizedBox(height: 12),
+        Text(_rated ? 'Thanks for rating your driver!' : 'How was your driver?', style: const TextStyle(fontWeight: FontWeight.w700)),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.start,
+          children: [
+            for (var i = 1; i <= 5; i++)
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                onPressed: _rated ? null : () => _rate(i),
+                icon: Icon(i <= _stars ? Icons.star_rounded : Icons.star_outline_rounded, color: Colors.amber.shade700, size: 32),
+              ),
+          ],
+        ),
       ],
       const SizedBox(height: 14),
       SizedBox(

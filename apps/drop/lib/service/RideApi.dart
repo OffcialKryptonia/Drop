@@ -113,6 +113,10 @@ class RideApi {
   /// The signed-in user's currency (code, symbol, decimals).
   static Future<Map<String, dynamic>> currency() => _get('account/currency');
 
+  /// Rate the driver of a completed ride, 1 to 5 stars.
+  static Future<Map<String, dynamic>> rate(dynamic rideId, int stars, [String? comment]) =>
+      _post('ride/rating', {'ride_request_id': rideId, 'rating': stars, if (comment != null && comment.isNotEmpty) 'comment': comment});
+
   // ---- Recovery email ----
 
   static Future<Map<String, dynamic>> emailStatus() => _get('account/email');
