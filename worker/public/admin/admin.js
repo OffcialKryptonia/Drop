@@ -97,6 +97,7 @@
     { id: "payment-methods", label: "Payment methods", group: "Financial", perm: "payment_gateway list", render: pagePayments },
     { id: "transfers", label: "Wallet transfers", group: "Financial", perm: "wallet_transfer list", render: pageTransfers },
     { id: "paymyride", label: "PayMyRide", group: "Financial", perm: "paymyride list", render: pagePayMyRide },
+    { id: "payouts", label: "Driver payouts", group: "Financial", perm: "payout list", render: pagePayouts },
     { id: "banks", label: "Banks", group: "Financial", perm: "bank list", render: pageBanks },
     { id: "driver-wallets", label: "Driver wallets", group: "Financial", perm: "driver_wallet list", render: pageDriverWallets },
     { id: "user-accounts", label: "User accounts", group: "People", perm: "user_account list", render: pageUserAccounts },
@@ -697,6 +698,58 @@
         lc.appendChild(row);
       });
       root.appendChild(lc);
+    });
+  }
+
+  // ---------- Driver payouts (pay by hand, then mark paid) ----------
+  var po = { status: "pending", page: 1 };
+  function pagePayouts(root) {
+    loading(root);
+    api("GET", "/admin/payouts?status=" + po.status + "&page=" + po.page).then(function (r) {
+      var b = r.body || {}, s = b.settings || {}, list = b.data || [], pg = b.pagination || { page: 1, total_pages: 1, total: 0 };
+      root.textContent = "";
+      root.appendChild(head("Driver payouts", "When a driver asks to be paid, the amount leaves their wallet at once. Send the money to the bank account shown, then mark it paid. If you decline, it goes back to their wallet."));
+      var en = select([["1", "On"], ["0", "Paused"]], s.enabled === false ? "0" : "1"), min = num(s.min_amount), out = h("p", { class: "msg" });
+      var sc = h("div", { class: "card" }, field("Payout requests", en), field("Smallest payout (\u20A6)", min));
+      if (can("payout edit")) {
+        var sv = h("button", { text: "Save", class: "small", style: "margin-top:10px" });
+        sv.addEventListener("click", function () {
+          sv.disabled = true;
+          api("PUT", "/admin/payouts/settings", { enabled: en.value === "1", min_amount: nn(min) }).then(function (x) { sv.disabled = false; if (x.ok) toast("Saved"); else msg(out, errText(x)); });
+        });
+        sc.appendChild(sv);
+      }
+      sc.appendChild(out); root.appendChild(sc);
+      var tabs = h("div", { style: "display:flex;gap:8px;margin:12px 0" });
+      [["pending", "Waiting"], ["paid", "Paid"], ["declined", "Declined"]].forEach(function (t) {
+        var bt = h("button", { text: t[1], class: "small" + (po.status === t[0] ? "" : " secondary") });
+        bt.addEventListener("click", function () { po.status = t[0]; po.page = 1; pagePayouts(root); });
+        tabs.appendChild(bt);
+      });
+      root.appendChild(tabs);
+      var card = h("div", { class: "card" }, h("div", { class: "t", text: pg.total + " request" + (pg.total === 1 ? "" : "s") }));
+      if (!list.length) card.appendChild(h("div", { class: "empty", text: "Nothing here." }));
+      list.forEach(function (p) {
+        var row = h("div", { class: "row", style: "padding:10px 0;border-top:1px solid var(--line,#eee)" },
+          h("div", { class: "t", text: "\u20A6" + Number(p.amount).toLocaleString() + " \u00B7 " + (p.driver || p.username) }),
+          h("div", { class: "s", text: p.bank_name + " \u00B7 " + p.account_number + " \u00B7 " + p.account_name }),
+          h("div", { class: "s", text: String(p.created_at).slice(0, 16).replace("T", " ") + (p.admin_note ? " \u00B7 " + p.admin_note : "") }));
+        if (p.status === "pending" && can("payout edit")) {
+          var paid = h("button", { text: "Mark as paid", class: "small", style: "margin-top:8px" });
+          paid.addEventListener("click", function () {
+            if (!window.confirm("Confirm you sent \u20A6" + Number(p.amount).toLocaleString() + " to " + p.account_name + " (" + p.account_number + ")?")) return;
+            api("PUT", "/admin/payouts/" + p.id, { action: "paid" }).then(function (x) { toast(x.ok ? x.body.message : errText(x), !x.ok); if (x.ok) pagePayouts(root); });
+          });
+          var dec = h("button", { text: "Decline", class: "small secondary", style: "margin:8px 0 0 8px" });
+          dec.addEventListener("click", function () {
+            var note = window.prompt("Why is this payout declined? The driver will see this."); if (!note) return;
+            api("PUT", "/admin/payouts/" + p.id, { action: "declined", note: note }).then(function (x) { toast(x.ok ? x.body.message : errText(x), !x.ok); if (x.ok) pagePayouts(root); });
+          });
+          row.appendChild(paid); row.appendChild(dec);
+        }
+        card.appendChild(row);
+      });
+      root.appendChild(card);
     });
   }
 
