@@ -5,8 +5,10 @@ import { authRoutes } from "./routes/auth";
 import { legacyRoutes } from "./routes/legacy";
 import { bankRoutes } from "./routes/banks";
 import { tripShareRoutes } from "./routes/trip-share";
+import { payMyRideRoutes, payPage } from "./routes/paymyride";
 import { walletTransferRoutes } from "./routes/wallet-transfer";
 import { adminTransferRoutes } from "./routes/admin-transfers";
+import { adminPayMyRideRoutes } from "./routes/admin-paymyride";
 import { adminBankRoutes } from "./routes/admin-banks";
 import { userRoutes } from "./routes/users";
 import { adminRoutes } from "./routes/admin";
@@ -67,9 +69,12 @@ app.route("/api", adminDriverApplicationRoutes);
 app.route("/api", legacyRoutes);
 app.route("/api", bankRoutes);
 app.route("/api", tripShareRoutes);
+app.route("/api", payMyRideRoutes);
+app.route("/", payPage);
 app.route("/", tripShareRoutes);
 app.route("/api", walletTransferRoutes);
 app.route("/api", adminTransferRoutes);
+app.route("/api", adminPayMyRideRoutes);
 app.route("/api", adminBankRoutes);
 
 // Any other /api route that does not exist yet returns JSON, never HTML.

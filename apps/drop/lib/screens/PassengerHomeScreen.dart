@@ -355,6 +355,18 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
     }
   }
 
+  /// PayMyRide: shares a link so someone else can pay this ride's fare.
+  Future<void> _payLink() async {
+    try {
+      final res = await RideApi.payLink();
+      await SharePlus.instance.share(ShareParams(text: res['message']?.toString() ?? res['url'].toString()));
+    } on ApiFailure catch (e) {
+      _say(e.message);
+    } catch (_) {
+      _say('Could not create the payment link. Please try again.');
+    }
+  }
+
   Future<void> _call(String? number) async {
     if (number == null || number.isEmpty) return;
     try {
@@ -643,6 +655,16 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
             onPressed: _share,
             icon: const Icon(Icons.share_outlined, size: 18),
             label: const Text('Share trip for safety'),
+            style: OutlinedButton.styleFrom(foregroundColor: primaryColor, side: BorderSide(color: primaryColor), minimumSize: const Size.fromHeight(44)),
+          ),
+        ),
+      if (r['payment_method'] != 'wallet')
+        Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: OutlinedButton.icon(
+            onPressed: _payLink,
+            icon: const Icon(Icons.request_quote_outlined, size: 18),
+            label: const Text('Let someone pay for this ride'),
             style: OutlinedButton.styleFrom(foregroundColor: primaryColor, side: BorderSide(color: primaryColor), minimumSize: const Size.fromHeight(44)),
           ),
         ),

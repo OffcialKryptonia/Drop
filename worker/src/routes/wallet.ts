@@ -5,6 +5,7 @@ import { requireAuth } from "../auth/middleware";
 import { loadGateway, loadSecrets } from "../lib/gateway-creds";
 import { createStaticAccount, normalizePhone, pocketfiBase, resolveCustomers, verifySignature } from "../lib/pocketfi";
 import { postToWallet, toMoney } from "../lib/wallet";
+import { applyTransferToPayLink } from "../lib/paymyride";
 import { getGlobalMinBalance } from "../lib/commission";
 
 export const walletRoutes = new Hono<AppEnv>();
@@ -154,6 +155,7 @@ walletRoutes.post("/webhooks/pocketfi", withDb, async (c) => {
       description: "Wallet top-up by bank transfer", meta: { provider: "pocketfi", reference, fee },
     });
     await db.query("update app.payment_events set status = 'credited', user_id = $2 where id = $1", [eventId, owner.user_id]);
+    if (owner.wallet_kind === "rider") await applyTransferToPayLink(db, owner.user_id, amount);
     await db.query("commit");
     return c.json({ message: "success" });
   } catch (e) {

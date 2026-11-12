@@ -95,6 +95,7 @@
     { id: "ride-options", label: "Ride options", group: "Operations", perm: "service_option list", render: pageOptions },
     { id: "payment-methods", label: "Payment methods", group: "Financial", perm: "payment_gateway list", render: pagePayments },
     { id: "transfers", label: "Wallet transfers", group: "Financial", perm: "wallet_transfer list", render: pageTransfers },
+    { id: "paymyride", label: "PayMyRide", group: "Financial", perm: "paymyride list", render: pagePayMyRide },
     { id: "banks", label: "Banks", group: "Financial", perm: "bank list", render: pageBanks },
     { id: "driver-wallets", label: "Driver wallets", group: "Financial", perm: "driver_wallet list", render: pageDriverWallets },
     { id: "roles", label: "Roles", group: "System", perm: "role list", render: pageRoles },
@@ -544,6 +545,37 @@
         hist.appendChild(h("div", { class: "row", style: "padding:8px 0;border-top:1px solid var(--line,#eee)" },
           h("div", { class: "t", text: "\u20A6" + Number(t.amount).toLocaleString() + " \u00B7 @" + t.sender + " \u2192 @" + t.recipient }),
           h("div", { class: "s", text: String(t.created_at).slice(0, 16).replace("T", " ") + (t.note ? " \u00B7 " + t.note : "") })));
+      });
+      root.appendChild(hist);
+    });
+  }
+
+  // ---------- PayMyRide (someone else pays a passenger's fare) ----------
+  var pm = { page: 1 };
+  function pagePayMyRide(root) {
+    loading(root);
+    api("GET", "/admin/paymyride?page=" + pm.page).then(function (r) {
+      var b = r.body || {}, s = b.settings || {}, list = b.data || [], pg = b.pagination || { page: 1, total_pages: 1, total: 0 };
+      root.textContent = "";
+      root.appendChild(head("PayMyRide", "A passenger can share a link so a friend, family member or employer pays the ride fare through Korapay or bank transfer. The money lands in the passenger's wallet and the ride is paid from it."));
+      var enabled = select([["1", "On"], ["0", "Off"]], s.enabled === false ? "0" : "1");
+      var hours = num(s.link_hours), out = h("p", { class: "msg" });
+      var card = h("div", { class: "card" }, field("PayMyRide", enabled), field("Link stays valid for (hours)", hours));
+      if (can("paymyride edit")) {
+        var save = h("button", { text: "Save", class: "small", style: "margin-top:10px" });
+        save.addEventListener("click", function () {
+          save.disabled = true;
+          api("PUT", "/admin/paymyride/settings", { enabled: enabled.value === "1", link_hours: nn(hours) }).then(function (x) { save.disabled = false; if (x.ok) { toast("Saved"); pagePayMyRide(root); } else msg(out, errText(x)); });
+        });
+        card.appendChild(save);
+      }
+      card.appendChild(out); root.appendChild(card);
+      var hist = h("div", { class: "card" }, h("div", { class: "t", text: pg.total + " link" + (pg.total === 1 ? "" : "s") }));
+      if (!list.length) hist.appendChild(h("div", { class: "empty", text: "No pay links yet." }));
+      list.forEach(function (t) {
+        hist.appendChild(h("div", { class: "row", style: "padding:8px 0;border-top:1px solid var(--line,#eee)" },
+          h("div", { class: "t", text: "\u20A6" + Number(t.amount).toLocaleString() + " \u00B7 @" + t.passenger + " \u00B7 " + t.status }),
+          h("div", { class: "s", text: String(t.created_at).slice(0, 16).replace("T", " ") + (t.payer_name ? " \u00B7 paid by " + t.payer_name : "") + (t.gateway ? " via " + t.gateway : "") })));
       });
       root.appendChild(hist);
     });
