@@ -20,12 +20,12 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: 21
 
       - uses: subosito/flutter-action@v2
         with:
-          # Pinned: Flutter 3.50 needs Gradle 9.3.1, but this project's Android setup (Gradle 8.14, AGP 8.11) is on 3.47.
-          # Move to 3.50 only together with a Gradle/AGP upgrade.
+          # Keep this aligned with the existing Gradle 8.14 / AGP 8.11 setup.
+          # Upgrade Flutter and Gradle/AGP together, not independently.
           channel: stable
           flutter-version: 3.47.x
           cache: true

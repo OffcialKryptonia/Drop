@@ -1,4 +1,5 @@
 import 'package:drop/screens/ReviewsScreen.dart';
+import '../drop/screens/drop_help_screen.dart';
 
 import '../manage_imports.dart';
 import 'ModeSwitchTile.dart';
@@ -104,6 +105,13 @@ class _DrawerComponentState extends State<DrawerComponent> {
                     onTap: () {
                       Navigator.pop(context);
                       launchScreen(context, EmergencyContactScreen(), pageRouteAnimation: PageRouteAnimation.Slide);
+                    }),
+                DrawerWidget(
+                    title: 'Help & complaints',
+                    iconData: ic_emergency_contact,
+                    onTap: () {
+                      Navigator.pop(context);
+                      launchScreen(context, DropHelpScreen(), pageRouteAnimation: PageRouteAnimation.Slide);
                     }),
                 DrawerWidget(
                     paddingApply: true,

@@ -135,4 +135,11 @@ class DriverApplicationApi {
         ));
     return r['message']?.toString() ?? 'Payout requested.';
   }
+
+  // ---- plain helpers for other small features (SOS, complaints) ----
+
+  static Future<Map<String, dynamic>> getJson(String path) async => _send(() async => http.get(_uri(path), headers: await _headers()));
+
+  static Future<Map<String, dynamic>> postJson(String path, Map<String, dynamic> body) async =>
+      _send(() async => http.post(_uri(path), headers: await _headers(contentType: 'application/json'), body: jsonEncode(body)));
 }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_mobx/flutter_mobx.dart';
 import 'package:flutter_vector_icons/flutter_vector_icons.dart';
 import 'package:drop/driver/screens/DriverWithdrawScreen.dart';
+import 'package:drop/drop/screens/drop_help_screen.dart';
 import 'package:drop/driver/screens/ReviewsListScreen.dart';
 import 'package:drop/driver/utils/Extensions/dataTypeExtensions.dart';
 
@@ -20,6 +21,7 @@ import '../screens/ScheduleRideListScreen.dart';
 import '../screens/SettingScreen.dart';
 import '../screens/VehicleScreen.dart';
 import '../screens/WalletScreen.dart';
+import '../screens/OfflineMapsScreen.dart';
 import '../screens/refer_earn_screen.dart';
 import '../utils/Colors.dart';
 import '../utils/Common.dart';
@@ -130,6 +132,14 @@ class _DrawerComponentState extends State<DrawerComponent> {
                   launchScreen(context, WalletScreen(), pageRouteAnimation: PageRouteAnimation.Slide);
                 }),
             DrawerWidget(
+                title: 'Offline maps',
+                icon: Ionicons.download_outline,
+                iconData: ic_faq,
+                onTap: () {
+                  Navigator.pop(context);
+                  launchScreen(context, const OfflineMapsScreen(), pageRouteAnimation: PageRouteAnimation.Slide);
+                }),
+            DrawerWidget(
                 title: language.emergencyContacts,
                 iconData: ic_emergency,
                 onTap: () {
@@ -143,6 +153,13 @@ class _DrawerComponentState extends State<DrawerComponent> {
                 onTap: () {
                   Navigator.pop(context);
                   launchScreen(context, EarningScreen(), pageRouteAnimation: PageRouteAnimation.Slide);
+                }),
+            DrawerWidget(
+                title: 'Help & complaints',
+                iconData: payout_icon,
+                onTap: () {
+                  Navigator.pop(context);
+                  launchScreen(context, DropHelpScreen(), pageRouteAnimation: PageRouteAnimation.Slide);
                 }),
             DrawerWidget(
                 title: 'Withdraw & payouts',

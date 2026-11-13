@@ -16,6 +16,8 @@ export const MODULES: { key: string; label: string; actions: string[] }[] = [
   { key: "payout", label: "Driver payouts", actions: ["list", "edit"] },
   { key: "document", label: "Driver document types", actions: ["list", "edit"] },
   { key: "user_account", label: "User accounts (password reset)", actions: ["list", "edit"] },
+  { key: "sos", label: "SOS alerts", actions: ["list", "edit"] },
+  { key: "complaint", label: "Complaints", actions: ["list", "edit"] },
   { key: "bank", label: "Banks", actions: ["list", "edit"] },
   { key: "map_settings", label: "Maps", actions: ["list", "edit"] },
   { key: "role", label: "Roles", actions: ["list", "add", "edit", "delete"] },
