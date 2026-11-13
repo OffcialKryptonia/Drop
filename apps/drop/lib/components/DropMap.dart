@@ -85,6 +85,9 @@ class _DropMapState extends State<DropMap> {
   void didUpdateWidget(DropMap old) {
     super.didUpdateWidget(old);
     widget.controller?._state = this;
+    if (_isMapLibre && _mapLibreStyleReady && old.markers != widget.markers) {
+      _syncMapLibreMarkers();
+    }
   }
 
   @override
