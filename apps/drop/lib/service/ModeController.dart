@@ -4,6 +4,7 @@ import 'package:mighty_core/utils/core_network_utils.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../utils/Constants.dart' show USER_ID;
+import 'DriverApplicationApi.dart' show ApiFailure, DriverApplicationApi;
 
 const String ACTIVE_MODE_KEY = 'ACTIVE_MODE';
 const String DRIVER_STATUS_KEY = 'DRIVER_STATUS';
@@ -48,23 +49,19 @@ class ModeController {
   }
 
   /// Asks the server to switch mode. Returns null on success or a message to show the person.
+  /// The server's own reason is shown (for example "Finish your current ride first") instead of a generic error.
   static Future<String?> switchTo(String target) async {
     try {
-      final res = await parseModel<Map<String, dynamic>>(
-        apiCall: executeRequest('mode', method: HttpMethods.POST, request: {'mode': target}),
-        fromJson: (json) => Map<String, dynamic>.from(json as Map),
-      );
+      final res = await DriverApplicationApi.postJson('mode', {'mode': target});
       final data = res['data'];
-      if (data is Map) {
-        final r = data['roles'];
-        await applyUser(r is List ? r.map((e) => e.toString()).toList() : null, data['active_mode']?.toString(), data['driver_status']?.toString());
-      } else {
-        return 'Could not switch mode. Please try again.';
-      }
+      if (data is! Map) return 'Could not switch mode. Please try again.';
+      final r = data['roles'];
+      await applyUser(r is List ? r.map((e) => e.toString()).toList() : null, data['active_mode']?.toString(), data['driver_status']?.toString());
       return null;
-    } catch (e) {
-      final msg = e.toString();
-      return msg.isEmpty ? 'Could not switch mode. Please try again.' : msg;
+    } on ApiFailure catch (e) {
+      return e.message;
+    } catch (_) {
+      return 'Could not switch mode. Please try again.';
     }
   }
 

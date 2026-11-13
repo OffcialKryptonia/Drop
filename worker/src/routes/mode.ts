@@ -32,7 +32,8 @@ modeRoutes.post("/mode", withDb, requireAuth, async (c) => {
   if (p.data.mode === "driver") {
     const block = await driverModeBlock(db, me.id);
     if (block) return c.json({ status: false, ...block }, 403);
-    if (await activeRide(db, me.id)) return c.json({ status: false, code: "active_trip", message: "Finish your current ride before switching to Driver mode." }, 409);
+    const open = await activeRide(db, me.id);
+    if (open) return c.json({ status: false, code: "active_trip", message: open.as === "passenger" ? "You have a ride request open. Cancel it or wait for it to finish, then switch to Driver mode." : "Finish your current trip before switching." }, 409);
   } else if (await activeRide(db, me.id)) {
     return c.json({ status: false, code: "active_trip", message: "Finish your current trip before switching to Passenger mode." }, 409);
   }
