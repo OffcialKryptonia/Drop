@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:drop/service/DriverApplicationApi.dart';
+import 'package:drop/drop/widgets/drop_sos_sheet.dart';
 import 'package:drop/components/DropMap.dart';
 import 'package:drop/service/MapConfig.dart';
 import 'package:drop/service/RideApi.dart';
@@ -447,6 +448,13 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
           onPressed: () => _openMaps(_num(target['lat']), _num(target['lng'])),
           icon: const Icon(Icons.navigation_outlined),
           label: Text(toDrop ? 'Navigate to drop-off' : 'Navigate to pickup'),
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: () => showDropSos(context, rideId: (a['id'] as num?)?.toInt()),
+          icon: const Icon(Icons.sos, color: Colors.red),
+          label: const Text('SOS \u2013 I need help', style: TextStyle(color: Colors.red)),
+          style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.red)),
         ),
         const SizedBox(height: 8),
         SizedBox(

@@ -11,6 +11,7 @@ import '../components/DropMap.dart';
 import '../components/drawer_component.dart';
 import '../drop/services/drop_money.dart';
 import '../drop/widgets/drop_email_prompt.dart';
+import '../drop/widgets/drop_sos_sheet.dart';
 import '../service/DriverApplicationApi.dart' show ApiFailure;
 import '../service/MapConfig.dart';
 import '../service/RideApi.dart';
@@ -674,6 +675,16 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
             icon: const Icon(Icons.share_outlined, size: 18),
             label: const Text('Share trip for safety'),
             style: OutlinedButton.styleFrom(foregroundColor: primaryColor, side: BorderSide(color: primaryColor), minimumSize: const Size.fromHeight(44)),
+          ),
+        ),
+      if (driver.isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: OutlinedButton.icon(
+            onPressed: () => showDropSos(context, rideId: (r['id'] as num?)?.toInt()),
+            icon: const Icon(Icons.sos, size: 18),
+            label: const Text('SOS \u2013 I need help'),
+            style: OutlinedButton.styleFrom(foregroundColor: Colors.red, side: const BorderSide(color: Colors.red), minimumSize: const Size.fromHeight(44)),
           ),
         ),
       if (r['payment_method'] != 'wallet')

@@ -98,6 +98,8 @@
     { id: "transfers", label: "Wallet transfers", group: "Financial", perm: "wallet_transfer list", render: pageTransfers },
     { id: "paymyride", label: "PayMyRide", group: "Financial", perm: "paymyride list", render: pagePayMyRide },
     { id: "payouts", label: "Driver payouts", group: "Financial", perm: "payout list", render: pagePayouts },
+    { id: "sos", label: "SOS alerts", group: "Safety", perm: "sos list", render: pageSos },
+    { id: "complaints", label: "Complaints", group: "Safety", perm: "complaint list", render: pageComplaints },
     { id: "banks", label: "Banks", group: "Financial", perm: "bank list", render: pageBanks },
     { id: "driver-wallets", label: "Driver wallets", group: "Financial", perm: "driver_wallet list", render: pageDriverWallets },
     { id: "user-accounts", label: "User accounts", group: "People", perm: "user_account list", render: pageUserAccounts },
@@ -121,6 +123,8 @@
         nav.appendChild(h("a", { href: "#/" + p.id, "data-page": p.id, text: p.label }));
       });
       route();
+      sosBadge();
+      if (!window.__sosTimer) window.__sosTimer = setInterval(sosBadge, 20000);
     });
   }
 
@@ -748,6 +752,133 @@
           row.appendChild(paid); row.appendChild(dec);
         }
         card.appendChild(row);
+      });
+      root.appendChild(card);
+    });
+  }
+
+  // ---------- SOS alerts and complaints ----------
+  var so = { status: "open", page: 1 };
+  function pageSos(root) {
+    loading(root);
+    api("GET", "/admin/sos?status=" + so.status + "&page=" + so.page).then(function (r) {
+      var b = r.body || {}, list = b.data || [], pg = b.pagination || { page: 1, total_pages: 1, total: 0 };
+      root.textContent = "";
+      root.appendChild(head("SOS alerts", "When a rider or driver presses SOS, it appears here with their location, phone and trip. Call them, then mark it acknowledged and finally resolved. This page refreshes itself every 20 seconds."));
+      if (can("sos edit")) {
+        var em = text((b.settings || {}).notify_emails, "e.g. ops@yourdomain.com, safety@yourdomain.com"), out = h("p", { class: "msg" });
+        var sv = h("button", { text: "Save", class: "small", style: "margin-top:10px" });
+        sv.addEventListener("click", function () {
+          sv.disabled = true;
+          api("PUT", "/admin/sos/settings", { notify_emails: em.value }).then(function (x) { sv.disabled = false; if (x.ok) toast("Saved"); else msg(out, errText(x)); });
+        });
+        root.appendChild(h("div", { class: "card" }, field("Email me when someone presses SOS", em, "Separate several with commas. Left empty, every active admin is emailed. Needs the Resend keys under Payment methods; the alert always shows here either way."), sv, out));
+      }
+      var tabs = h("div", { style: "display:flex;gap:8px;margin:12px 0" });
+      [["open", "Open"], ["acknowledged", "Acknowledged"], ["resolved", "Resolved"]].forEach(function (t) {
+        var bt = h("button", { text: t[1], class: "small" + (so.status === t[0] ? "" : " secondary") });
+        bt.addEventListener("click", function () { so.status = t[0]; so.page = 1; pageSos(root); });
+        tabs.appendChild(bt);
+      });
+      root.appendChild(tabs);
+      var card = h("div", { class: "card" }, h("div", { class: "t", text: pg.total + " alert" + (pg.total === 1 ? "" : "s") }));
+      if (!list.length) card.appendChild(h("div", { class: "empty", text: "Nothing here." }));
+      list.forEach(function (a) {
+        var c = a.context || {}, who = c.person || {}, other = c.other_party, ride = c.ride, veh = c.vehicle;
+        var row = h("div", { class: "row", style: "padding:10px 0;border-top:1px solid var(--line,#eee)" },
+          h("div", { class: "t", text: "#" + a.id + " · " + (who.name || "Unknown") + " (" + a.role + ") · " + (who.phone || "no phone") }),
+          h("div", { class: "s", text: String(a.created_at).slice(0, 16).replace("T", " ") + " UTC" }));
+        if (ride) row.appendChild(h("div", { class: "s", text: "Trip #" + ride.id + " (" + ride.status + "): " + ride.pickup + " → " + ride.dropoff }));
+        if (other) row.appendChild(h("div", { class: "s", text: (a.role === "driver" ? "Passenger: " : "Driver: ") + (other.name || "") + " " + (other.phone || "") }));
+        if (veh) row.appendChild(h("div", { class: "s", text: "Vehicle: " + (veh.description || "") + " " + (veh.plate || "") }));
+        if (a.message) row.appendChild(h("div", { class: "s", text: "Message: " + a.message }));
+        if (a.admin_note) row.appendChild(h("div", { class: "s", text: "Note: " + a.admin_note }));
+        if (a.latitude != null && a.longitude != null) {
+          var map = h("a", { href: "https://www.google.com/maps?q=" + a.latitude + "," + a.longitude, target: "_blank", rel: "noopener", text: "Open location on the map" });
+          row.appendChild(h("div", { class: "s" }, map));
+        } else row.appendChild(h("div", { class: "s", text: "No location was shared." }));
+        if (a.status !== "resolved" && can("sos edit")) {
+          if (a.status === "open") {
+            var ack = h("button", { text: "Acknowledge", class: "small", style: "margin-top:8px" });
+            ack.addEventListener("click", function () { api("PUT", "/admin/sos/" + a.id, { status: "acknowledged" }).then(function (x) { toast(x.ok ? x.body.message : errText(x), !x.ok); if (x.ok) { pageSos(root); sosBadge(); } }); });
+            row.appendChild(ack);
+          }
+          var res = h("button", { text: "Mark resolved", class: "small secondary", style: "margin:8px 0 0 8px" });
+          res.addEventListener("click", function () {
+            var note = window.prompt("Add a short note about what happened (optional).") || "";
+            api("PUT", "/admin/sos/" + a.id, { status: "resolved", note: note }).then(function (x) { toast(x.ok ? x.body.message : errText(x), !x.ok); if (x.ok) { pageSos(root); sosBadge(); } });
+          });
+          row.appendChild(res);
+        }
+        card.appendChild(row);
+      });
+      root.appendChild(card);
+      // Keep the open alerts fresh while this page is on screen.
+      clearTimeout(pageSos.timer);
+      pageSos.timer = setTimeout(function () { if (location.hash.indexOf("#/sos") === 0 && root.isConnected) pageSos(root); }, 20000);
+    });
+  }
+
+  // A red bar at the top of every admin page while an SOS alert is open.
+  function sosBadge() {
+    if (!can("sos list")) return;
+    api("GET", "/admin/sos/open-count").then(function (r) {
+      var n = r.ok ? (r.body || {}).open : 0, bar = $("sosBar");
+      if (!bar) {
+        bar = h("a", { id: "sosBar", href: "#/sos", style: "display:none;background:#c62828;color:#fff;padding:10px 16px;font-weight:700;text-align:center;text-decoration:none" });
+        var app = $("app"); app.insertBefore(bar, app.firstChild);
+      }
+      bar.style.display = n > 0 ? "block" : "none";
+      bar.textContent = n > 0 ? "⚠ " + n + " open SOS alert" + (n === 1 ? "" : "s") + " — tap to handle" : "";
+      document.title = (n > 0 ? "(" + n + ") " : "") + ($("title").textContent || "Admin");
+    });
+  }
+
+  var cm = { status: "pending", page: 1, open: null };
+  function pageComplaints(root) {
+    loading(root);
+    api("GET", "/admin/complaints?status=" + cm.status + "&page=" + cm.page).then(function (r) {
+      var b = r.body || {}, list = b.data || [], pg = b.pagination || { page: 1, total_pages: 1, total: 0 };
+      root.textContent = "";
+      root.appendChild(head("Complaints", "What riders and drivers report. Reply to them here (they see your reply in the app under Help & complaints) and move the complaint along."));
+      var tabs = h("div", { style: "display:flex;gap:8px;margin:12px 0" });
+      [["pending", "New"], ["investigating", "Being looked into"], ["resolved", "Resolved"]].forEach(function (t) {
+        var bt = h("button", { text: t[1], class: "small" + (cm.status === t[0] ? "" : " secondary") });
+        bt.addEventListener("click", function () { cm.status = t[0]; cm.page = 1; cm.open = null; pageComplaints(root); });
+        tabs.appendChild(bt);
+      });
+      root.appendChild(tabs);
+      var card = h("div", { class: "card" }, h("div", { class: "t", text: pg.total + " complaint" + (pg.total === 1 ? "" : "s") }));
+      if (!list.length) card.appendChild(h("div", { class: "empty", text: "Nothing here." }));
+      list.forEach(function (c) {
+        var row = h("div", { class: "row", style: "padding:10px 0;border-top:1px solid var(--line,#eee);cursor:pointer" },
+          h("div", { class: "t", text: "#" + c.id + " · " + c.subject }),
+          h("div", { class: "s", text: c.person + " (" + c.role + ") · " + String(c.created_at).slice(0, 16).replace("T", " ") + (c.ride_request_id ? " · trip #" + c.ride_request_id : "") }));
+        row.addEventListener("click", function () { cm.open = cm.open === c.id ? null : c.id; pageComplaints(root); });
+        card.appendChild(row);
+        if (cm.open === c.id) {
+          var box = h("div", { style: "padding:6px 0 12px" }, h("div", { class: "s", text: "Loading…" }));
+          card.appendChild(box);
+          api("GET", "/admin/complaints/" + c.id).then(function (x) {
+            var d = (x.body || {}).data; if (!d) { box.textContent = errText(x); return; }
+            box.textContent = "";
+            box.appendChild(h("div", { class: "s", text: d.person + " · " + (d.phone || "no phone") }));
+            box.appendChild(h("p", { text: d.description, style: "white-space:pre-wrap" }));
+            (d.comments || []).forEach(function (m) {
+              box.appendChild(h("div", { class: "s", style: "margin:4px 0;white-space:pre-wrap", text: (m.added_by === "admin" ? "You: " : "Them: ") + m.comment + "  (" + String(m.created_at).slice(0, 16).replace("T", " ") + ")" }));
+            });
+            if (can("complaint edit")) {
+              var reply = h("textarea", { rows: "3", placeholder: "Write a reply the person will see in their app", style: "width:100%;margin-top:8px" });
+              var st = select([["", "Keep status"], ["pending", "New"], ["investigating", "Being looked into"], ["resolved", "Resolved"]], "");
+              var send = h("button", { text: "Save", class: "small", style: "margin-top:8px" }), o2 = h("p", { class: "msg" });
+              send.addEventListener("click", function () {
+                send.disabled = true;
+                api("PUT", "/admin/complaints/" + c.id, { comment: reply.value, status: st.value || undefined }).then(function (y) { send.disabled = false; if (y.ok) { toast("Saved"); pageComplaints(root); } else msg(o2, errText(y)); });
+              });
+              box.appendChild(reply); box.appendChild(field("Status", st)); box.appendChild(send); box.appendChild(o2);
+            }
+          });
+        }
       });
       root.appendChild(card);
     });

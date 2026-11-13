@@ -64,7 +64,7 @@ legacyRoutes.get("/service-list", withDb, requireAuth, async (c) => {
 /** Lists that are empty until their feature is rebuilt. */
 for (const path of [
   "/faq-list", "/coupon-list", "/notification-list", "/reward-list", "/reference-list",
-  "/complaintcomment-list", "/managezone-list", "/additional-fees-list", "/airport-list",
+  "/managezone-list", "/additional-fees-list", "/airport-list",
   "/coin-wallet-list", "/driver-rating-list",
   "/rider-rating-list", "/cancelReason-list", "/language-table-list", "/document-list",
   "/driver-document-list", "/driver-payout-document-list",
