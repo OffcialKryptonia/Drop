@@ -72,10 +72,10 @@ class _OfflineMapsScreenState extends State<OfflineMapsScreen> {
       }
       final position = await Geolocator.getCurrentPosition(locationSettings: const LocationSettings(accuracy: LocationAccuracy.high));
       const radius = 0.10; // Roughly an 11 km radius; keeps the download manageable.
-      final south = math.max(-85.0, position.latitude - radius);
-      final north = math.min(85.0, position.latitude + radius);
-      final west = math.max(-180.0, position.longitude - radius);
-      final east = math.min(180.0, position.longitude + radius);
+      final south = math.max(-85.0, position.latitude - radius).toDouble();
+      final north = math.min(85.0, position.latitude + radius).toDouble();
+      final west = math.max(-180.0, position.longitude - radius).toDouble();
+      final east = math.min(180.0, position.longitude + radius).toDouble();
       final definition = ml.OfflineRegionDefinition(
         bounds: ml.LatLngBounds(
           southwest: ml.LatLng(south, west),
