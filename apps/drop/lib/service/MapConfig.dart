@@ -6,7 +6,7 @@ import '../utils/Constants.dart';
 
 /// Which map service the app should draw, as decided in the admin (Maps page).
 class MapConfig {
-  /// 'google' or 'osm'.
+  /// 'google' or 'maplibre' (OpenStreetMap vector tiles).
   final String provider;
   final String tileUrl;
   final String attribution;
