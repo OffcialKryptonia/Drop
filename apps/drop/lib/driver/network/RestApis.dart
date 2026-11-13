@@ -245,14 +245,12 @@ Future updateProfile({String? firstName, String? lastName, String? userEmail, St
 
 Future<void> logout({bool isDelete = false}) async {
   if (!isDelete) {
-    await logoutApi().then((value) async {
-      logOutSuccess();
-    }).catchError((e) {
-      throw e.toString();
-    });
-  } else {
-    logOutSuccess();
+    // Signing out always works: if the server cannot be reached the token simply expires there.
+    try {
+      await logoutApi().timeout(Duration(seconds: 5));
+    } catch (_) {}
   }
+  await logOutSuccess();
 }
 
 Future<ChangePasswordResponseModel> changePassword(Map req) async {

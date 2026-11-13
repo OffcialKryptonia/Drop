@@ -118,4 +118,21 @@ class DriverApplicationApi {
           body: jsonEncode({'latitude': latitude, 'longitude': longitude}),
         ));
   }
+
+  // ---- driver mode: profile, payouts ----
+
+  /// Referral code, ride type and vehicle.
+  static Future<Map<String, dynamic>> driverProfile() async => _send(() async => http.get(_uri('driver/profile'), headers: await _headers()));
+
+  /// Balance, smallest payout, bank account and payout history.
+  static Future<Map<String, dynamic>> payouts() async => _send(() async => http.get(_uri('driver/payouts'), headers: await _headers()));
+
+  static Future<String> requestPayout(num amount) async {
+    final r = await _send(() async => http.post(
+          _uri('save-withdrawrequest'),
+          headers: await _headers(contentType: 'application/json'),
+          body: jsonEncode({'amount': amount}),
+        ));
+    return r['message']?.toString() ?? 'Payout requested.';
+  }
 }

@@ -1,7 +1,8 @@
+import 'package:drop/service/DriverApplicationApi.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_mobx/flutter_mobx.dart';
 import 'package:flutter_vector_icons/flutter_vector_icons.dart';
-import 'package:drop/driver/screens/DriverPayoutScreen.dart';
+import 'package:drop/driver/screens/DriverWithdrawScreen.dart';
 import 'package:drop/driver/screens/ReviewsListScreen.dart';
 import 'package:drop/driver/utils/Extensions/dataTypeExtensions.dart';
 
@@ -144,11 +145,11 @@ class _DrawerComponentState extends State<DrawerComponent> {
                   launchScreen(context, EarningScreen(), pageRouteAnimation: PageRouteAnimation.Slide);
                 }),
             DrawerWidget(
-                title: 'Payout Report',
+                title: 'Withdraw & payouts',
                 iconData: payout_icon,
                 onTap: () {
                   Navigator.pop(context);
-                  launchScreen(context, DriverPayoutListScreen(), pageRouteAnimation: PageRouteAnimation.Slide);
+                  launchScreen(context, DriverWithdrawScreen(), pageRouteAnimation: PageRouteAnimation.Slide);
                 }),
             DrawerWidget(
                 title: language.documents,
@@ -198,8 +199,14 @@ class _DrawerComponentState extends State<DrawerComponent> {
                 iconData: ic_logout,
                 onTap: () async {
                   await showConfirmDialogCustom(context, primaryColor: primaryColor, dialogType: DialogType.CONFIRMATION, title: language.areYouSureYouWantToLogoutThisApp, positiveText: language.yes, negativeText: language.no, onAccept: (v) async {
-                    widget.onCall!();
-                    await Future.delayed(Duration(milliseconds: 500));
+                    // Go offline first (best effort), then sign out whatever the network says.
+                    try {
+                      if (widget.onCall != null) {
+                        await widget.onCall!();
+                      } else {
+                        await DriverApplicationApi.setOnline(false).timeout(Duration(seconds: 4));
+                      }
+                    } catch (_) {}
                     await logout();
                   });
                 }),

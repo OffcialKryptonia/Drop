@@ -44,7 +44,7 @@ class EarningWeekWidgetState extends State<EarningWeekWidget> {
       if (value.totalCardRide != null) totalCardRide = value.totalCardRide!;
       if (value.totalEarnings != null) totalEarnings = value.totalEarnings!;
 
-      weekReport.addAll(value.weekReport!);
+      weekReport.addAll(value.weekReport ?? []);
       setState(() {});
     }).catchError((error) {
       appStore.setLoading(false);

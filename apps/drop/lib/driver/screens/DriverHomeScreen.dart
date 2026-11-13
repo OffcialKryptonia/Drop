@@ -183,32 +183,39 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     _positionSub = null;
   }
 
+  /// Flips the switch at once and confirms with the server in the background; undoes it with a message if refused.
   Future<void> _toggle(bool wantOnline) async {
     if (busy) return;
-    setState(() => busy = true);
+    final before = Map<String, dynamic>.from(status);
+    if (wantOnline && !await _locationAllowed()) return;
+    setState(() {
+      busy = true;
+      status = {...status, 'is_online': wantOnline};
+    });
     try {
       if (wantOnline) {
-        if (!await _locationAllowed()) {
-          setState(() => busy = false);
-          return;
-        }
-        final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+        // Last known position is instant; a fresh fix is only waited for briefly.
+        Position? pos = await Geolocator.getLastKnownPosition();
+        pos ??= await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.medium, timeLimit: const Duration(seconds: 8));
+        if (mounted) setState(() => myPos = LatLng(pos!.latitude, pos.longitude));
         await DriverApplicationApi.setOnline(true, latitude: pos.latitude, longitude: pos.longitude);
         _startSharing();
       } else {
         _stopSharing();
+        if (mounted) setState(() => requests = []);
         await DriverApplicationApi.setOnline(false);
       }
-      await _load();
+      _load(); // refresh wallet and blocks without holding the switch
     } on ApiFailure catch (e) {
       _say(e.message);
-      await _load();
+      if (mounted) setState(() => status = before);
+      _load();
     } catch (_) {
       _say('Could not get your location. Please try again.');
+      if (mounted) setState(() => status = before);
     }
     if (mounted) setState(() => busy = false);
   }
-
 
   // ---------- ride requests and the active trip ----------
 
