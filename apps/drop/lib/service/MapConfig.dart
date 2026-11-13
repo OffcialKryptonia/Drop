@@ -10,12 +10,20 @@ class MapConfig {
   final String provider;
   final String tileUrl;
   final String attribution;
+  final String styleUrl;
 
-  const MapConfig({this.provider = 'osm', this.tileUrl = defaultTileUrl, this.attribution = '© OpenStreetMap contributors'});
+  const MapConfig({
+    this.provider = 'maplibre',
+    this.tileUrl = defaultTileUrl,
+    this.attribution = '© OpenStreetMap contributors',
+    this.styleUrl = defaultStyleUrl,
+  });
 
   static const String defaultTileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+  static const String defaultStyleUrl = 'https://tiles.openfreemap.org/styles/liberty';
 
   bool get isGoogle => provider == 'google';
+  bool get isMapLibre => provider == 'maplibre';
 
   static MapConfig? _cached;
 
@@ -28,9 +36,12 @@ class MapConfig {
       if (r.statusCode == 200 && body is Map) {
         final tile = body['osm_tile_url']?.toString() ?? '';
         _cached = MapConfig(
-          provider: body['provider'] == 'google' ? 'google' : 'osm',
+          provider: body['provider'] == 'google' ? 'google' : 'maplibre',
           tileUrl: tile.contains('{z}') ? tile : defaultTileUrl,
           attribution: body['attribution']?.toString() ?? '© OpenStreetMap contributors',
+          styleUrl: body['maplibre_style_url']?.toString().startsWith('https://') == true
+              ? body['maplibre_style_url'].toString()
+              : defaultStyleUrl,
         );
         return _cached!;
       }
