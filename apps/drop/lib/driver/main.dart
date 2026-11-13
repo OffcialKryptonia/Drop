@@ -68,9 +68,10 @@ Future<void> initDriverModule() async {
   await appStore.setUserProfile(sharedPref.getString(USER_PROFILE_PHOTO).validate(), isInitialization: true);
   await mightyCoreInit();
   if (_driverModuleReady) return;
-  initJsonFile();
-  await oneSignalSettings();
   _driverModuleReady = true;
+  // Notification set-up waits a few seconds on purpose; never make the driver wait for it.
+  initJsonFile();
+  oneSignalSettings().catchError((_) {});
 }
 
 Future<void> mightyCoreInit() async {

@@ -15,32 +15,32 @@ class EarningTodayWidgetState extends State<EarningTodayWidget> {
   num totalWalletRide = 0;
   num todayEarnings = 0;
   num todayRideRequest = 0;
+  bool loading = true;
+  bool failed = false;
 
   @override
   void initState() {
     super.initState();
-    afterBuildCreated(() {
-      appStore.setLoading(true);
-    });
     init();
   }
 
+  /// Own loading flag: the shared one is flipped by the other tabs and could leave this spinner stuck.
   void init() async {
-    Map req = {
-      "type": "today",
-    };
-    await earningList(req: req).then((value) {
-      totalCashRide = value.totalCashRide!;
-      totalWalletRide = value.totalWalletRide!;
-      todayEarnings = value.todayEarnings!;
-      todayRideRequest = value.todayRideRequest!;
-      appStore.setLoading(false);
-      setState(() {});
-    }).catchError((error) {
-      appStore.setLoading(false);
-
-      log(error.toString());
+    setState(() {
+      loading = true;
+      failed = false;
     });
+    try {
+      final value = await earningList(req: {"type": "today"});
+      totalCashRide = value.totalCashRide ?? 0;
+      totalWalletRide = value.totalWalletRide ?? 0;
+      todayEarnings = value.todayEarnings ?? 0;
+      todayRideRequest = value.todayRideRequest ?? 0;
+    } catch (error) {
+      failed = true;
+      log(error.toString());
+    }
+    setState(() => loading = false);
   }
 
   @override
@@ -74,10 +74,14 @@ class EarningTodayWidgetState extends State<EarningTodayWidget> {
             ],
           ),
         ),
-        Visibility(
-          visible: appStore.isLoading,
-          child: loaderWidget(),
-        )
+        if (loading) loaderWidget(),
+        if (!loading && failed)
+          Center(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Text('Could not load your earnings.', style: secondaryTextStyle()),
+              TextButton(onPressed: init, child: Text('Try again')),
+            ]),
+          ),
       ],
     );
   }

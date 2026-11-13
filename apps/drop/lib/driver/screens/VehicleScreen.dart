@@ -1,3 +1,4 @@
+import 'package:drop/service/DriverApplicationApi.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_mobx/flutter_mobx.dart';
@@ -37,20 +38,20 @@ class VehicleScreenState extends State<VehicleScreen> {
 
   void init() async {
     appStore.setLoading(true);
-    await getUserDetail(userId: sharedPref.getInt(USER_ID)).then((value) {
-      userDetail = value.data!.userDetail!;
-      carModelController.text = userDetail.carModel.validate();
-      carColorController.text = userDetail.carColor.validate();
-      carPlateNumberController.text = userDetail.carPlateNumber.validate();
-      carProductionYearController.text =
-          userDetail.carProductionYear.validate();
-      vehicleService.text = value.data!.driverService!.name.validate();
-      appStore.setLoading(false);
-      setState(() {});
-    }).catchError((error) {
-      appStore.setLoading(false);
+    try {
+      final r = await DriverApplicationApi.driverProfile();
+      final v = r['vehicle'] is Map ? Map<String, dynamic>.from(r['vehicle'] as Map) : <String, dynamic>{};
+      carModelController.text = (v['model'] ?? '').toString();
+      carColorController.text = (v['color'] ?? '').toString();
+      carPlateNumberController.text = (v['plate'] ?? '').toString();
+      carProductionYearController.text = (v['year'] ?? '').toString();
+      vehicleService.text = (r['service_name'] ?? '').toString();
+    } catch (error) {
       log(error.toString());
-    });
+      toast('Could not load your vehicle details. Check your connection and try again.');
+    }
+    appStore.setLoading(false);
+    setState(() {});
   }
 
   Future<void> updateVehicle() async {

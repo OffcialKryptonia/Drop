@@ -31,28 +31,7 @@ class EarningScreenState extends State<EarningScreen> {
     init();
   }
 
-  void init() async {
-    appStore.setLoading(true);
-    Map req = {
-      "type": "week",
-    };
-    await earningList(req: req).then((value) {
-      appStore.setLoading(false);
-
-      totalRideCount = value.totalRideCount!;
-      totalCashRide = value.totalCashRide!;
-      totalWalletRide = value.totalWalletRide!;
-      totalCardRide = value.totalCardRide!;
-      totalEarnings = value.totalEarnings!;
-
-      weekReport.addAll(value.weekReport!);
-      setState(() {});
-    }).catchError((error) {
-      appStore.setLoading(false);
-
-      log(error.toString());
-    });
-  }
+  void init() {}
 
   @override
   void setState(fn) {

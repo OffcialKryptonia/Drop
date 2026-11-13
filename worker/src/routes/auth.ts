@@ -211,6 +211,8 @@ authRoutes.get("/logout", withDb, requireAuth, async (c) => {
   if (clear === "player_id" || clear === "fcm_token") {
     await db.query(`update app.users set ${clear} = null where id = $1`, [user.id]);
   }
+  // Signing out must not leave a driver showing as online.
+  await db.query("update app.users set is_online = false, is_available = false where id = $1 and is_online", [user.id]);
   await db.query("delete from app.api_tokens where id = $1", [c.get("tokenId")]);
   return c.json({ message: MESSAGES.logout });
 });
