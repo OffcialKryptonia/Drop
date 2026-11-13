@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart' as fm;
 import 'package:google_maps_flutter/google_maps_flutter.dart' as g;
 import 'package:latlong2/latlong.dart' as ll;
+import 'package:maplibre_gl/maplibre_gl.dart' as ml;
 
 /// A pin on the map.
 class DropMarker {
@@ -32,6 +33,7 @@ class DropMap extends StatefulWidget {
   final String provider;
   final String tileUrl;
   final String attribution;
+  final String styleUrl;
   final ll.LatLng initialCenter;
   final double initialZoom;
   final List<DropMarker> markers;
@@ -46,6 +48,7 @@ class DropMap extends StatefulWidget {
     required this.tileUrl,
     required this.initialCenter,
     this.attribution = '© OpenStreetMap contributors',
+    this.styleUrl = 'https://tiles.openfreemap.org/styles/liberty',
     this.initialZoom = 15,
     this.markers = const [],
     this.showMyLocation = false,
@@ -60,12 +63,16 @@ class DropMap extends StatefulWidget {
 
 class _DropMapState extends State<DropMap> {
   g.GoogleMapController? _google;
+  ml.MapLibreMapController? _mapLibre;
+  bool _mapLibreReady = false;
+  bool _mapLibreStyleReady = false;
   final fm.MapController _osm = fm.MapController();
   bool _osmReady = false;
   Timer? _idle;
   late ll.LatLng _center;
 
   bool get _isGoogle => widget.provider == 'google';
+  bool get _isMapLibre => widget.provider == 'maplibre';
 
   @override
   void initState() {
@@ -91,6 +98,8 @@ class _DropMapState extends State<DropMap> {
     try {
       if (_isGoogle) {
         _google?.animateCamera(g.CameraUpdate.newLatLngZoom(g.LatLng(p.latitude, p.longitude), zoom));
+      } else if (_isMapLibre && _mapLibreReady) {
+        _mapLibre?.animateCamera(ml.CameraUpdate.newLatLngZoom(ml.LatLng(p.latitude, p.longitude), zoom));
       } else if (_osmReady) {
         _osm.move(p, zoom);
       }
@@ -110,6 +119,11 @@ class _DropMapState extends State<DropMap> {
     try {
       if (_isGoogle) {
         _google?.animateCamera(g.CameraUpdate.newLatLngBounds(g.LatLngBounds(southwest: g.LatLng(south, west), northeast: g.LatLng(north, east)), 80));
+      } else if (_isMapLibre && _mapLibreReady) {
+        final center = ll.LatLng((south + north) / 2, (west + east) / 2);
+        final span = (north - south).abs() > (east - west).abs() ? (north - south).abs() : (east - west).abs();
+        final zoom = span <= 0.01 ? 14.0 : (span <= 0.05 ? 12.0 : (span <= 0.2 ? 10.0 : 8.0));
+        _mapLibre?.animateCamera(ml.CameraUpdate.newLatLngZoom(ml.LatLng(center.latitude, center.longitude), zoom));
       } else if (_osmReady) {
         _osm.fitCamera(fm.CameraFit.bounds(bounds: fm.LatLngBounds(ll.LatLng(south, west), ll.LatLng(north, east)), padding: const EdgeInsets.all(80)));
       }
@@ -120,11 +134,56 @@ class _DropMapState extends State<DropMap> {
     _center = c;
     widget.onMove?.call(c);
     _idle?.cancel();
-    if (!_isGoogle) _idle = Timer(const Duration(milliseconds: 450), () => widget.onIdle?.call(_center));
+    if (!_isGoogle && !_isMapLibre) _idle = Timer(const Duration(milliseconds: 450), () => widget.onIdle?.call(_center));
   }
 
   @override
-  Widget build(BuildContext context) => _isGoogle ? _googleMap() : _osmMap();
+  Widget build(BuildContext context) {
+    if (_isGoogle) return _googleMap();
+    if (_isMapLibre) return _mapLibreMap();
+    return _osmMap();
+  }
+
+  String _colorHex(Color color) => '#${color.value.toRadixString(16).padLeft(8, '0').substring(2)}';
+
+  Future<void> _syncMapLibreMarkers() async {
+    if (!_mapLibreStyleReady || _mapLibre == null) return;
+    try {
+      await _mapLibre!.clearCircles();
+      for (final marker in widget.markers) {
+        await _mapLibre!.addCircle(ml.CircleOptions(
+          geometry: ml.LatLng(marker.point.latitude, marker.point.longitude),
+          circleRadius: 8,
+          circleColor: _colorHex(marker.color),
+          circleStrokeColor: '#FFFFFF',
+          circleStrokeWidth: 2,
+        ));
+      }
+    } catch (_) {
+      // A style reload can temporarily make annotations unavailable; the next style callback retries.
+    }
+  }
+
+  Widget _mapLibreMap() {
+    return ml.MapLibreMap(
+      styleString: widget.styleUrl,
+      initialCameraPosition: ml.CameraPosition(
+        target: ml.LatLng(widget.initialCenter.latitude, widget.initialCenter.longitude),
+        zoom: widget.initialZoom,
+      ),
+      trackCameraPosition: true,
+      onMapCreated: (controller) {
+        _mapLibre = controller;
+        _mapLibreReady = true;
+      },
+      onStyleLoadedCallback: () {
+        _mapLibreStyleReady = true;
+        _syncMapLibreMarkers();
+      },
+      onCameraMove: (position) => _moved(ll.LatLng(position.target.latitude, position.target.longitude)),
+      onCameraIdle: () => widget.onIdle?.call(_center),
+    );
+  }
 
   Widget _googleMap() {
     return g.GoogleMap(
