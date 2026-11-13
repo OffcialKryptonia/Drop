@@ -1,3 +1,4 @@
+import { vehicleFromProfile } from "../lib/driver-vehicle";
 import { Hono } from "hono";
 import type { AppEnv } from "../env";
 import { withDb } from "../db";
@@ -28,9 +29,19 @@ userRoutes.get("/user-detail", withDb, requireAuth, async (c) => {
     rating: 0, // ratings arrive with the rides slice
   };
 
-  if (u.user_type === "driver") {
-    const svc = u.service_id
-      ? await db.query("select * from app.services where id = $1", [u.service_id])
+  // Drivers who applied through "Become a driver" keep their vehicle in the application; show it here too.
+  const prof = (await db.query("select service_id, vehicle_make, vehicle_model, vehicle_year, vehicle_colour, vehicle_plate from app.driver_profiles where user_id = $1", [id])).rows[0];
+  if (prof) {
+    const v = vehicleFromProfile(prof)!;
+    const have = (data.user_detail ?? {}) as Record<string, unknown>;
+    data.user_detail = { ...(serializeUserDetail({ id: 0, user_id: id }) as object), ...have,
+      car_model: have.car_model || v.car_model, car_color: have.car_color || v.car_color,
+      car_plate_number: have.car_plate_number || v.car_plate_number, car_production_year: have.car_production_year || v.car_production_year };
+  }
+  if (u.user_type === "driver" || prof) {
+    const serviceId = u.service_id ?? prof?.service_id;
+    const svc = serviceId
+      ? await db.query("select * from app.services where id = $1", [serviceId])
       : { rows: [] };
     data.driver_service = serializeService(svc.rows[0]);
   }

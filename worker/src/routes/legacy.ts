@@ -1,3 +1,4 @@
+import { saveVehicleEdit } from "../lib/driver-vehicle";
 import { nationalNumber } from "../lib/phone";
 import { Hono } from "hono";
 import type { AppEnv } from "../env";
@@ -103,7 +104,12 @@ legacyRoutes.post("/update-profile", withDb, requireAuth, async (c) => {
     if (phone.length < 6 || phone.length > 13) return validationFailed(c, { contact_number: ["Enter a valid phone number."] });
     add("contact_number", phone);
   }
+  // Vehicle edits from the driver's "Vehicle details" screen (multipart "user_detail[car_model]" or nested JSON).
+  const ud = (b.user_detail && typeof b.user_detail === "object" ? b.user_detail : {}) as Record<string, unknown>;
+  const vget = (k: string) => text(ud[k] ?? b[`user_detail[${k}]`], 100) ?? undefined;
+  const vehicle = { car_model: vget("car_model"), car_color: vget("car_color"), car_plate_number: vget("car_plate_number"), car_production_year: vget("car_production_year") };
   try {
+    if (Object.values(vehicle).some((x) => x !== undefined)) await saveVehicleEdit(db, me.id, vehicle);
     if (sets.length) await db.query(`update app.users set ${sets.join(", ")} where id = $1`, args);
   } catch (err) {
     const e = err as { code?: string; constraint?: string };
