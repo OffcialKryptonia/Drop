@@ -43,6 +43,8 @@ dependencies:
   flutter_map: ^8.1.1
   latlong2: ^0.9.1
   google_maps_flutter: ^2.9.0
+  # Premium vector maps and offline regions (Android/iOS)
+  maplibre_gl: ^0.27.1
   # IMAGES
   image_picker: ^1.2.0
   # CONNECTIVITY

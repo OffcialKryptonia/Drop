@@ -482,6 +482,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
                         : DropMap(
                             provider: mapConfig.provider,
                             tileUrl: mapConfig.tileUrl,
+                            styleUrl: mapConfig.styleUrl,
                             attribution: mapConfig.attribution,
                             initialCenter: myPos ?? const LatLng(9.0765, 7.3986),
                             controller: _map,
