@@ -70,7 +70,7 @@ class _OfflineMapsScreenState extends State<OfflineMapsScreen> {
       if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
         throw Exception('Location permission is required to select the area around you.');
       }
-      final position = await Geolocator.getCurrentPosition(locationSettings: const LocationSettings(accuracy: LocationAccuracy.high));
+      final position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
       const radius = 0.10; // Roughly an 11 km radius; keeps the download manageable.
       final south = math.max(-85.0, position.latitude - radius).toDouble();
       final north = math.min(85.0, position.latitude + radius).toDouble();
