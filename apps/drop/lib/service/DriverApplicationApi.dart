@@ -140,6 +140,11 @@ class DriverApplicationApi {
 
   static Future<Map<String, dynamic>> getJson(String path) async => _send(() async => http.get(_uri(path), headers: await _headers()));
 
+  static Future<Map<String, dynamic>> putJson(String path, Map<String, dynamic> body) async =>
+      _send(() async => http.put(_uri(path), headers: await _headers(contentType: 'application/json'), body: jsonEncode(body)));
+
+  static Future<Map<String, dynamic>> deleteJson(String path) async => _send(() async => http.delete(_uri(path), headers: await _headers()));
+
   static Future<Map<String, dynamic>> postJson(String path, Map<String, dynamic> body) async =>
       _send(() async => http.post(_uri(path), headers: await _headers(contentType: 'application/json'), body: jsonEncode(body)));
 }
