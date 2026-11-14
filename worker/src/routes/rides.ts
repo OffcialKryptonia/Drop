@@ -1,3 +1,4 @@
+import { iconKeyFor } from "./map-icons";
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
@@ -40,7 +41,7 @@ type Row = Record<string, unknown>;
 const ride = (r: Row) => ({
   id: Number(r.id),
   status: r.status,
-  service: { id: Number(r.service_id), name: r.service_name ?? null },
+  service: { id: Number(r.service_id), name: r.service_name ?? null, category: r.service_category ?? null, map_icon: iconKeyFor(r.service_category as string, r.service_map_icon as string) },
   pickup: { lat: r.pickup_lat, lng: r.pickup_lng, address: r.pickup_address },
   dropoff: { lat: r.dropoff_lat, lng: r.dropoff_lng, address: r.dropoff_address },
   distance: Number(r.distance),
@@ -68,7 +69,7 @@ const ride = (r: Row) => ({
 });
 
 /** One ride with its service name and, once accepted, the driver's details and live position. */
-const RIDE_SELECT = `select r.*, s.name as service_name,
+const RIDE_SELECT = `select r.*, s.name as service_name, s.category as service_category, s.map_icon_key as service_map_icon,
        du.first_name as driver_first_name, du.last_name as driver_last_name, du.contact_number as driver_contact_number,
        du.latitude as driver_lat, du.longitude as driver_lng, du.last_location_update_at as driver_location_at,
        p.vehicle_make, p.vehicle_model, p.vehicle_colour, p.vehicle_plate

@@ -1,10 +1,14 @@
 import 'dart:async';
+import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart' as fm;
 import 'package:google_maps_flutter/google_maps_flutter.dart' as g;
 import 'package:latlong2/latlong.dart' as ll;
 import 'package:maplibre_gl/maplibre_gl.dart' as ml;
+
+import 'VehicleIcons.dart';
 
 /// A pin on the map.
 class DropMarker {
@@ -13,7 +17,13 @@ class DropMarker {
   final String title;
   final Color color;
 
-  const DropMarker({required this.id, required this.point, this.title = '', this.color = Colors.red});
+  /// When set, the marker is drawn as this vehicle picture (see VehicleIcons) instead of a pin.
+  final String? iconKey;
+
+  /// Which way the vehicle faces, in degrees clockwise from north.
+  final double heading;
+
+  const DropMarker({required this.id, required this.point, this.title = '', this.color = Colors.red, this.iconKey, this.heading = 0});
 }
 
 /// Moves the map without the screen caring which map service is underneath.
@@ -72,6 +82,8 @@ class _DropMapState extends State<DropMap> {
   final fm.MapController _osm = fm.MapController();
   bool _osmReady = false;
   Timer? _idle;
+  final Map<String, Uint8List> _icons = {};
+  final Set<String> _mlImages = {};
   late ll.LatLng _center;
 
   bool get _isGoogle => widget.provider == 'google';
@@ -82,12 +94,27 @@ class _DropMapState extends State<DropMap> {
     super.initState();
     _center = widget.initialCenter;
     widget.controller?._state = this;
+    _ensureIcons();
+  }
+
+  /// Loads every vehicle picture the markers need, once, then redraws.
+  void _ensureIcons() {
+    for (final m in widget.markers) {
+      final key = m.iconKey;
+      if (key == null || _icons.containsKey(key)) continue;
+      VehicleIcons.load(key).then((bytes) {
+        if (bytes == null || !mounted) return;
+        setState(() => _icons[key] = bytes);
+        if (_isMapLibre && _mapLibreStyleReady) _syncMapLibreMarkers();
+      });
+    }
   }
 
   @override
   void didUpdateWidget(DropMap old) {
     super.didUpdateWidget(old);
     widget.controller?._state = this;
+    _ensureIcons();
     if (_isMapLibre && _mapLibreStyleReady && (old.markers != widget.markers || old.routePoints != widget.routePoints)) {
       _syncMapLibreMarkers();
     }
@@ -157,6 +184,7 @@ class _DropMapState extends State<DropMap> {
     try {
       await _mapLibre!.clearLines();
       await _mapLibre!.clearCircles();
+      await _mapLibre!.clearSymbols();
       if (widget.routePoints.length > 1) {
         await _mapLibre!.addLine(ml.LineOptions(
           geometry: [for (final p in widget.routePoints) ml.LatLng(p.latitude, p.longitude)],
@@ -167,6 +195,19 @@ class _DropMapState extends State<DropMap> {
         ));
       }
       for (final marker in widget.markers) {
+        final bytes = marker.iconKey == null ? null : _icons[marker.iconKey!];
+        if (bytes != null) {
+          final name = 'veh_${marker.iconKey}';
+          if (_mlImages.add(name)) await _mapLibre!.addImage(name, bytes);
+          await _mapLibre!.addSymbol(ml.SymbolOptions(
+            geometry: ml.LatLng(marker.point.latitude, marker.point.longitude),
+            iconImage: name,
+            iconSize: 0.5,
+            iconRotate: marker.heading,
+            iconAnchor: 'center',
+          ));
+          continue;
+        }
         await _mapLibre!.addCircle(ml.CircleOptions(
           geometry: ml.LatLng(marker.point.latitude, marker.point.longitude),
           circleRadius: 8,
@@ -194,6 +235,7 @@ class _DropMapState extends State<DropMap> {
       },
       onStyleLoadedCallback: () {
         _mapLibreStyleReady = true;
+        _mlImages.clear();
         _syncMapLibreMarkers();
       },
       onCameraMove: (position) => _moved(ll.LatLng(position.target.latitude, position.target.longitude)),
@@ -229,7 +271,13 @@ class _DropMapState extends State<DropMap> {
             markerId: g.MarkerId(m.id),
             position: g.LatLng(m.point.latitude, m.point.longitude),
             infoWindow: g.InfoWindow(title: m.title),
-            icon: g.BitmapDescriptor.defaultMarkerWithHue(HSVColor.fromColor(m.color).hue),
+            icon: m.iconKey != null && _icons[m.iconKey!] != null
+                ? g.BitmapDescriptor.bytes(_icons[m.iconKey!]!, width: VehicleIcons.size / 2)
+                : g.BitmapDescriptor.defaultMarkerWithHue(HSVColor.fromColor(m.color).hue),
+            anchor: m.iconKey != null && _icons[m.iconKey!] != null ? const Offset(0.5, 0.5) : const Offset(0.5, 1.0),
+            rotation: m.iconKey != null ? m.heading : 0,
+            flat: m.iconKey != null,
+            zIndexInt: m.iconKey != null ? 2 : 1,
           ),
       },
     );
@@ -250,7 +298,16 @@ class _DropMapState extends State<DropMap> {
           fm.PolylineLayer(polylines: [fm.Polyline(points: widget.routePoints, strokeWidth: 5, color: const Color(0xFF1A73E8), strokeCap: StrokeCap.round, strokeJoin: StrokeJoin.round)]),
         fm.MarkerLayer(markers: [
           for (final m in widget.markers)
-            fm.Marker(point: m.point, width: 44, height: 44, alignment: Alignment.topCenter, child: Icon(Icons.location_pin, color: m.color, size: 40)),
+            if (m.iconKey != null && _icons[m.iconKey!] != null)
+              fm.Marker(
+                point: m.point,
+                width: VehicleIcons.size / 2,
+                height: VehicleIcons.size / 2,
+                alignment: Alignment.center,
+                child: Transform.rotate(angle: m.heading * math.pi / 180, child: Image.memory(_icons[m.iconKey!]!, gaplessPlayback: true)),
+              )
+            else
+              fm.Marker(point: m.point, width: 44, height: 44, alignment: Alignment.topCenter, child: Icon(Icons.location_pin, color: m.color, size: 40)),
         ]),
         fm.SimpleAttributionWidget(source: Text(widget.attribution)),
       ],

@@ -6,6 +6,7 @@ import 'package:drop/components/DropMap.dart';
 import 'package:drop/service/MapConfig.dart';
 import 'package:drop/service/RideApi.dart';
 import 'package:drop/service/RouteLineApi.dart';
+import 'package:drop/components/RouteGeometry.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart' show LatLng;
@@ -45,8 +46,12 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
   bool mapLoaded = false;
   LatLng? myPos;
   String? _fitKey;
-  List<LatLng> _route = const [];
+  List<LatLng> _routeFull = const [];
   String? _routeKey;
+  LatLng? _routeFrom;
+  LatLng? _prevPos;
+  double _heading = 0;
+  String _iconKey = 'car';
 
   bool get online => status['is_online'] == true;
   Map<String, dynamic> get wallet => Map<String, dynamic>.from((status['wallet'] ?? {}) as Map);
@@ -56,6 +61,10 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    DriverApplicationApi.driverProfile().then((p) {
+      final k = p['map_icon']?.toString();
+      if (k != null && k.isNotEmpty && mounted) setState(() => _iconKey = k);
+    }).catchError((_) {});
     MapConfig.load().then((c) {
       if (mounted) setState(() {
         mapConfig = c;
@@ -140,21 +149,56 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     _map.fitPoints([if (me != null) me, target]);
   }
 
-  /// Loads the road line pickup -> drop-off for the trip in progress.
+  RouteSnap? get _mySnap {
+    final me = myPos;
+    if (me == null) return null;
+    final s = RouteGeometry.snap(_routeFull, me);
+    return s != null && s.meters < 80 ? s : null;
+  }
+
+  /// The line still ahead: the part already driven is cleared.
+  List<LatLng> get _route {
+    final s = _mySnap;
+    return s == null ? _routeFull : RouteGeometry.remaining(_routeFull, s);
+  }
+
+  /// The vehicle sits exactly on the route line when it is close to it.
+  LatLng? get _vehiclePoint => _mySnap?.point ?? myPos;
+
+  /// Loads the road line: to the pickup while on the way, then pickup -> drop-off.
   void _syncRoute() {
     final a = active;
     if (a == null) {
-      if (_route.isNotEmpty || _routeKey != null) setState(() { _route = const []; _routeKey = null; });
+      if (_routeFull.isNotEmpty || _routeKey != null) setState(() { _routeFull = const []; _routeKey = null; _routeFrom = null; });
       return;
     }
-    final from = _ll(a['pickup']);
-    final to = _ll(a['dropoff']);
-    final key = '${a['id']}:${from.latitude},${from.longitude}>${to.latitude},${to.longitude}';
-    if (key == _routeKey) return;
+    final pick = _ll(a['pickup']);
+    final drop = _ll(a['dropoff']);
+    final me = myPos;
+    final toPickup = (a['status'] == 'accepted' || a['status'] == 'arrived') && me != null;
+    final LatLng from = toPickup ? me! : pick;
+    final to = toPickup ? pick : drop;
+    final key = '${a['id']}:${toPickup ? 'toPickup' : 'trip'}';
+    final moved = toPickup && _routeFrom != null && RouteGeometry.meters(_routeFrom!, me!) > 250;
+    if (key == _routeKey && !moved) return;
+    final changed = key != _routeKey;
     _routeKey = key;
+    _routeFrom = from;
+    if (changed) setState(() => _routeFull = const []);
     RouteLineApi.fetch(from, to).then((pts) {
-      if (mounted && _routeKey == key) setState(() => _route = pts);
+      if (mounted && _routeKey == key) setState(() => _routeFull = pts);
     });
+  }
+
+  /// Which way the vehicle faces: the phone's heading when moving, else the direction of the last movement.
+  void _trackHeading(Position pos) {
+    final now = LatLng(pos.latitude, pos.longitude);
+    if (pos.speed > 1.5 && pos.heading >= 0) {
+      _heading = pos.heading;
+    } else if (_prevPos != null && RouteGeometry.meters(_prevPos!, now) >= 5) {
+      _heading = RouteGeometry.bearing(_prevPos!, now);
+    }
+    _prevPos = now;
   }
 
   List<DropMarker> get _markers {
@@ -168,7 +212,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
         out.add(DropMarker(id: 'req${r['id']}', title: 'Pickup', color: Colors.green, point: _ll(r['pickup'])));
       }
     }
-    if (myPos != null) out.add(DropMarker(id: 'me', title: 'You', color: Colors.blue, point: myPos!));
+    final v = _vehiclePoint;
+    if (v != null) out.add(DropMarker(id: 'me', title: 'You', color: Colors.blue, point: v, iconKey: _iconKey, heading: _heading));
     return out;
   }
 
@@ -190,8 +235,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
   void _startSharing() {
     if (_positionSub != null) return;
     _positionSub = Geolocator.getPositionStream(locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 15)).listen((pos) async {
-      if (mounted) setState(() => myPos = LatLng(pos.latitude, pos.longitude));
-      if (DateTime.now().difference(_lastPing).inSeconds < 20) return;
+      if (mounted) setState(() { _trackHeading(pos); myPos = LatLng(pos.latitude, pos.longitude); });
+      if (DateTime.now().difference(_lastPing).inSeconds < (active != null ? 5 : 20)) return;
       _lastPing = DateTime.now();
       try {
         await DriverApplicationApi.pingLocation(pos.latitude, pos.longitude);

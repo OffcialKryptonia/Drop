@@ -11,11 +11,15 @@ export const mapRoutes = new Hono<AppEnv>();
 /** What the app needs to draw its map. No sign-in needed: it contains no secrets. */
 mapRoutes.get("/map-config", withDb, async (c) => {
   const s = await mapSettings(c.get("db"), c.env);
+  const origin = new URL(c.req.url).origin;
+  const icons = (await c.get("db").query("select key, version from app.map_icons where file_key is not null")).rows;
   return c.json({
     status: true,
     provider: s.active,
     osm_tile_url: s.osm_tile_url,
     attribution: "© OpenStreetMap contributors",
+    /** Admin-uploaded vehicle pictures by key. Keys not listed use the icons bundled in the app. */
+    vehicle_icons: Object.fromEntries(icons.map((r) => [r.key, `${origin}/api/map-icons/${r.key}/image?v=${r.version}`])),
   });
 });
 

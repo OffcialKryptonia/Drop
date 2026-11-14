@@ -130,6 +130,7 @@ const serviceSchema = z.object({
   description: z.string().trim().max(500).nullable(),
   icon_url: z.string().trim().max(500).nullable(),
   photo_url: z.string().trim().max(500).nullable(),
+  map_icon_key: z.string().trim().max(40).nullable(),
   name_i18n: i18n,
   description_i18n: i18n,
   base_fare: money, minimum_fare: money, minimum_distance: money, per_distance: money,
@@ -154,7 +155,7 @@ function legacyPayment(methods: string[]) {
   return cash && digital ? "cash_wallet" : cash ? "cash" : "wallet";
 }
 
-const SERVICE_COLS = `id, name, region_id, category, capacity, description, icon_url, photo_url, name_i18n, description_i18n,
+const SERVICE_COLS = `id, name, region_id, category, capacity, description, icon_url, photo_url, map_icon_key, name_i18n, description_i18n,
   base_fare, minimum_fare, minimum_distance, per_distance, per_minute_drive, per_minute_wait, waiting_time_limit,
   cancellation_fee, commission_type, admin_commission, fleet_commission, booking_modes, payment_methods,
   min_driver_rating, min_wallet_balance, working_hours, badge, sort_order, status, created_at, updated_at`;

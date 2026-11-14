@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../components/VehicleIcons.dart';
 import '../utils/Constants.dart';
 
 /// Which map service the app should draw, as decided in the admin (Maps page).
@@ -43,6 +44,8 @@ class MapConfig {
               ? body['maplibre_style_url'].toString()
               : defaultStyleUrl,
         );
+        final icons = body['vehicle_icons'];
+        VehicleIcons.configure(icons is Map ? {for (final e in icons.entries) e.key.toString(): e.value.toString()} : const {});
         return _cached!;
       }
     } catch (_) {}

@@ -8,6 +8,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../components/DropMap.dart';
+import '../components/RouteGeometry.dart';
 import '../components/drawer_component.dart';
 import '../drop/services/drop_money.dart';
 import '../drop/widgets/drop_email_prompt.dart';
@@ -49,8 +50,11 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
   bool busy = false;
 
   LatLng? pickup;
-  List<LatLng> _route = const [];
+  List<LatLng> _routeFull = const [];
   String? _routeKey;
+  LatLng? _routeFrom;
+  LatLng? _prevDriver;
+  double _heading = 0;
   String pickupAddress = 'Your location';
   LatLng center = const LatLng(9.0765, 7.3986); // Abuja until we know where the person is
   String dropAddress = '';
@@ -285,7 +289,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
       final r = _m((await RideApi.current())['data']);
       if (r.isNotEmpty) {
         final changed = ride?['status'] != r['status'];
-        if (mounted) setState(() => ride = r);
+        if (mounted) setState(() { ride = r; _trackHeading(); });
         if (changed) _fitTrip();
       } else {
         await _rideEnded();
@@ -422,20 +426,68 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
 
   // ---------- build ----------
 
-  /// Loads the road line pickup -> drop-off once per trip.
+  LatLng? get _driverRaw {
+    final loc = _m(_m(ride?['driver'])['location']);
+    return loc.isEmpty ? null : LatLng(_d(loc['lat']), _d(loc['lng']));
+  }
+
+  RouteSnap? get _driverSnap {
+    final d = _driverRaw;
+    if (d == null) return null;
+    final s = RouteGeometry.snap(_routeFull, d);
+    return s != null && s.meters < 80 ? s : null;
+  }
+
+  /// The line still ahead of the vehicle: the part already driven is cleared.
+  List<LatLng> get _route {
+    final s = _driverSnap;
+    return s == null ? _routeFull : RouteGeometry.remaining(_routeFull, s);
+  }
+
+  /// The vehicle sits exactly on the route line when it is close to it.
+  LatLng? get _vehiclePoint => _driverSnap?.point ?? _driverRaw;
+
+  /// Which way the vehicle faces: its movement since the last update, or the road direction at first sight.
+  void _trackHeading() {
+    final d = _driverRaw;
+    if (d == null) {
+      _prevDriver = null;
+      return;
+    }
+    final prev = _prevDriver;
+    if (prev == null) {
+      _prevDriver = d;
+      final s = RouteGeometry.snap(_routeFull, d);
+      if (s != null && s.index + 1 < _routeFull.length) _heading = RouteGeometry.bearing(_routeFull[s.index], _routeFull[s.index + 1]);
+    } else if (RouteGeometry.meters(prev, d) >= 5) {
+      _heading = RouteGeometry.bearing(prev, d);
+      _prevDriver = d;
+    }
+  }
+
+  /// Loads the road line: driver -> pickup while the driver is coming, then pickup -> drop-off.
   void _syncRoute() {
     final r = ride;
     if (phase != _Phase.trip || r == null) {
-      if (_route.isNotEmpty || _routeKey != null) setState(() { _route = const []; _routeKey = null; });
+      if (_routeFull.isNotEmpty || _routeKey != null) setState(() { _routeFull = const []; _routeKey = null; _routeFrom = null; _prevDriver = null; });
       return;
     }
-    final a = LatLng(_d(_m(r['pickup'])['lat']), _d(_m(r['pickup'])['lng']));
-    final b = LatLng(_d(_m(r['dropoff'])['lat']), _d(_m(r['dropoff'])['lng']));
-    final key = '${r['id']}:${a.latitude},${a.longitude}>${b.latitude},${b.longitude}';
-    if (key == _routeKey) return;
+    final pick = LatLng(_d(_m(r['pickup'])['lat']), _d(_m(r['pickup'])['lng']));
+    final drop = LatLng(_d(_m(r['dropoff'])['lat']), _d(_m(r['dropoff'])['lng']));
+    final status = r['status'];
+    final drv = _driverRaw;
+    final toPickup = (status == 'accepted' || status == 'arrived') && drv != null;
+    final LatLng from = toPickup ? drv! : pick;
+    final to = toPickup ? pick : drop;
+    final key = '${r['id']}:${toPickup ? 'toPickup' : 'trip'}';
+    final moved = toPickup && _routeFrom != null && RouteGeometry.meters(_routeFrom!, drv!) > 250;
+    if (key == _routeKey && !moved) return;
+    final changed = key != _routeKey;
     _routeKey = key;
-    RouteLineApi.fetch(a, b).then((pts) {
-      if (mounted && _routeKey == key) setState(() => _route = pts);
+    _routeFrom = from;
+    if (changed) setState(() => _routeFull = const []);
+    RouteLineApi.fetch(from, to).then((pts) {
+      if (mounted && _routeKey == key) setState(() => _routeFull = pts);
     });
   }
 
@@ -445,8 +497,11 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
       final r = ride!;
       out.add(DropMarker(id: 'pickup', title: 'Pickup', color: Colors.green, point: LatLng(_d(_m(r['pickup'])['lat']), _d(_m(r['pickup'])['lng']))));
       out.add(DropMarker(id: 'drop', title: 'Drop-off', color: Colors.red, point: LatLng(_d(_m(r['dropoff'])['lat']), _d(_m(r['dropoff'])['lng']))));
-      final loc = _m(_m(r['driver'])['location']);
-      if (loc.isNotEmpty) out.add(DropMarker(id: 'driver', title: 'Your driver', color: Colors.blue, point: LatLng(_d(loc['lat']), _d(loc['lng']))));
+      final v = _vehiclePoint;
+      if (v != null) {
+        final key = _m(r['service'])['map_icon']?.toString() ?? 'car';
+        out.add(DropMarker(id: 'driver', title: 'Your driver', color: Colors.blue, point: v, iconKey: key, heading: _heading));
+      }
     } else if (pickup != null) {
       out.add(DropMarker(id: 'pickup', title: 'Pickup', color: Colors.green, point: pickup!));
     }
