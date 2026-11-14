@@ -6,7 +6,7 @@ import { withDb } from "../db";
 import { requireAuth } from "../auth/middleware";
 import { currencyInfo, userCurrency } from "../lib/currency";
 import { readBody, validationFailed } from "../lib/legacy";
-import { quoteRide } from "../lib/ride-pricing";
+import { quoteRide, listRideTypes } from "../lib/ride-pricing";
 import { computeFare } from "../lib/fare";
 import { getSetting } from "../lib/driver-application";
 import { chargeCancellationFee } from "../lib/ride-settlement";
@@ -89,6 +89,14 @@ const currentOf = async (c: C) =>
       [c.get("user").id, OPEN],
     )
   ).rows[0] ?? null;
+
+/** Ride types at the passenger's location, for the home strip. Query: lat, lng. */
+rideRoutes.get("/ride/types", ...mw, async (c) => {
+  const lat = Number(c.req.query("lat")), lng = Number(c.req.query("lng"));
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return validationFailed(c, { location: ["Location is missing."] });
+  const r = await listRideTypes(c.get("db"), { lat, lng });
+  return c.json(r.ok ? { status: true, ride_types: r.ride_types } : { status: true, ride_types: [], message: r.message });
+});
 
 /** Prices for every ride type available for this trip, with nearby drivers and pickup time. Nothing is saved. */
 rideRoutes.post("/ride/estimate", ...mw, async (c) => {

@@ -2,6 +2,7 @@ import type { Client } from "pg";
 import type { Bindings } from "../env";
 import { computeFare, type FareBreakdown } from "./fare";
 import { MILE_PER_KM, routeBetween, type LatLng, type Route } from "./routing";
+import { iconKeyFor } from "../routes/map-icons";
 import { getSetting } from "./driver-application";
 
 const POINT = (latParam: number, lngParam: number) => `extensions.st_setsrid(extensions.st_makepoint($${lngParam}, $${latParam}), 4326)::extensions.geography`;
@@ -116,4 +117,43 @@ export async function quoteRide(db: Client, env: Bindings, pickup: LatLng, dropo
   });
 
   return { ok: true, region: { id: Number(region.id), name: region.name, distance_unit: region.distance_unit, timezone: region.timezone, currency: String(region.currency).trim() }, route, distance, options, ride_types };
+}
+
+/** Ride types open at a pickup point, with nearby driver counts, for the home screen strip (no destination yet, so no fares). */
+export async function listRideTypes(db: Client, pickup: LatLng) {
+  const region = await regionAt(db, pickup);
+  if (!region) return { ok: false as const, message: "DROP is not available at your location yet." };
+  const services = (
+    await db.query(
+      `select id, name, name_i18n, category, icon_url, photo_url, map_icon_key, capacity, badge
+         from app.services s
+        where s.region_id = $1 and s.status and s.deleted_at is null and 'now' = any(s.booking_modes)
+          and (s.working_hours is null or case
+                when (s.working_hours->>'from')::time <= (s.working_hours->>'to')::time
+                  then (now() at time zone $2)::time between (s.working_hours->>'from')::time and (s.working_hours->>'to')::time
+                else (now() at time zone $2)::time >= (s.working_hours->>'from')::time or (now() at time zone $2)::time <= (s.working_hours->>'to')::time end)
+        order by s.sort_order, s.id`,
+      [region.id, region.timezone],
+    )
+  ).rows;
+  const radius = await getSetting(db, "nearby_driver_radius_m", 5000);
+  const near = (
+    await db.query(
+      `select p.service_id, count(*)::int as n
+         from app.users u join app.driver_profiles p on p.user_id = u.id
+        where u.is_online and u.is_available and u.active_mode = 'driver' and u.status = 'active' and p.status = 'approved'
+          and u.location is not null and u.last_location_update_at > now() - interval '5 minutes'
+          and extensions.st_dwithin(u.location, ${POINT(1, 2)}, $3)
+        group by p.service_id`,
+      [pickup.lat, pickup.lng, radius],
+    )
+  ).rows;
+  const n = new Map<number, number>(near.map((r) => [Number(r.service_id), r.n as number]));
+  return {
+    ok: true as const,
+    ride_types: services.map((s) => ({
+      id: Number(s.id), name: s.name, name_i18n: s.name_i18n, category: s.category, icon_url: s.icon_url, photo_url: s.photo_url,
+      map_icon: iconKeyFor(s.category, s.map_icon_key), capacity: s.capacity, badge: s.badge, drivers_nearby: n.get(Number(s.id)) ?? 0,
+    })),
+  };
 }

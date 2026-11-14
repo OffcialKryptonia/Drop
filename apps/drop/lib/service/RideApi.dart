@@ -88,6 +88,9 @@ class RideApi {
         'option_ids': optionIds,
       });
 
+  /// Ride types open at the passenger's location, with drivers nearby (no fares yet).
+  static Future<Map<String, dynamic>> rideTypes(double lat, double lng) => _get('ride/types?lat=$lat&lng=$lng');
+
   /// The passenger's open ride, or null inside `data`.
   static Future<Map<String, dynamic>> current() => _get('ride/current');
 
