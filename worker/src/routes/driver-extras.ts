@@ -6,6 +6,7 @@ import { readBody } from "../lib/legacy";
 import { vehicleFromProfile } from "../lib/driver-vehicle";
 import { getPayoutSettings } from "./payouts";
 import { routeLine } from "../lib/routing";
+import { iconKeyFor } from "./map-icons";
 
 /** Small, fast endpoints the driver screens read: profile (referral code, vehicle), payouts overview, earnings. */
 export const driverExtraRoutes = new Hono<AppEnv>();
@@ -17,13 +18,14 @@ driverExtraRoutes.get("/driver/profile", withDb, requireAuth, async (c) => {
   const db = c.get("db");
   const me = c.get("user");
   const p = (await db.query(
-    `select p.status, p.service_id, p.vehicle_make, p.vehicle_model, p.vehicle_year, p.vehicle_colour, p.vehicle_plate, s.name as service_name
+    `select p.status, p.service_id, p.vehicle_make, p.vehicle_model, p.vehicle_year, p.vehicle_colour, p.vehicle_plate, s.name as service_name, s.category as service_category, s.map_icon_key
        from app.driver_profiles p left join app.services s on s.id = p.service_id where p.user_id = $1`, [me.id])).rows[0];
   const d = (await db.query("select car_model, car_color, car_plate_number, car_production_year from app.user_details where user_id = $1 limit 1", [me.id])).rows[0] ?? {};
   const v = vehicleFromProfile(p) ?? { car_model: null, car_color: null, car_plate_number: null, car_production_year: null };
   return c.json({
     referral_code: me.referral_code ?? null,
     service_name: p?.service_name ?? null,
+    map_icon: iconKeyFor(p?.service_category, p?.map_icon_key),
     vehicle: {
       model: d.car_model || v.car_model || "",
       color: d.car_color || v.car_color || "",

@@ -49,6 +49,11 @@
       });
     }).catch(function () { return { status: 0, ok: false, body: { message: "Network error. Try again." } }; });
   }
+  function uploadFile(path, file) {
+    return fetch("/api" + path, { method: "PUT", headers: Object.assign({ Accept: "application/json", "Content-Type": file.type || "application/octet-stream" }, TOKEN ? { Authorization: "Bearer " + TOKEN } : {}), body: file })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { status: r.status, ok: r.ok, body: j }; }); })
+      .catch(function () { return { status: 0, ok: false, body: { message: "Network error. Try again." } }; });
+  }
   function errText(r) {
     var b = r.body || {};
     if (b.errors) { var k = Object.keys(b.errors)[0]; return (k && k !== "body" ? k.replace(/_/g, " ") + ": " : "") + b.errors[k][0]; }
@@ -243,7 +248,8 @@
   function rideTypeForm(root, id) {
     loading(root);
     var one = id ? api("GET", "/admin/services/" + id) : Promise.resolve({ body: { data: {} } });
-    one.then(function (r) {
+    Promise.all([one, api("GET", "/admin/map-icons")]).then(function (both) {
+      var r = both[0], iconList = (both[1].body && both[1].body.data) || [];
       var s = (r.body && r.body.data) || {};
       if (id && !r.ok) { toast("Ride type not found", true); return pageRideTypes(root); }
       var i18n = s.name_i18n || {}, hrs = s.working_hours;
@@ -251,6 +257,7 @@
         name: text(s.name), region_id: select(rt.regions.map(function (g) { return [g.id, g.name]; }), s.region_id || rt.region || (rt.regions[0] && rt.regions[0].id)),
         category: select(CATEGORIES, s.category || "car"), capacity: num(s.capacity == null ? 4 : s.capacity),
         description: text(s.description), icon_url: text(s.icon_url, "https://…"), photo_url: text(s.photo_url, "https://…"),
+        map_icon_key: select([["", "Automatic (from category)"]].concat(iconList.map(function (ic) { return [ic.key, ic.label]; })), s.map_icon_key || ""),
         ha: text(i18n.ha), yo: text(i18n.yo), ig: text(i18n.ig), pcm: text(i18n.pcm),
         base_fare: num(s.base_fare), minimum_fare: num(s.minimum_fare), minimum_distance: num(s.minimum_distance),
         per_distance: num(s.per_distance), per_minute_drive: num(s.per_minute_drive), per_minute_wait: num(s.per_minute_wait),
@@ -272,6 +279,7 @@
       card.appendChild(h("div", { class: "grid2" }, field("Seats or load capacity", f.capacity), field("Badge", f.badge)));
       card.appendChild(field("Short description", f.description));
       card.appendChild(h("div", { class: "grid2" }, field("Icon link", f.icon_url), field("Photo link", f.photo_url)));
+      card.appendChild(field("Vehicle icon on the map", f.map_icon_key, "Shown for the driver on the map. Upload pictures on the Maps page."));
       card.appendChild(h("h3", { text: "Name in other languages" }));
       card.appendChild(h("div", { class: "grid2" }, field("Hausa", f.ha), field("Yoruba", f.yo), field("Igbo", f.ig), field("Pidgin", f.pcm)));
       card.appendChild(h("h3", { text: "Fare (₦)" }));
@@ -295,7 +303,7 @@
         var names = {}; ["ha", "yo", "ig", "pcm"].forEach(function (k) { if (f[k].value.trim()) names[k] = f[k].value.trim(); });
         var body = {
           name: f.name.value.trim(), region_id: Number(f.region_id.value), category: f.category.value, capacity: Number(f.capacity.value || 1),
-          description: ns(f.description), icon_url: ns(f.icon_url), photo_url: ns(f.photo_url), name_i18n: names,
+          description: ns(f.description), icon_url: ns(f.icon_url), photo_url: ns(f.photo_url), map_icon_key: ns(f.map_icon_key), name_i18n: names,
           base_fare: nn(f.base_fare) || 0, minimum_fare: nn(f.minimum_fare) || 0, minimum_distance: nn(f.minimum_distance) || 0, per_distance: nn(f.per_distance) || 0,
           per_minute_drive: nn(f.per_minute_drive) || 0, per_minute_wait: nn(f.per_minute_wait) || 0, waiting_time_limit: nn(f.waiting_time_limit) || 0, cancellation_fee: nn(f.cancellation_fee) || 0,
           commission_type: f.commission_type.value, admin_commission: nn(f.admin_commission) || 0, fleet_commission: nn(f.fleet_commission) || 0,
@@ -523,7 +531,54 @@
       }
       card.appendChild(out);
       root.appendChild(card);
+      mapIconsCard(root);
     });
+  }
+
+  /** Vehicle pictures drawn on the map. Built-in ones are used until a picture is uploaded here. */
+  function mapIconsCard(root) {
+    var card = h("div", { class: "card" });
+    root.appendChild(card);
+    function draw() {
+      api("GET", "/admin/map-icons").then(function (r) {
+        card.textContent = "";
+        card.appendChild(h("h3", { text: "Vehicle icons on the map" }));
+        card.appendChild(h("p", { class: "muted", text: "These show the driver's vehicle on every map (Google, OpenStreetMap). Built-in pictures are used until you upload your own. Use a PNG or WebP with a transparent background, the vehicle seen from above with the front pointing up, at least 128 px wide, under 1 MB. The app resizes it automatically. Then choose the icon on each ride type." }));
+        if (!r.ok) { card.appendChild(h("p", { class: "msg", text: errText(r) })); return; }
+        var grid = h("div", { class: "grid2" });
+        (r.body.data || []).forEach(function (ic) {
+          var img = h("img", { style: "width:64px;height:64px;object-fit:contain;background:#f1f1f1;border-radius:8px" });
+          if (ic.url) img.src = ic.url; else img.alt = "built-in";
+          var row = h("div", { class: "row", style: "gap:12px;align-items:center;margin-bottom:10px" }, img,
+            h("div", { style: "flex:1" }, h("div", { class: "t", text: ic.label }), h("div", { class: "muted", text: ic.url ? "Your picture" : "Built-in picture" })));
+          if (can("map_settings edit")) {
+            var file = h("input", { type: "file", accept: "image/png,image/webp", style: "display:none" });
+            var up = h("button", { class: "small ghost", text: ic.url ? "Replace" : "Upload" });
+            up.addEventListener("click", function () { file.click(); });
+            file.addEventListener("change", function () {
+              if (!file.files[0]) return;
+              up.disabled = true;
+              uploadFile("/admin/map-icons/" + ic.key + "/image", file.files[0]).then(function (x) { toast(x.ok ? "Picture saved" : errText(x), !x.ok); draw(); });
+            });
+            row.appendChild(file); row.appendChild(up);
+            if (ic.url) row.appendChild(h("button", { class: "small ghost", text: "Reset", on: { click: function () { api("DELETE", "/admin/map-icons/" + ic.key + "/image").then(function (x) { toast(x.ok ? "Back to built-in" : errText(x), !x.ok); draw(); }); } } }));
+            if (!ic.builtin) row.appendChild(h("button", { class: "small ghost", text: "Delete", on: { click: function () { confirmDo("Delete this icon?", function () { api("DELETE", "/admin/map-icons/" + ic.key).then(function (x) { toast(x.ok ? "Deleted" : errText(x), !x.ok); draw(); }); }); } } }));
+          }
+          grid.appendChild(row);
+        });
+        card.appendChild(grid);
+        if (can("map_settings edit")) {
+          var name = text("", "New icon name, e.g. Ambulance");
+          var add = h("button", { class: "small", text: "Add icon slot" });
+          add.addEventListener("click", function () {
+            if (!name.value.trim()) return;
+            api("POST", "/admin/map-icons", { label: name.value.trim() }).then(function (x) { toast(x.ok ? "Added. Now upload its picture." : errText(x), !x.ok); draw(); });
+          });
+          card.appendChild(h("div", { class: "row", style: "gap:8px;margin-top:10px" }, name, add));
+        }
+      });
+    }
+    draw();
   }
 
   // ---------- Wallet transfers (passenger to passenger) ----------
