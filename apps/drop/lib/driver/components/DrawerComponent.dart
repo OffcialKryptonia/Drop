@@ -1,4 +1,5 @@
 import 'package:drop/service/DriverApplicationApi.dart';
+import 'package:drop/drop/screens/drop_sounds_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_mobx/flutter_mobx.dart';
 import 'package:flutter_vector_icons/flutter_vector_icons.dart';
@@ -204,6 +205,12 @@ class _DrawerComponentState extends State<DrawerComponent> {
                 iconData: ic_faq,
                 onTap: () {
                   launchScreen(context, FAQScreen(), pageRouteAnimation: PageRouteAnimation.Slide);
+                }),
+            DrawerWidget(
+                title: 'Tone settings',
+                iconData: ic_setting,
+                onTap: () {
+                  launchScreen(context, const DropSoundsScreen(), pageRouteAnimation: PageRouteAnimation.Slide);
                 }),
             DrawerWidget(
                 title: language.settings,

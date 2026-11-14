@@ -5,6 +5,7 @@ import 'package:drop/drop/widgets/drop_sos_sheet.dart';
 import 'package:drop/components/DropMap.dart';
 import 'package:drop/service/MapConfig.dart';
 import 'package:drop/service/RideApi.dart';
+import 'package:drop/service/ToneService.dart';
 import 'package:drop/service/RouteLineApi.dart';
 import 'package:drop/components/RouteGeometry.dart';
 import 'package:flutter/material.dart';
@@ -125,7 +126,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
       final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
       if (!mounted) return;
       setState(() => myPos = LatLng(pos.latitude, pos.longitude));
-      _map.animateTo(myPos!, zoom: 15);
+      _map.animateTo(myPos!, zoom: 17);
     } catch (_) {}
   }
 
@@ -142,7 +143,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     if (key == _fitKey) return;
     _fitKey = key;
     if (a == null) {
-      if (me != null) _map.animateTo(me, zoom: 15);
+      if (me != null) _map.animateTo(me, zoom: 17);
       return;
     }
     final target = a['status'] == 'in_progress' ? _ll(a['dropoff']) : _ll(a['pickup']);
@@ -236,6 +237,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     if (_positionSub != null) return;
     _positionSub = Geolocator.getPositionStream(locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 15)).listen((pos) async {
       if (mounted) setState(() { _trackHeading(pos); myPos = LatLng(pos.latitude, pos.longitude); });
+      _toneIfArrived(LatLng(pos.latitude, pos.longitude));
       if (DateTime.now().difference(_lastPing).inSeconds < (active != null ? 5 : 20)) return;
       _lastPing = DateTime.now();
       try {
@@ -297,6 +299,32 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     return '\u20A6$whole${parts.length > 1 ? '.${parts[1]}' : ''}';
   }
 
+  final Set<int> _heardRequests = {};
+  bool _requestsPrimed = false;
+  int? _arrivedFor;
+
+  /// Rings once for each ride request that appears for the first time.
+  void _toneForRequests(List<Map<String, dynamic>> list) {
+    final ids = list.map((e) => (e['id'] as num?)?.toInt()).whereType<int>().toSet();
+    final fresh = ids.difference(_heardRequests);
+    _heardRequests.addAll(ids);
+    if (_requestsPrimed && fresh.isNotEmpty && active == null) ToneService.play(ToneEvent.driverIncoming);
+    _requestsPrimed = true;
+  }
+
+  /// Rings once when the driver gets within ~80 m of the drop-off during a trip.
+  void _toneIfArrived(LatLng here) {
+    final a = active;
+    if (a == null || a['status'] != 'in_progress') return;
+    final id = (a['id'] as num?)?.toInt();
+    final drop = _ll(a['dropoff']);
+    if (id == null || _arrivedFor == id) return;
+    if (Geolocator.distanceBetween(here.latitude, here.longitude, drop.latitude, drop.longitude) <= 80) {
+      _arrivedFor = id;
+      ToneService.play(ToneEvent.driverArrived);
+    }
+  }
+
   Future<void> _pollRides() async {
     if (_polling || !mounted || loading || (!online && active == null)) return;
     _polling = true;
@@ -305,10 +333,12 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
       final a = r['active'];
       final list = r['requests'];
       if (mounted) {
+        final newRequests = list is List ? list.map(_asMap).toList() : <Map<String, dynamic>>[];
         setState(() {
           active = a is Map ? Map<String, dynamic>.from(a) : null;
-          requests = list is List ? list.map(_asMap).toList() : <Map<String, dynamic>>[];
+          requests = newRequests;
         });
+        _toneForRequests(newRequests);
       }
     } on ApiFailure {
       if (RideApi.lastCode == 'not_online') {
@@ -369,6 +399,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     setState(() => rideBusy = true);
     try {
       final res = _asMap((await RideApi.complete(id))['data']);
+      ToneService.play(ToneEvent.driverPayment);
       if (mounted) {
         await showDialog<void>(
           context: context,

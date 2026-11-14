@@ -30,7 +30,7 @@ class DropMarker {
 class DropMapController {
   _DropMapState? _state;
 
-  void animateTo(ll.LatLng point, {double zoom = 15}) => _state?._animateTo(point, zoom);
+  void animateTo(ll.LatLng point, {double zoom = 17}) => _state?._animateTo(point, zoom);
 
   /// Zooms so all points are visible.
   void fitPoints(List<ll.LatLng> points) => _state?._fit(points);
@@ -61,7 +61,7 @@ class DropMap extends StatefulWidget {
     required this.initialCenter,
     this.attribution = '© OpenStreetMap contributors',
     this.styleUrl = 'https://tiles.openfreemap.org/styles/liberty',
-    this.initialZoom = 15,
+    this.initialZoom = 17,
     this.markers = const [],
     this.routePoints = const [],
     this.showMyLocation = false,
@@ -146,7 +146,7 @@ class _DropMapState extends State<DropMap> {
     final west = points.map((p) => p.longitude).reduce((a, b) => a < b ? a : b);
     final east = points.map((p) => p.longitude).reduce((a, b) => a > b ? a : b);
     if (south == north && west == east) {
-      _animateTo(points.first, 15);
+      _animateTo(points.first, 17);
       return;
     }
     try {
@@ -202,7 +202,7 @@ class _DropMapState extends State<DropMap> {
           await _mapLibre!.addSymbol(ml.SymbolOptions(
             geometry: ml.LatLng(marker.point.latitude, marker.point.longitude),
             iconImage: name,
-            iconSize: 0.5,
+            iconSize: VehicleIcons.logical / VehicleIcons.size,
             iconRotate: marker.heading,
             iconAnchor: 'center',
           ));
@@ -272,7 +272,7 @@ class _DropMapState extends State<DropMap> {
             position: g.LatLng(m.point.latitude, m.point.longitude),
             infoWindow: g.InfoWindow(title: m.title),
             icon: m.iconKey != null && _icons[m.iconKey!] != null
-                ? g.BitmapDescriptor.bytes(_icons[m.iconKey!]!, width: VehicleIcons.size / 2)
+                ? g.BitmapDescriptor.bytes(_icons[m.iconKey!]!, width: VehicleIcons.logical)
                 : g.BitmapDescriptor.defaultMarkerWithHue(HSVColor.fromColor(m.color).hue),
             anchor: m.iconKey != null && _icons[m.iconKey!] != null ? const Offset(0.5, 0.5) : const Offset(0.5, 1.0),
             rotation: m.iconKey != null ? m.heading : 0,
@@ -301,8 +301,8 @@ class _DropMapState extends State<DropMap> {
             if (m.iconKey != null && _icons[m.iconKey!] != null)
               fm.Marker(
                 point: m.point,
-                width: VehicleIcons.size / 2,
-                height: VehicleIcons.size / 2,
+                width: VehicleIcons.logical,
+                height: VehicleIcons.logical,
                 alignment: Alignment.center,
                 child: Transform.rotate(angle: m.heading * math.pi / 180, child: Image.memory(_icons[m.iconKey!]!, gaplessPlayback: true)),
               )

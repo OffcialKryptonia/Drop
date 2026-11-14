@@ -15,10 +15,11 @@ import '../drop/widgets/drop_email_prompt.dart';
 import '../drop/screens/drop_route_screen.dart';
 import '../drop/widgets/drop_ride_type_strip.dart';
 import '../drop/widgets/drop_sos_sheet.dart';
-import '../service/DriverApplicationApi.dart' show ApiFailure;
+import '../service/DriverApplicationApi.dart' show ApiFailure, DriverApplicationApi;
 import '../service/RouteLineApi.dart';
 import '../service/MapConfig.dart';
 import '../service/RideApi.dart';
+import '../service/ToneService.dart';
 import '../utils/Colors.dart';
 
 Map<String, dynamic> _m(dynamic v) => v is Map ? Map<String, dynamic>.from(v) : <String, dynamic>{};
@@ -83,12 +84,38 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _start();
+    _checkTransfers();
+    _transferTimer = Timer.periodic(const Duration(seconds: 25), (_) => _checkTransfers());
+  }
+
+  Timer? _transferTimer;
+  int _lastTransferId = -1; // -1: not read yet, so the first look never rings for old transfers
+
+  /// Rings when another passenger has sent money: a new "transfer_in" appears in the wallet ledger.
+  Future<void> _checkTransfers() async {
+    if (!mounted) return;
+    try {
+      final r = await DriverApplicationApi.getJson('wallet-list?per_page=10');
+      final data = r['data'];
+      if (data is! List) return;
+      var newest = 0;
+      for (final e in data) {
+        if (e is Map && e['transaction_type'] == 'transfer_in') {
+          final id = int.tryParse('${e['id']}') ?? 0;
+          if (id > newest) newest = id;
+        }
+      }
+      if (_lastTransferId >= 0 && newest > _lastTransferId) ToneService.play(ToneEvent.passengerTransfer);
+      if (newest > _lastTransferId) _lastTransferId = newest;
+      if (_lastTransferId < 0) _lastTransferId = 0;
+    } catch (_) {}
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _poll?.cancel();
+    _transferTimer?.cancel();
     _idle?.cancel();
     _search.dispose();
     super.dispose();
@@ -138,7 +165,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
       pickup = LatLng(pos.latitude, pos.longitude);
       center = pickup!;
       pickupAddress = await _addressOf(pickup!, fallback: 'Your location');
-      _map.animateTo(pickup!, zoom: 15);
+      _map.animateTo(pickup!, zoom: 17);
     } catch (_) {
       _say('Turn on location and allow DROP to use it, so we know where to pick you up.');
     }
@@ -220,7 +247,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
       }
       final target = LatLng(found.first.latitude, found.first.longitude);
       center = target;
-      _map.animateTo(target, zoom: 16);
+      _map.animateTo(target, zoom: 17);
       return true;
     } catch (_) {
       _say('We could not find that place. Try a nearby landmark or move the pin yourself.');
@@ -384,6 +411,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
       final r = _m((await RideApi.current())['data']);
       if (r.isNotEmpty) {
         final changed = ride?['status'] != r['status'];
+        if (changed && ride?['status'] == 'searching' && r['status'] == 'accepted') ToneService.play(ToneEvent.passengerAccepted);
         if (mounted) setState(() { ride = r; _trackHeading(); });
         if (changed) _fitTrip();
       } else {

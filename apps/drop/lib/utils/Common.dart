@@ -142,7 +142,11 @@ void afterBuildCreated(Function()? onCreated) {
 T? makeNullable<T>(T? value) => value;
 
 String printDate(String date) {
-  return DateFormat('dd MMM yyyy').format(DateTime.parse(date).toLocal()) + " at " + DateFormat('hh:mm a').format(DateTime.parse(date).toLocal());
+  // A missing or unreadable date shows nothing instead of crashing the screen.
+  final parsed = DateTime.tryParse(date);
+  if (parsed == null) return '';
+  final local = parsed.toLocal();
+  return DateFormat('dd MMM yyyy').format(local) + " at " + DateFormat('hh:mm a').format(local);
 }
 
 Widget emptyWidget() {
