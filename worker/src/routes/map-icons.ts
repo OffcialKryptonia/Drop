@@ -87,3 +87,46 @@ adminMapIconRoutes.delete("/admin/map-icons/:key", ...guard("map_settings edit")
   await audit(c, "map_icon_delete", key, {});
   return c.json({ message: "Deleted." });
 });
+
+/** Ride-type picture (side view, shown on the home screen strip): separate from the on-map vehicle icon. */
+export const serviceIconRoutes = new Hono<AppEnv>();
+export const adminServiceIconRoutes = new Hono<AppEnv>();
+
+serviceIconRoutes.get("/service-icons/:id/image", withDb, async (c) => {
+  const row = (await c.get("db").query("select icon_file_key from app.services where id = $1", [c.req.param("id")])).rows[0];
+  if (!row?.icon_file_key || !c.env.DOCS) return c.json({ message: "Not found", status: 404 }, 404);
+  const obj = await c.env.DOCS.get(row.icon_file_key);
+  if (!obj) return c.json({ message: "Not found", status: 404 }, 404);
+  return new Response(obj.body, { headers: { "Content-Type": obj.httpMetadata?.contentType ?? "image/png", "Cache-Control": "public, max-age=86400" } });
+});
+
+adminServiceIconRoutes.put("/admin/services/:id/icon", ...guard("service edit"), async (c) => {
+  if (!c.env.DOCS) return c.json({ message: "File uploads are not set up yet.", status: 503 }, 503);
+  const id = Number(c.req.param("id"));
+  const db = c.get("db");
+  const row = (await db.query("select icon_file_key from app.services where id = $1", [id])).rows[0];
+  if (!row) return c.json({ message: "Ride type not found", status: 404 }, 404);
+  const bytes = new Uint8Array(await c.req.arrayBuffer());
+  if (bytes.length === 0) return validationFailed(c, { image: ["No file received."] });
+  if (bytes.length > MAX_ICON_BYTES) return c.json({ message: "That picture is too large (1 MB maximum).", status: 413 }, 413);
+  const kind = sniff(bytes);
+  if (!kind || !["image/png", "image/webp", "image/jpeg"].includes(kind.type)) return c.json({ message: "Upload a PNG, WebP or JPG picture.", status: 415 }, 415);
+  const fileKey = `service-icons/${id}-${crypto.randomUUID()}.${kind.ext}`;
+  await c.env.DOCS.put(fileKey, bytes, { httpMetadata: { contentType: kind.type } });
+  const url = `${new URL(c.req.url).origin}/api/service-icons/${id}/image?v=${Date.now()}`;
+  await db.query("update app.services set icon_file_key = $2, icon_url = $3 where id = $1", [id, fileKey, url]);
+  if (row.icon_file_key) await c.env.DOCS.delete(row.icon_file_key).catch(() => undefined);
+  await audit(c, "service_icon_upload", String(id), {});
+  return c.json({ message: "Picture saved.", icon_url: url });
+});
+
+adminServiceIconRoutes.delete("/admin/services/:id/icon", ...guard("service edit"), async (c) => {
+  const id = Number(c.req.param("id"));
+  const db = c.get("db");
+  const row = (await db.query("select icon_file_key from app.services where id = $1", [id])).rows[0];
+  if (!row) return c.json({ message: "Ride type not found", status: 404 }, 404);
+  await db.query("update app.services set icon_file_key = null, icon_url = null where id = $1", [id]);
+  if (row.icon_file_key && c.env.DOCS) await c.env.DOCS.delete(row.icon_file_key).catch(() => undefined);
+  await audit(c, "service_icon_reset", String(id), {});
+  return c.json({ message: "Back to the built-in picture." });
+});

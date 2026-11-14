@@ -1,9 +1,6 @@
-import 'dart:math' as math;
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
-import '../../components/VehicleIcons.dart';
 
 /// The horizontal row of ride types on the passenger home sheet: a vehicle picture, the name and the seats.
 /// Types with no driver nearby are shown faded but can still be chosen.
@@ -53,39 +50,24 @@ class DropRideTypeStrip extends StatelessWidget {
   }
 }
 
-/// The admin's ride-type picture when there is one, otherwise the vehicle's map icon turned to face right.
-class _TypeIcon extends StatefulWidget {
+/// The admin's ride-type picture when there is one, otherwise a built-in side-view picture for the vehicle kind.
+/// This is separate from the top-down icon drawn on the map.
+class _TypeIcon extends StatelessWidget {
   final String iconUrl;
   final String mapIcon;
 
   const _TypeIcon({required this.iconUrl, required this.mapIcon});
 
-  @override
-  State<_TypeIcon> createState() => _TypeIconState();
-}
+  static const _kinds = {'car', 'bike', 'keke', 'van', 'car_dispatch', 'bike_dispatch'};
 
-class _TypeIconState extends State<_TypeIcon> {
-  Uint8List? _bytes;
-
-  @override
-  void initState() {
-    super.initState();
-    VehicleIcons.load(widget.mapIcon).then((b) {
-      if (mounted && b != null) setState(() => _bytes = b);
-    });
-  }
-
-  Widget _fallback() => SizedBox(
-        width: 64,
-        height: 40,
-        child: _bytes == null ? null : Transform.rotate(angle: math.pi / 2, child: Image.memory(_bytes!, fit: BoxFit.contain)),
-      );
+  Widget _builtIn() => Image.asset('assets/vehicle_icons/side_${_kinds.contains(mapIcon) ? mapIcon : 'car'}.png', fit: BoxFit.contain);
 
   @override
   Widget build(BuildContext context) {
-    if (widget.iconUrl.startsWith('http')) {
-      return SizedBox(width: 64, height: 40, child: Image.network(widget.iconUrl, fit: BoxFit.contain, errorBuilder: (_, __, ___) => _fallback()));
-    }
-    return _fallback();
+    return SizedBox(
+      width: 72,
+      height: 40,
+      child: iconUrl.startsWith('http') ? Image.network(iconUrl, fit: BoxFit.contain, errorBuilder: (_, __, ___) => _builtIn()) : _builtIn(),
+    );
   }
 }

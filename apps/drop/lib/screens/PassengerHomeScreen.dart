@@ -12,6 +12,7 @@ import '../components/RouteGeometry.dart';
 import '../components/drawer_component.dart';
 import '../drop/services/drop_money.dart';
 import '../drop/widgets/drop_email_prompt.dart';
+import '../drop/screens/drop_route_screen.dart';
 import '../drop/widgets/drop_ride_type_strip.dart';
 import '../drop/widgets/drop_sos_sheet.dart';
 import '../service/DriverApplicationApi.dart' show ApiFailure;
@@ -53,6 +54,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
   LatLng? pickup;
   List<LatLng> _routeFull = const [];
   String? _routeKey;
+  String? _shownEnds;
   LatLng? _routeFrom;
   LatLng? _prevDriver;
   double _heading = 0;
@@ -226,53 +228,30 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
     }
   }
 
-  /// Home sheet: type a place, or tap a recent one, and go straight to prices.
-  Future<void> _openDestinationSearch() async {
-    final field = TextEditingController();
-    final q = await showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
-      builder: (c) => Padding(
-        padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.of(c).viewInsets.bottom),
-        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          TextField(
-            controller: field,
-            autofocus: true,
-            textInputAction: TextInputAction.search,
-            onSubmitted: (v) => Navigator.pop(c, v.trim()),
-            decoration: InputDecoration(
-              hintText: 'Where to?',
-              prefixIcon: const Icon(Icons.search),
-              filled: true,
-              fillColor: const Color(0xFFF1F0EC),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
-            ),
-          ),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.pin_drop_outlined),
-            title: const Text('Choose on the map'),
-            onTap: () => Navigator.pop(c, '\u0000map'),
-          ),
-          for (final r in recents) _recentTile(r, onTap: () => Navigator.pop(c, '\u0000recent:${recents.indexOf(r)}')),
-        ]),
-      ),
+  /// "Enter your route": search, Suggested and Saved places. Choosing a place goes straight to prices.
+  Future<void> _openRouteScreen() async {
+    if (pickup == null) {
+      await _locate();
+      if (pickup == null) return;
+    }
+    final r = await Navigator.of(context).push<DropRouteResult>(
+      MaterialPageRoute(fullscreenDialog: true, builder: (_) => DropRouteScreen(pickup: pickup!, pickupAddress: pickupAddress, recents: recents)),
     );
-    field.dispose();
-    if (q == null || q.isEmpty || !mounted) return;
-    if (q == '\u0000map') {
+    if (r == null || !mounted) return;
+    if (r.pickup != null) {
+      setState(() {
+        pickup = r.pickup;
+        pickupAddress = r.pickupAddress ?? pickupAddress;
+      });
+      _map.animateTo(r.pickup!);
+    }
+    if (r.kind == 'mapDrop') {
       setState(() => pinMode = true);
       return;
     }
-    if (q.startsWith('\u0000recent:')) {
-      _goToRecent(recents[int.parse(q.substring(8))]);
-      return;
-    }
-    _search.text = q;
-    if (await _searchPlace()) {
-      dropAddress = q;
+    if (r.point != null) {
+      center = r.point!;
+      dropAddress = r.address;
       await _confirmDropoff();
     }
   }
@@ -581,29 +560,49 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
     }
   }
 
-  /// Loads the road line: driver -> pickup while the driver is coming, then pickup -> drop-off.
+  /// Loads the road line: pickup -> drop-off as soon as prices are shown, then driver -> pickup while the driver
+  /// is coming, then pickup -> drop-off again. A line fetched before is shown at once.
   void _syncRoute() {
     final r = ride;
-    if (phase != _Phase.trip || r == null) {
+    LatLng from, to;
+    String key;
+    var toPickup = false;
+    final drv = _driverRaw;
+    if (phase == _Phase.choose && pickup != null) {
+      from = pickup!;
+      to = center;
+      key = 'choose';
+    } else if (phase == _Phase.trip && r != null) {
+      final pick = LatLng(_d(_m(r['pickup'])['lat']), _d(_m(r['pickup'])['lng']));
+      final drop = LatLng(_d(_m(r['dropoff'])['lat']), _d(_m(r['dropoff'])['lng']));
+      final status = r['status'];
+      toPickup = (status == 'accepted' || status == 'arrived') && drv != null;
+      from = toPickup ? drv! : pick;
+      to = toPickup ? pick : drop;
+      key = '${r['id']}:${toPickup ? 'toPickup' : 'trip'}';
+    } else {
       if (_routeFull.isNotEmpty || _routeKey != null) setState(() { _routeFull = const []; _routeKey = null; _routeFrom = null; _prevDriver = null; });
       return;
     }
-    final pick = LatLng(_d(_m(r['pickup'])['lat']), _d(_m(r['pickup'])['lng']));
-    final drop = LatLng(_d(_m(r['dropoff'])['lat']), _d(_m(r['dropoff'])['lng']));
-    final status = r['status'];
-    final drv = _driverRaw;
-    final toPickup = (status == 'accepted' || status == 'arrived') && drv != null;
-    final LatLng from = toPickup ? drv! : pick;
-    final to = toPickup ? pick : drop;
-    final key = '${r['id']}:${toPickup ? 'toPickup' : 'trip'}';
     final moved = toPickup && _routeFrom != null && RouteGeometry.meters(_routeFrom!, drv!) > 250;
-    if (key == _routeKey && !moved) return;
-    final changed = key != _routeKey;
-    _routeKey = key;
+    final target = '$key:${to.latitude.toStringAsFixed(5)},${to.longitude.toStringAsFixed(5)}';
+    if (target == _routeKey && !moved) return;
+    _routeKey = target;
     _routeFrom = from;
-    if (changed) setState(() => _routeFull = const []);
+    final known = RouteLineApi.cached(from, to);
+    final ends = '${from.latitude.toStringAsFixed(4)},${from.longitude.toStringAsFixed(4)}>${to.latitude.toStringAsFixed(4)},${to.longitude.toStringAsFixed(4)}';
+    if (known != null) {
+      _shownEnds = ends;
+      setState(() => _routeFull = known);
+      return;
+    }
+    // Keep the line on screen while the same journey is refreshed; clear it only for a different one.
+    if (!moved && _shownEnds != ends) setState(() => _routeFull = const []);
     RouteLineApi.fetch(from, to).then((pts) {
-      if (mounted && _routeKey == key) setState(() => _routeFull = pts);
+      if (!mounted || _routeKey != target) return;
+      _shownEnds = ends;
+      setState(() => _routeFull = pts);
+      if (key == 'choose' && pts.length > 1) _map.fitPoints([from, to, ...pts]);
     });
   }
 
@@ -620,6 +619,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
       }
     } else if (pickup != null) {
       out.add(DropMarker(id: 'pickup', title: 'Pickup', color: Colors.green, point: pickup!));
+      if (phase == _Phase.choose) out.add(DropMarker(id: 'drop', title: 'Drop-off', color: Colors.red, point: center));
     }
     return out;
   }
@@ -671,7 +671,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
                     elevation: 3,
                     child: InkWell(
                       borderRadius: BorderRadius.circular(14),
-                      onTap: locating ? null : _locate,
+                      onTap: locating ? null : _openRouteScreen,
                       child: Container(
                         constraints: const BoxConstraints(maxWidth: 320),
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -692,7 +692,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
             ]),
           ),
         ),
-        Align(alignment: Alignment.bottomCenter, child: _bottom()),
+        if (home) _homeSheet() else Align(alignment: Alignment.bottomCenter, child: _bottom()),
       ]),
     );
   }
@@ -737,7 +737,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
       case _Phase.loading:
         return _sheet(const Padding(padding: EdgeInsets.all(12), child: Center(child: CircularProgressIndicator())));
       case _Phase.plan:
-        return pinMode ? _planSheet() : _homeSheet();
+        return _planSheet();
       case _Phase.choose:
         return _chooseSheet();
       case _Phase.trip:
@@ -747,31 +747,52 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
     }
   }
 
-  Widget _homeSheet() => _sheet(Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Center(child: Container(width: 44, height: 4, margin: const EdgeInsets.only(bottom: 12), decoration: BoxDecoration(color: Colors.grey.shade400, borderRadius: BorderRadius.circular(4)))),
-        if (homeTypes.isNotEmpty) ...[
-          DropRideTypeStrip(types: homeTypes, selected: homeType, onTap: (t) => setState(() => homeType = (t['id'] as num).toInt())),
-          const SizedBox(height: 10),
-        ],
-        Material(
-          color: const Color(0xFFF1F0EC),
-          borderRadius: BorderRadius.circular(14),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(14),
-            onTap: _openDestinationSearch,
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-              child: Row(children: [
-                Icon(Icons.search),
-                SizedBox(width: 14),
-                Text('Where to & for how much?', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-              ]),
+  /// The home sheet can be dragged: smaller to see more map, larger to see more recent places.
+  Widget _homeSheet() => Positioned.fill(
+        child: DraggableScrollableSheet(
+          initialChildSize: 0.5,
+          minChildSize: 0.27,
+          maxChildSize: 0.88,
+          snap: true,
+          snapSizes: const [0.27, 0.5, 0.88],
+          builder: (context, scroll) => Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+              boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 12)],
+            ),
+            child: ListView(
+              controller: scroll,
+              padding: EdgeInsets.fromLTRB(16, 0, 16, 18 + MediaQuery.of(context).padding.bottom),
+              children: [
+                Center(child: Container(width: 44, height: 5, margin: const EdgeInsets.symmetric(vertical: 12), decoration: BoxDecoration(color: Colors.grey.shade400, borderRadius: BorderRadius.circular(4)))),
+                if (homeTypes.isNotEmpty) ...[
+                  DropRideTypeStrip(types: homeTypes, selected: homeType, onTap: (t) => setState(() => homeType = (t['id'] as num).toInt())),
+                  const SizedBox(height: 10),
+                ],
+                Material(
+                  color: const Color(0xFFF1F0EC),
+                  borderRadius: BorderRadius.circular(14),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(14),
+                    onTap: _openRouteScreen,
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                      child: Row(children: [
+                        Icon(Icons.search),
+                        SizedBox(width: 14),
+                        Expanded(child: Text('Where to & for how much?', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600))),
+                      ]),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                for (final r in recents) _recentTile(r, onTap: () => _goToRecent(r)),
+              ],
             ),
           ),
         ),
-        const SizedBox(height: 6),
-        for (final r in recents) _recentTile(r, onTap: () => _goToRecent(r)),
-      ]));
+      );
 
   Widget _planSheet() => _sheet(Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [

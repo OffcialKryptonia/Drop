@@ -279,6 +279,24 @@
       card.appendChild(h("div", { class: "grid2" }, field("Seats or load capacity", f.capacity), field("Badge", f.badge)));
       card.appendChild(field("Short description", f.description));
       card.appendChild(h("div", { class: "grid2" }, field("Icon link", f.icon_url), field("Photo link", f.photo_url)));
+      if (id && can("service edit")) {
+        var iconFile = h("input", { type: "file", accept: "image/png,image/webp,image/jpeg", style: "display:none" });
+        var iconBtn = h("button", { class: "small ghost", type: "button", text: "Upload ride type picture" });
+        iconBtn.addEventListener("click", function () { iconFile.click(); });
+        iconFile.addEventListener("change", function () {
+          if (!iconFile.files[0]) return;
+          uploadFile("/admin/services/" + id + "/icon", iconFile.files[0]).then(function (x) {
+            if (x.ok) f.icon_url.value = x.body.icon_url || "";
+            toast(x.ok ? "Picture saved" : errText(x), !x.ok);
+          });
+        });
+        var iconReset = h("button", { class: "small ghost", type: "button", text: "Use built-in picture" });
+        iconReset.addEventListener("click", function () {
+          api("DELETE", "/admin/services/" + id + "/icon").then(function (x) { if (x.ok) f.icon_url.value = ""; toast(x.ok ? "Back to built-in" : errText(x), !x.ok); });
+        });
+        card.appendChild(h("div", { class: "row", style: "gap:8px;margin:4px 0 12px;align-items:center" }, iconFile, iconBtn, iconReset,
+          h("span", { class: "muted", text: "Side-view picture on the rider's ride type list (PNG, WebP or JPG, under 1 MB). Separate from the map icon below." })));
+      }
       card.appendChild(field("Vehicle icon on the map", f.map_icon_key, "Shown for the driver on the map. Upload pictures on the Maps page."));
       card.appendChild(h("h3", { text: "Name in other languages" }));
       card.appendChild(h("div", { class: "grid2" }, field("Hausa", f.ha), field("Yoruba", f.yo), field("Igbo", f.ig), field("Pidgin", f.pcm)));

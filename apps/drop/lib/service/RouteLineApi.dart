@@ -9,13 +9,16 @@ class RouteLineApi {
   static String _key(LatLng a, LatLng b) =>
       '${a.latitude.toStringAsFixed(4)},${a.longitude.toStringAsFixed(4)}>${b.latitude.toStringAsFixed(4)},${b.longitude.toStringAsFixed(4)}';
 
+  /// The line if it was loaded before, so a screen can show it at once.
+  static List<LatLng>? cached(LatLng from, LatLng to) => _cache[_key(from, to)];
+
   /// Returns the line, or an empty list when it cannot be loaded (the map then just shows the pins).
   static Future<List<LatLng>> fetch(LatLng from, LatLng to) async {
     final key = _key(from, to);
     final cached = _cache[key];
     if (cached != null) return cached;
     try {
-      final res = await DriverApplicationApi.getJson('/route/line?from=${from.latitude},${from.longitude}&to=${to.latitude},${to.longitude}');
+      final res = await DriverApplicationApi.getJson('route/line?from=${from.latitude},${from.longitude}&to=${to.latitude},${to.longitude}');
       final raw = res['points'];
       if (raw is! List) return const [];
       final pts = <LatLng>[
