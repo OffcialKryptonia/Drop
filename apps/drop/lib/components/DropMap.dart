@@ -37,6 +37,8 @@ class DropMap extends StatefulWidget {
   final ll.LatLng initialCenter;
   final double initialZoom;
   final List<DropMarker> markers;
+  /// Road line to draw (pickup to drop-off). Empty means no line.
+  final List<ll.LatLng> routePoints;
   final bool showMyLocation;
   final void Function(ll.LatLng center)? onMove;
   final void Function(ll.LatLng center)? onIdle;
@@ -51,6 +53,7 @@ class DropMap extends StatefulWidget {
     this.styleUrl = 'https://tiles.openfreemap.org/styles/liberty',
     this.initialZoom = 15,
     this.markers = const [],
+    this.routePoints = const [],
     this.showMyLocation = false,
     this.onMove,
     this.onIdle,
@@ -85,7 +88,7 @@ class _DropMapState extends State<DropMap> {
   void didUpdateWidget(DropMap old) {
     super.didUpdateWidget(old);
     widget.controller?._state = this;
-    if (_isMapLibre && _mapLibreStyleReady && old.markers != widget.markers) {
+    if (_isMapLibre && _mapLibreStyleReady && (old.markers != widget.markers || old.routePoints != widget.routePoints)) {
       _syncMapLibreMarkers();
     }
   }
@@ -152,7 +155,17 @@ class _DropMapState extends State<DropMap> {
   Future<void> _syncMapLibreMarkers() async {
     if (!_mapLibreStyleReady || _mapLibre == null) return;
     try {
+      await _mapLibre!.clearLines();
       await _mapLibre!.clearCircles();
+      if (widget.routePoints.length > 1) {
+        await _mapLibre!.addLine(ml.LineOptions(
+          geometry: [for (final p in widget.routePoints) ml.LatLng(p.latitude, p.longitude)],
+          lineColor: '#1A73E8',
+          lineWidth: 5,
+          lineOpacity: 0.9,
+          lineJoin: 'round',
+        ));
+      }
       for (final marker in widget.markers) {
         await _mapLibre!.addCircle(ml.CircleOptions(
           geometry: ml.LatLng(marker.point.latitude, marker.point.longitude),
@@ -198,6 +211,18 @@ class _DropMapState extends State<DropMap> {
       mapToolbarEnabled: false,
       onCameraMove: (p) => _moved(ll.LatLng(p.target.latitude, p.target.longitude)),
       onCameraIdle: () => widget.onIdle?.call(_center),
+      polylines: {
+        if (widget.routePoints.length > 1)
+          g.Polyline(
+            polylineId: const g.PolylineId('route'),
+            points: [for (final p in widget.routePoints) g.LatLng(p.latitude, p.longitude)],
+            color: const Color(0xFF1A73E8),
+            width: 5,
+            jointType: g.JointType.round,
+            startCap: g.Cap.roundCap,
+            endCap: g.Cap.roundCap,
+          ),
+      },
       markers: {
         for (final m in widget.markers)
           g.Marker(
@@ -221,6 +246,8 @@ class _DropMapState extends State<DropMap> {
       ),
       children: [
         fm.TileLayer(urlTemplate: widget.tileUrl, userAgentPackageName: 'com.kryptonia.drop'),
+        if (widget.routePoints.length > 1)
+          fm.PolylineLayer(polylines: [fm.Polyline(points: widget.routePoints, strokeWidth: 5, color: const Color(0xFF1A73E8), strokeCap: StrokeCap.round, strokeJoin: StrokeJoin.round)]),
         fm.MarkerLayer(markers: [
           for (final m in widget.markers)
             fm.Marker(point: m.point, width: 44, height: 44, alignment: Alignment.topCenter, child: Icon(Icons.location_pin, color: m.color, size: 40)),
