@@ -143,19 +143,24 @@ legacyRoutes.get("/riderequest-list", withDb, requireAuth, async (c) => {
   const perPage = 20;
   const status = c.req.query("status");
   const statuses = status === "completed" ? ["completed"] : status === "cancelled" ? ["cancelled", "expired"] : ["completed", "cancelled", "expired"];
-  const total = (await db.query("select count(*)::int n from app.ride_requests where rider_id = $1 and status = any($2)", [me.id, statuses])).rows[0].n;
+  // The driver app asks with driver_id: it lists the trips this person drove, not the ones they rode.
+  const asDriver = c.req.query("driver_id") != null;
+  const own = asDriver ? "driver_id" : "rider_id";
+  const other = asDriver ? "rider_id" : "driver_id";
+  const total = (await db.query(`select count(*)::int n from app.ride_requests where ${own} = $1 and status = any($2)`, [me.id, statuses])).rows[0].n;
   const rows = (await db.query(
     `select r.*, du.first_name as df, du.last_name as dl from app.ride_requests r
-       left join app.users du on du.id = r.driver_id
-      where r.rider_id = $1 and r.status = any($2) order by r.id desc limit $3 offset $4`,
+       left join app.users du on du.id = r.${other}
+      where r.${own} = $1 and r.status = any($2) order by r.id desc limit $3 offset $4`,
     [me.id, statuses, perPage, (page - 1) * perPage])).rows;
   const name = me.display_name ?? `${me.first_name ?? ""} ${me.last_name ?? ""}`.trim();
+  const otherName = (r: Record<string, unknown>) => [r.df, r.dl].filter(Boolean).join(" ");
   return c.json({
     data: rows.map((r) => ({
-      id: Number(r.id), rider_id: Number(me.id), rider_name: name, service_id: Number(r.service_id),
-      driver_id: r.driver_id == null ? null : Number(r.driver_id),
-      driver_name: r.driver_id ? [r.df, r.dl].filter(Boolean).join(" ") : null,
-      datetime: iso(r.created_at), start_time: iso(r.created_at), end_time: iso(r.completed_at),
+      id: Number(r.id), rider_id: asDriver ? Number(r.rider_id) : Number(me.id), rider_name: asDriver ? otherName(r) : name, service_id: Number(r.service_id),
+      driver_id: asDriver ? Number(me.id) : r.driver_id == null ? null : Number(r.driver_id),
+      driver_name: asDriver ? name : r.driver_id ? otherName(r) : null,
+      datetime: iso(r.created_at), created_at: iso(r.created_at), updated_at: iso(r.completed_at ?? r.created_at), start_time: iso(r.created_at), end_time: iso(r.completed_at),
       start_address: r.pickup_address, end_address: r.dropoff_address,
       start_latitude: String(r.pickup_lat), start_longitude: String(r.pickup_lng),
       end_latitude: String(r.dropoff_lat), end_longitude: String(r.dropoff_lng),

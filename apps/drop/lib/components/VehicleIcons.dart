@@ -28,8 +28,11 @@ class VehicleIcons {
     return true;
   }
 
-  /// Side of the square, in pixels. Shown at half that size in logical pixels on a 2x screen.
-  static const int size = 96;
+  /// Side of the square, in pixels, so the picture stays sharp on a 2x screen.
+  static const int size = 144;
+
+  /// How big the vehicle is drawn on the map, in logical pixels.
+  static const double logical = 72;
 
   static const _builtIn = {'car', 'bike', 'keke', 'van', 'car_dispatch', 'bike_dispatch'};
 

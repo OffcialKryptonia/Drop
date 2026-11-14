@@ -1,5 +1,6 @@
 import 'package:drop/screens/ReviewsScreen.dart';
 import '../drop/screens/drop_help_screen.dart';
+import '../drop/screens/drop_sounds_screen.dart';
 
 import '../manage_imports.dart';
 import 'ModeSwitchTile.dart';
@@ -144,6 +145,13 @@ class _DrawerComponentState extends State<DrawerComponent> {
                     onTap: () {
                       Navigator.pop(context);
                       launchScreen(context, FAQScreen(), pageRouteAnimation: PageRouteAnimation.Slide);
+                    }),
+                DrawerWidget(
+                    title: 'Tone settings',
+                    iconData: ic_setting,
+                    onTap: () {
+                      Navigator.pop(context);
+                      launchScreen(context, const DropSoundsScreen(), pageRouteAnimation: PageRouteAnimation.Slide);
                     }),
                 DrawerWidget(
                     title: language.settings,
