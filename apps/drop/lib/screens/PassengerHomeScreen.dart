@@ -12,6 +12,7 @@ import '../components/RouteGeometry.dart';
 import '../components/drawer_component.dart';
 import '../drop/services/drop_money.dart';
 import '../drop/widgets/drop_email_prompt.dart';
+import '../drop/widgets/drop_ride_type_strip.dart';
 import '../drop/widgets/drop_sos_sheet.dart';
 import '../service/DriverApplicationApi.dart' show ApiFailure;
 import '../service/RouteLineApi.dart';
@@ -58,6 +59,10 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
   String pickupAddress = 'Your location';
   LatLng center = const LatLng(9.0765, 7.3986); // Abuja until we know where the person is
   String dropAddress = '';
+  List<Map<String, dynamic>> homeTypes = [];
+  int? homeType;
+  List<Map<String, dynamic>> recents = [];
+  bool pinMode = false;
   bool locating = true;
 
   Map<String, dynamic> quote = {};
@@ -136,6 +141,35 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
       _say('Turn on location and allow DROP to use it, so we know where to pick you up.');
     }
     if (mounted) setState(() => locating = false);
+    _loadHome();
+  }
+
+  /// Ride types at the pickup point, and the last places the passenger went.
+  Future<void> _loadHome() async {
+    final p = pickup;
+    if (p == null) return;
+    try {
+      final r = await RideApi.rideTypes(p.latitude, p.longitude);
+      final t = _l(r['ride_types']).map(_m).toList();
+      if (mounted) {
+        setState(() {
+          homeTypes = t;
+          if (homeType == null || !t.any((x) => (x['id'] as num).toInt() == homeType)) homeType = t.isEmpty ? null : (t.first['id'] as num).toInt();
+        });
+      }
+    } catch (_) {}
+    try {
+      final seen = <String>{};
+      final out = <Map<String, dynamic>>[];
+      for (final x in _l((await RideApi.history())['data']).map(_m)) {
+        final d = _m(x['dropoff']);
+        final a = d['address']?.toString() ?? '';
+        if (a.isEmpty || d['lat'] == null || !seen.add(a)) continue;
+        out.add(d);
+        if (out.length == 4) break;
+      }
+      if (mounted) setState(() => recents = out);
+    } catch (_) {}
   }
 
   Future<String> _addressOf(LatLng p, {String fallback = ''}) async {
@@ -172,22 +206,104 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
     });
   }
 
-  Future<void> _searchPlace() async {
+  Future<bool> _searchPlace() async {
     final q = _search.text.trim();
-    if (q.isEmpty) return;
+    if (q.isEmpty) return false;
     FocusScope.of(context).unfocus();
     try {
       final found = await locationFromAddress(q);
       if (found.isEmpty) {
         _say('We could not find that place. Try a nearby landmark or move the pin yourself.');
-        return;
+        return false;
       }
       final target = LatLng(found.first.latitude, found.first.longitude);
       center = target;
       _map.animateTo(target, zoom: 16);
+      return true;
     } catch (_) {
       _say('We could not find that place. Try a nearby landmark or move the pin yourself.');
+      return false;
     }
+  }
+
+  /// Home sheet: type a place, or tap a recent one, and go straight to prices.
+  Future<void> _openDestinationSearch() async {
+    final field = TextEditingController();
+    final q = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      builder: (c) => Padding(
+        padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.of(c).viewInsets.bottom),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          TextField(
+            controller: field,
+            autofocus: true,
+            textInputAction: TextInputAction.search,
+            onSubmitted: (v) => Navigator.pop(c, v.trim()),
+            decoration: InputDecoration(
+              hintText: 'Where to?',
+              prefixIcon: const Icon(Icons.search),
+              filled: true,
+              fillColor: const Color(0xFFF1F0EC),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+            ),
+          ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.pin_drop_outlined),
+            title: const Text('Choose on the map'),
+            onTap: () => Navigator.pop(c, '\u0000map'),
+          ),
+          for (final r in recents) _recentTile(r, onTap: () => Navigator.pop(c, '\u0000recent:${recents.indexOf(r)}')),
+        ]),
+      ),
+    );
+    field.dispose();
+    if (q == null || q.isEmpty || !mounted) return;
+    if (q == '\u0000map') {
+      setState(() => pinMode = true);
+      return;
+    }
+    if (q.startsWith('\u0000recent:')) {
+      _goToRecent(recents[int.parse(q.substring(8))]);
+      return;
+    }
+    _search.text = q;
+    if (await _searchPlace()) {
+      dropAddress = q;
+      await _confirmDropoff();
+    }
+  }
+
+  void _goToRecent(Map<String, dynamic> d) {
+    center = LatLng(_d(d['lat']), _d(d['lng']));
+    dropAddress = d['address']?.toString() ?? '';
+    _confirmDropoff();
+  }
+
+  Widget _recentTile(Map<String, dynamic> d, {required VoidCallback onTap}) {
+    final full = d['address']?.toString() ?? '';
+    final i = full.indexOf(',');
+    final title = i > 0 ? full.substring(0, i) : full;
+    final sub = i > 0 ? full.substring(i + 1).trim() : '';
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Row(children: [
+          Icon(Icons.access_time, color: Colors.grey.shade700),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+              if (sub.isNotEmpty) Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+            ]),
+          ),
+        ]),
+      ),
+    );
   }
 
   Future<void> _confirmDropoff() async {
@@ -215,7 +331,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
       } else {
         selectedType = null;
         extras.clear();
-        _pickType(_m(types.first));
+        _pickType(_m(types.firstWhere((t) => (_m(t)['id'] as num).toInt() == homeType, orElse: () => types.first)));
         phase = _Phase.choose;
       }
     } on ApiFailure catch (e) {
@@ -512,6 +628,8 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
   Widget build(BuildContext context) {
     WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted) _syncRoute(); });
     final planning = phase == _Phase.plan;
+    final pinning = planning && pinMode;
+    final home = planning && !pinMode;
     return Scaffold(
       key: _scaffoldKey,
       drawer: DrawerComponent(),
@@ -528,19 +646,49 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
             showMyLocation: pickup != null,
             markers: _markers,
             routePoints: _route,
-            onMove: planning ? _onCameraMove : null,
-            onIdle: planning ? _onCameraIdle : null,
+            onMove: pinning ? _onCameraMove : null,
+            onIdle: pinning ? _onCameraIdle : null,
           ),
         ),
-        if (planning) const Center(child: Padding(padding: EdgeInsets.only(bottom: 36), child: Icon(Icons.location_pin, size: 44, color: Color(0xFFE5441A)))),
+        if (pinning) const Center(child: Padding(padding: EdgeInsets.only(bottom: 36), child: Icon(Icons.location_pin, size: 44, color: Color(0xFFE5441A)))),
         SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(12),
-            child: Row(children: [
-              _roundButton(Icons.menu, () => _scaffoldKey.currentState?.openDrawer()),
-              const SizedBox(width: 10),
-              if (planning) Expanded(child: _searchBar()),
-              if (phase == _Phase.choose) _roundButton(Icons.arrow_back, () => setState(() => phase = _Phase.plan)),
+            child: Column(children: [
+              Row(children: [
+                _roundButton(Icons.menu, () => _scaffoldKey.currentState?.openDrawer()),
+                const SizedBox(width: 10),
+                if (pinning) Expanded(child: _searchBar()),
+                if (pinning) ...[const SizedBox(width: 10), _roundButton(Icons.arrow_back, () => setState(() => pinMode = false))],
+                if (phase == _Phase.choose) _roundButton(Icons.arrow_back, () => setState(() => phase = _Phase.plan)),
+              ]),
+              if (home)
+                Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Material(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    elevation: 3,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(14),
+                      onTap: locating ? null : _locate,
+                      child: Container(
+                        constraints: const BoxConstraints(maxWidth: 320),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          Flexible(
+                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              Text('Pickup point', style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+                              Text(locating ? 'Finding your location…' : pickupAddress, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                            ]),
+                          ),
+                          const SizedBox(width: 10),
+                          const Icon(Icons.chevron_right),
+                        ]),
+                      ),
+                    ),
+                  ),
+                ),
             ]),
           ),
         ),
@@ -589,7 +737,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
       case _Phase.loading:
         return _sheet(const Padding(padding: EdgeInsets.all(12), child: Center(child: CircularProgressIndicator())));
       case _Phase.plan:
-        return _planSheet();
+        return pinMode ? _planSheet() : _homeSheet();
       case _Phase.choose:
         return _chooseSheet();
       case _Phase.trip:
@@ -598,6 +746,32 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
         return _doneSheet();
     }
   }
+
+  Widget _homeSheet() => _sheet(Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Center(child: Container(width: 44, height: 4, margin: const EdgeInsets.only(bottom: 12), decoration: BoxDecoration(color: Colors.grey.shade400, borderRadius: BorderRadius.circular(4)))),
+        if (homeTypes.isNotEmpty) ...[
+          DropRideTypeStrip(types: homeTypes, selected: homeType, onTap: (t) => setState(() => homeType = (t['id'] as num).toInt())),
+          const SizedBox(height: 10),
+        ],
+        Material(
+          color: const Color(0xFFF1F0EC),
+          borderRadius: BorderRadius.circular(14),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: _openDestinationSearch,
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              child: Row(children: [
+                Icon(Icons.search),
+                SizedBox(width: 14),
+                Text('Where to & for how much?', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+              ]),
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        for (final r in recents) _recentTile(r, onTap: () => _goToRecent(r)),
+      ]));
 
   Widget _planSheet() => _sheet(Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
