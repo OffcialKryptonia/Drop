@@ -5,6 +5,7 @@ import 'package:drop/drop/widgets/drop_sos_sheet.dart';
 import 'package:drop/components/DropMap.dart';
 import 'package:drop/service/MapConfig.dart';
 import 'package:drop/service/RideApi.dart';
+import 'package:drop/service/RouteLineApi.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart' show LatLng;
@@ -44,6 +45,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
   bool mapLoaded = false;
   LatLng? myPos;
   String? _fitKey;
+  List<LatLng> _route = const [];
+  String? _routeKey;
 
   bool get online => status['is_online'] == true;
   Map<String, dynamic> get wallet => Map<String, dynamic>.from((status['wallet'] ?? {}) as Map);
@@ -135,6 +138,23 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     }
     final target = a['status'] == 'in_progress' ? _ll(a['dropoff']) : _ll(a['pickup']);
     _map.fitPoints([if (me != null) me, target]);
+  }
+
+  /// Loads the road line pickup -> drop-off for the trip in progress.
+  void _syncRoute() {
+    final a = active;
+    if (a == null) {
+      if (_route.isNotEmpty || _routeKey != null) setState(() { _route = const []; _routeKey = null; });
+      return;
+    }
+    final from = _ll(a['pickup']);
+    final to = _ll(a['dropoff']);
+    final key = '${a['id']}:${from.latitude},${from.longitude}>${to.latitude},${to.longitude}';
+    if (key == _routeKey) return;
+    _routeKey = key;
+    RouteLineApi.fetch(from, to).then((pts) {
+      if (mounted && _routeKey == key) setState(() => _route = pts);
+    });
   }
 
   List<DropMarker> get _markers {
@@ -481,7 +501,13 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
 
   @override
   Widget build(BuildContext context) {
-    if (!loading) WidgetsBinding.instance.addPostFrameCallback((_) => _refit());
+    if (!loading) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _refit();
+        _syncRoute();
+      });
+    }
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: const Color(0xFFEFEFEF),
@@ -502,6 +528,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
                             initialCenter: myPos ?? const LatLng(9.0765, 7.3986),
                             controller: _map,
                             markers: _markers,
+                            routePoints: _route,
                           ),
                   ),
                   SafeArea(child: Padding(padding: const EdgeInsets.all(12), child: _topBar())),

@@ -13,6 +13,7 @@ import '../drop/services/drop_money.dart';
 import '../drop/widgets/drop_email_prompt.dart';
 import '../drop/widgets/drop_sos_sheet.dart';
 import '../service/DriverApplicationApi.dart' show ApiFailure;
+import '../service/RouteLineApi.dart';
 import '../service/MapConfig.dart';
 import '../service/RideApi.dart';
 import '../utils/Colors.dart';
@@ -48,6 +49,8 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
   bool busy = false;
 
   LatLng? pickup;
+  List<LatLng> _route = const [];
+  String? _routeKey;
   String pickupAddress = 'Your location';
   LatLng center = const LatLng(9.0765, 7.3986); // Abuja until we know where the person is
   String dropAddress = '';
@@ -419,6 +422,23 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
 
   // ---------- build ----------
 
+  /// Loads the road line pickup -> drop-off once per trip.
+  void _syncRoute() {
+    final r = ride;
+    if (phase != _Phase.trip || r == null) {
+      if (_route.isNotEmpty || _routeKey != null) setState(() { _route = const []; _routeKey = null; });
+      return;
+    }
+    final a = LatLng(_d(_m(r['pickup'])['lat']), _d(_m(r['pickup'])['lng']));
+    final b = LatLng(_d(_m(r['dropoff'])['lat']), _d(_m(r['dropoff'])['lng']));
+    final key = '${r['id']}:${a.latitude},${a.longitude}>${b.latitude},${b.longitude}';
+    if (key == _routeKey) return;
+    _routeKey = key;
+    RouteLineApi.fetch(a, b).then((pts) {
+      if (mounted && _routeKey == key) setState(() => _route = pts);
+    });
+  }
+
   List<DropMarker> get _markers {
     final out = <DropMarker>[];
     if (phase == _Phase.trip && ride != null) {
@@ -435,6 +455,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
 
   @override
   Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted) _syncRoute(); });
     final planning = phase == _Phase.plan;
     return Scaffold(
       key: _scaffoldKey,
@@ -451,6 +472,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
             controller: _map,
             showMyLocation: pickup != null,
             markers: _markers,
+            routePoints: _route,
             onMove: planning ? _onCameraMove : null,
             onIdle: planning ? _onCameraIdle : null,
           ),

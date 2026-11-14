@@ -5,6 +5,7 @@ import { requireAuth } from "../auth/middleware";
 import { readBody } from "../lib/legacy";
 import { vehicleFromProfile } from "../lib/driver-vehicle";
 import { getPayoutSettings } from "./payouts";
+import { routeLine } from "../lib/routing";
 
 /** Small, fast endpoints the driver screens read: profile (referral code, vehicle), payouts overview, earnings. */
 export const driverExtraRoutes = new Hono<AppEnv>();
@@ -104,4 +105,17 @@ driverExtraRoutes.post("/earning-list", withDb, requireAuth, async (c) => {
 
   const r = await sum(today, today);
   return c.json({ today_date: today, today_earnings: r.earned, today_ride_request: r.rides, total_cash_ride: r.cash, total_wallet_ride: r.wallet, total_card_ride: r.card, total_earnings: r.earned, total_ride_count: r.rides });
+});
+
+/** Road line between two points, for the pickup → drop-off line on the map. Query: from=lat,lng&to=lat,lng */
+driverExtraRoutes.get("/route/line", withDb, requireAuth, async (c) => {
+  const pair = (v: string | undefined) => {
+    const [lat, lng] = String(v ?? "").split(",").map(Number);
+    return Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? { lat, lng } : null;
+  };
+  const a = pair(c.req.query("from"));
+  const b = pair(c.req.query("to"));
+  if (!a || !b) return c.json({ error: "validation_failed", message: "from and to must be lat,lng." }, 422);
+  const r = await routeLine(c.env, a, b, c.get("db"));
+  return c.json({ points: r.points, road: r.road });
 });
