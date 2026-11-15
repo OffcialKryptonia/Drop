@@ -22,7 +22,9 @@ driverExtraRoutes.get("/driver/profile", withDb, requireAuth, async (c) => {
        from app.driver_profiles p left join app.services s on s.id = p.service_id where p.user_id = $1`, [me.id])).rows[0];
   const d = (await db.query("select car_model, car_color, car_plate_number, car_production_year from app.user_details where user_id = $1 limit 1", [me.id])).rows[0] ?? {};
   const v = vehicleFromProfile(p) ?? { car_model: null, car_color: null, car_plate_number: null, car_production_year: null };
+  const documentsRequested = (await db.query("select count(*)::int n from app.driver_document_requests where driver_id = $1", [me.id])).rows[0].n;
   return c.json({
+    documents_requested: documentsRequested,
     referral_code: me.referral_code ?? null,
     service_name: p?.service_name ?? null,
     map_icon: iconKeyFor(p?.service_category, p?.map_icon_key),

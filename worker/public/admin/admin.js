@@ -1180,7 +1180,18 @@
             else view.appendChild(h("img", { class: "docimg", src: f.url, alt: x.name }));
           }).catch(function () { btn.disabled = false; btn.textContent = "View"; toast("Could not open the file", true); });
         } } }));
-        if (x.uploaded && canEdit && reviewable) {
+        var locked = ["approved", "suspended", "in_review", "submitted"].indexOf(d.status) >= 0;
+        if (canEdit && locked) {
+          if (x.requested) acts.appendChild(h("button", { class: "ghost small", text: "Withdraw request", on: { click: function () {
+            api("DELETE", "/admin/driver-applications/" + id + "/request-documents/" + x.document_id).then(function (z) { toast(z.ok ? "Request withdrawn" : errText(z), !z.ok); if (z.ok) applicationDetail(root, id); });
+          } } }));
+          else acts.appendChild(h("button", { class: "ghost small", text: x.uploaded ? "Ask for new upload" : "Request upload", on: { click: function () {
+            var note = window.prompt("Message for the driver (optional):", x.status === "rejected" && x.note ? x.note : "");
+            if (note === null) return;
+            api("POST", "/admin/driver-applications/" + id + "/request-documents", { document_ids: [x.document_id], note: note.trim() || undefined }).then(function (z) { toast(z.ok ? "Driver asked to upload " + x.name : errText(z), !z.ok); if (z.ok) applicationDetail(root, id); });
+          } } }));
+        }
+        if (x.uploaded && canEdit && (reviewable || d.status === "approved" || d.status === "suspended")) {
           if (x.status !== "approved") acts.appendChild(h("button", { class: "small", text: "Approve", on: { click: function () {
             api("PUT", "/admin/driver-applications/" + id + "/documents/" + x.document_id, { status: "approved" }).then(function (z) { toast(z.ok ? "Approved" : errText(z), !z.ok); if (z.ok) applicationDetail(root, id); });
           } } }));
@@ -1193,10 +1204,29 @@
           h("div", { class: "main" }, h("div", { class: "t", text: x.name + (x.required ? "" : " (optional)") }),
             h("div", { class: "s", text: (x.has_expiry_date && x.expire_date ? "Expires " + x.expire_date + " · " : "") + (x.uploaded_at ? "Uploaded " + new Date(x.uploaded_at).toLocaleString() : "Not uploaded") }),
             x.note ? h("div", { class: "s", text: "Note: " + x.note }) : null,
+            x.requested ? h("div", { class: "s", text: "Waiting for the driver to upload" + (x.request_note ? " · Your message: " + x.request_note : "") }) : null,
             h("div", { style: "margin-top:8px" }, acts), view),
-          h("span", { class: "pill " + pillFor(x.status), text: DOC_STATUS[x.status] || x.status })));
+          h("span", { class: "pill " + (x.requested ? "warn" : pillFor(x.status)), text: x.requested ? "Requested" : (DOC_STATUS[x.status] || x.status) })));
       });
       root.appendChild(docs);
+
+      if (canEdit && ["approved", "suspended", "in_review", "submitted"].indexOf(d.status) >= 0) {
+        var missingDocs = d.documents.filter(function (x) { return x.required && (!x.uploaded || x.status === "rejected") && !x.requested; });
+        if (missingDocs.length) {
+          var reqOut = h("p", { class: "msg" });
+          root.appendChild(h("div", { class: "card" }, h("h3", { text: "Missing documents" }),
+            h("p", { class: "s", text: missingDocs.map(function (x) { return x.name; }).join(", ") + " — the driver stays " + (APP_STATUS[d.status] || d.status).toLowerCase() + " and can upload only what you ask for." }),
+            reqOut,
+            h("button", { class: "small", text: "Request " + missingDocs.length + " document" + (missingDocs.length === 1 ? "" : "s"), on: { click: function (e) {
+              var note = window.prompt("Message for the driver (optional):", "Please upload your missing documents so we can keep your account in good standing.");
+              if (note === null) return;
+              e.target.disabled = true;
+              api("POST", "/admin/driver-applications/" + id + "/request-documents", { note: note.trim() || undefined }).then(function (z) {
+                if (z.ok) { toast(z.body.message); applicationDetail(root, id); } else { e.target.disabled = false; msg(reqOut, errText(z)); }
+              });
+            } } })));
+        }
+      }
 
       var actions = [];
       if (d.status === "submitted") actions.push(["start_review", "Start review", "ghost", false]);

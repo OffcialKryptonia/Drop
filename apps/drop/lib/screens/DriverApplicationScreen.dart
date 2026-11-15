@@ -564,11 +564,19 @@ class _DriverApplicationScreenState extends State<DriverApplicationScreen> {
     );
   }
 
+  Widget _requestedChip() => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(color: Colors.deepOrange.withOpacity(0.12), borderRadius: BorderRadius.circular(20)),
+        child: const Text('Upload needed', style: TextStyle(color: Colors.deepOrange, fontSize: 12, fontWeight: FontWeight.w600)),
+      );
+
   Widget _docRow(Map<String, dynamic> d, {required bool canUpload}) {
     final st = (d['status'] ?? 'missing').toString();
     final note = (d['note'] ?? '').toString();
     final expire = d['expire_date']?.toString();
     final uploaded = d['uploaded'] == true;
+    final requested = d['requested'] == true;
+    final requestNote = (d['request_note'] ?? '').toString();
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(12),
@@ -576,11 +584,16 @@ class _DriverApplicationScreenState extends State<DriverApplicationScreen> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           Expanded(child: Text('${d['name']}${d['required'] == true ? '' : ' (optional)'}', style: const TextStyle(fontWeight: FontWeight.w700))),
-          _chip(st),
+          requested ? _requestedChip() : _chip(st),
         ]),
+        if (requested)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(requestNote.isNotEmpty ? 'DROP asks you to upload this. $requestNote' : 'DROP asks you to upload this document.', style: const TextStyle(fontSize: 12, color: Colors.deepOrange)),
+          ),
         if (expire != null && expire.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text('Expires $expire', style: TextStyle(fontSize: 12, color: Colors.grey.shade700))),
         if (st == 'rejected' && note.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text(note, style: const TextStyle(fontSize: 12, color: Colors.red))),
-        if (canUpload && st != 'approved')
+        if ((canUpload && st != 'approved') || requested)
           Align(
             alignment: Alignment.centerRight,
             child: TextButton.icon(
@@ -618,7 +631,7 @@ class _DriverApplicationScreenState extends State<DriverApplicationScreen> {
       Center(child: Text(text, textAlign: TextAlign.center, style: TextStyle(color: Colors.grey.shade700))),
       if (note.isNotEmpty) ...[const SizedBox(height: 12), Text('From our team: $note')],
       const SizedBox(height: 20),
-      for (final d in documents) _docRow(d, canUpload: false),
+      for (final d in documents) _docRow(d, canUpload: false), // only documents DROP has asked for show an upload button
       const SizedBox(height: 12),
       if (status == 'approved')
         _primaryButton('Switch to driver', () async {
