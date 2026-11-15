@@ -7,7 +7,7 @@ import '../../service/DriverApplicationApi.dart';
 
 /// What the rider chose on the "Enter your route" screen.
 class DropRouteResult {
-  /// 'drop' (a place was chosen) or 'mapDrop' (the rider wants to set the drop-off on the map).
+  /// 'drop' (a place was chosen), 'mapDrop' (set the drop-off on the map) or 'mapFrom' (set the pickup on the map).
   final String kind;
   final LatLng? point;
   final String address;
@@ -336,7 +336,17 @@ class _DropRouteScreenState extends State<DropRouteScreen> {
               ),
             ]),
             const SizedBox(height: 8),
-            _field(c: _from, f: _fromFocus, label: 'From', icon: Icons.my_location),
+            _field(
+              c: _from,
+              f: _fromFocus,
+              label: 'From',
+              icon: Icons.my_location,
+              trailing: IconButton(
+                icon: const Icon(Icons.map_outlined),
+                tooltip: 'Set pickup on the map',
+                onPressed: () => Navigator.pop(context, DropRouteResult('mapFrom', pickup: _pickupChanged ? _pickup : null, pickupAddress: _pickupChanged ? _pickupAddress : null)),
+              ),
+            ),
             const SizedBox(height: 10),
             _field(
               c: _to,

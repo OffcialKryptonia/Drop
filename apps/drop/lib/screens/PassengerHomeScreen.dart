@@ -72,6 +72,8 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
   int? homeType;
   List<Map<String, dynamic>> recents = [];
   bool pinMode = false;
+  bool pinForPickup = false; // the pin is choosing the pickup (From), not the drop-off
+  String pinPickupAddress = '';
   bool locating = true;
 
   Map<String, dynamic> quote = {};
@@ -256,7 +258,8 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
     _idle?.cancel();
     _idle = Timer(const Duration(milliseconds: 400), () async {
       final a = await _addressOf(center);
-      if (mounted && phase == _Phase.plan) setState(() => dropAddress = a);
+      if (!mounted || phase != _Phase.plan) return;
+      setState(() { if (pinForPickup) { pinPickupAddress = a; } else { dropAddress = a; } });
     });
   }
 
@@ -298,8 +301,19 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
       });
       _map.animateTo(r.pickup!);
     }
+    if (r.kind == 'mapFrom') {
+      _pickupAuto = false;
+      setState(() {
+        pinForPickup = true;
+        pinMode = true;
+        pinPickupAddress = pickupAddress;
+        center = pickup ?? center;
+      });
+      if (pickup != null) _map.animateTo(pickup!, zoom: 17);
+      return;
+    }
     if (r.kind == 'mapDrop') {
-      setState(() => pinMode = true);
+      setState(() { pinForPickup = false; pinMode = true; });
       return;
     }
     if (r.point != null) {
@@ -336,6 +350,18 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
         ]),
       ),
     );
+  }
+
+  /// The pin was moved to the right pickup: use it and refresh the ride types for that spot.
+  void _confirmPickup() {
+    setState(() {
+      pickup = center;
+      if (pinPickupAddress.isNotEmpty) pickupAddress = pinPickupAddress;
+      _pickupAuto = false;
+      pinMode = false;
+      pinForPickup = false;
+    });
+    _loadHome();
   }
 
   Future<void> _confirmDropoff() async {
@@ -708,7 +734,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
             onIdle: pinning ? _onCameraIdle : null,
           )),
         ),
-        if (pinning) const Center(child: Padding(padding: EdgeInsets.only(bottom: 36), child: Icon(Icons.location_pin, size: 44, color: Color(0xFFE5441A)))),
+        if (pinning) Center(child: Padding(padding: const EdgeInsets.only(bottom: 36), child: Icon(Icons.location_pin, size: 44, color: pinForPickup ? Colors.green : const Color(0xFFE5441A)))),
         SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(12),
@@ -717,7 +743,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
                 _roundButton(Icons.menu, () => _scaffoldKey.currentState?.openDrawer()),
                 const SizedBox(width: 10),
                 if (pinning) Expanded(child: _searchBar()),
-                if (pinning) ...[const SizedBox(width: 10), _roundButton(Icons.arrow_back, () => setState(() => pinMode = false))],
+                if (pinning) ...[const SizedBox(width: 10), _roundButton(Icons.arrow_back, () => setState(() { pinMode = false; pinForPickup = false; }))],
                 if (phase == _Phase.choose) _roundButton(Icons.arrow_back, () => setState(() => phase = _Phase.plan)),
               ]),
               if (home)
@@ -852,7 +878,24 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
         ),
       );
 
-  Widget _planSheet() => _sheet(Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+  Widget _pickupSheet() => _sheet(Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Icon(Icons.my_location, size: 18, color: Colors.green),
+          const SizedBox(width: 8),
+          Expanded(child: Text(pinPickupAddress.isEmpty ? 'Move the map to choose your pickup' : pinPickupAddress, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700))),
+        ]),
+        const SizedBox(height: 14),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14)),
+            onPressed: _confirmPickup,
+            child: const Text('Confirm pickup', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+          ),
+        ),
+      ]));
+
+  Widget _planSheet() => pinForPickup ? _pickupSheet() : _sheet(Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           const Icon(Icons.my_location, size: 18, color: Colors.green),
           const SizedBox(width: 8),

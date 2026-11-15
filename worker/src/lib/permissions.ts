@@ -20,6 +20,7 @@ export const MODULES: { key: string; label: string; actions: string[] }[] = [
   { key: "complaint", label: "Complaints", actions: ["list", "edit"] },
   { key: "bank", label: "Banks", actions: ["list", "edit"] },
   { key: "map_settings", label: "Maps", actions: ["list", "edit"] },
+  { key: "push_settings", label: "Push notifications", actions: ["list", "edit"] },
   { key: "role", label: "Roles", actions: ["list", "add", "edit", "delete"] },
   { key: "subadmin", label: "Sub-admins", actions: ["list", "add", "edit", "delete"] },
 ];
