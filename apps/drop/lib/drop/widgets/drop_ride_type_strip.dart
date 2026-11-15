@@ -23,7 +23,7 @@ class DropRideTypeStrip extends StatelessWidget {
           final t = types[i];
           final id = (t['id'] as num).toInt();
           final on = id == selected;
-          final free = ((t['drivers_nearby'] as num?)?.toInt() ?? 1) > 0;
+          final free = ((t['drivers_nearby'] as num?)?.toInt() ?? 1) > 0 || ((t['drivers_in_region'] as num?)?.toInt() ?? 0) > 0;
           return GestureDetector(
             onTap: () => onTap(t),
             child: Opacity(

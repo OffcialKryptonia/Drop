@@ -9,6 +9,7 @@ import { hashPassword } from "../auth/password";
 import { withDb } from "../db";
 import { requireAuth } from "../auth/middleware";
 import { STARTER_RIDE_TYPES } from "../lib/starter-ride-types";
+import { borderProblem } from "../lib/region";
 import { ALL_PERMISSIONS } from "../lib/permissions";
 
 export const adminCatalogRoutes = new Hono<AppEnv>();
@@ -72,7 +73,10 @@ function polygonWkt(points: { lat: number; lng: number }[] | null): string | nul
 adminCatalogRoutes.get("/admin/regions", ...guard("region list"), async (c) => {
   const r = await c.get("db").query(
     `select r.id, r.name, r.distance_unit, r.timezone, r.status, r.currency, r.coordinates, r.created_at,
-            (select count(*)::int from app.services s where s.region_id = r.id and s.deleted_at is null) as ride_types
+            (select count(*)::int from app.services s where s.region_id = r.id and s.deleted_at is null) as ride_types,
+            (select count(*)::int from app.users u join app.driver_profiles p on p.user_id = u.id where u.region_id = r.id and p.status = 'approved') as drivers,
+            (select count(*)::int from app.users u where u.region_id = r.id and u.is_online and u.last_location_update_at > now() - interval '5 minutes') as drivers_online,
+            (select count(*)::int from app.users u where u.region_id = r.id) as people
        from app.regions r order by r.name nulls last, r.id`);
   return c.json({ data: r.rows });
 });
@@ -81,6 +85,8 @@ adminCatalogRoutes.post("/admin/regions", ...guard("region add"), async (c) => {
   const p = regionSchema.safeParse(await readBody(c));
   if (!p.success) return validationFailed(c, zodErrors(p.error));
   const d = p.data;
+  const bad = await borderProblem(c.get("db"), d.coordinates);
+  if (bad) return validationFailed(c, { coordinates: [bad] });
   const r = await c.get("db").query(
     `insert into app.regions (name, distance_unit, timezone, status, coordinates, boundary, currency)
      values ($1,$2,$3,$4,$5::jsonb, case when $6::text is null then null else extensions.st_geogfromtext($6) end, $7) returning id`,
@@ -94,6 +100,8 @@ adminCatalogRoutes.put("/admin/regions/:id", ...guard("region edit"), async (c) 
   const p = regionSchema.safeParse(await readBody(c));
   if (!p.success) return validationFailed(c, zodErrors(p.error));
   const d = p.data;
+  const bad = await borderProblem(c.get("db"), d.coordinates);
+  if (bad) return validationFailed(c, { coordinates: [bad] });
   const r = await c.get("db").query(
     `update app.regions set name=$2, distance_unit=$3, timezone=$4, status=$5, coordinates=$6::jsonb,
             boundary = case when $7::text is null then null else extensions.st_geogfromtext($7) end, currency=$8 where id=$1`,

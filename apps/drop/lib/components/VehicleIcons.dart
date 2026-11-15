@@ -34,7 +34,7 @@ class VehicleIcons {
   /// How big the vehicle is drawn on the map, in logical pixels.
   static const double logical = 72;
 
-  static const _builtIn = {'car', 'bike', 'keke', 'van', 'car_dispatch', 'bike_dispatch'};
+  static const _builtIn = {'car', 'bike', 'keke', 'van', 'car_dispatch', 'bike_dispatch', 'me'};
 
   /// PNG bytes for the key, or null if nothing could be loaded.
   static Future<Uint8List?> load(String key) {

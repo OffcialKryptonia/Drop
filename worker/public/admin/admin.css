@@ -94,3 +94,8 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--orange); bo
 .kv { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
 .kv .k { color: var(--muted); }
 .card textarea { font-family: inherit; min-height: 80px; }
+
+.borderbox { height: 420px; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); background: var(--input); display: flex; align-items: center; justify-content: center; color: var(--muted); text-align: center; padding: 8px; }
+.borderbox.leaflet-container { display: block; padding: 0; }
+.vtx span { display: flex; width: 28px; height: 28px; border-radius: 50%; align-items: center; justify-content: center; background: #FC9600; color: #fff; font: 700 12px system-ui; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
+.acts input[type=search] { flex: 1 1 160px; width: auto; }

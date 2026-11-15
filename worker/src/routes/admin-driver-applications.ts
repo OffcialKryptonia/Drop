@@ -33,7 +33,8 @@ adminDriverApplicationRoutes.get("/admin/driver-applications", ...guard("driver_
   const total = (await db.query(`select count(*)::int n ${from}`, params)).rows[0].n;
   const rows = (await db.query(
     `select u.id, u.first_name, u.last_name, u.email, u.contact_number, p.status, p.submitted_at, p.reviewed_at, p.vehicle_make, p.vehicle_model, p.vehicle_plate,
-            (select name from app.services s where s.id = p.service_id) as ride_type
+            (select name from app.services s where s.id = p.service_id) as ride_type,
+            (select g.name from app.regions g where g.id = u.region_id) as region
        ${from} order by p.submitted_at desc nulls last, u.id desc limit ${perPage} offset ${(page - 1) * perPage}`, params)).rows;
   const counts = (await db.query("select status, count(*)::int n from app.driver_profiles group by status")).rows;
   return c.json({ data: rows, counts: Object.fromEntries(counts.map((r) => [r.status, r.n])), pagination: { page, per_page: perPage, total, total_pages: Math.max(Math.ceil(total / perPage), 1) } });
@@ -44,7 +45,8 @@ adminDriverApplicationRoutes.get("/admin/driver-applications/:id", ...guard("dri
   const db = c.get("db");
   const r = (await db.query(
     `select u.id, u.first_name, u.last_name, u.email, u.contact_number, u.status as account_status, (u.profile_image_key is not null) as has_photo,
-            p.*, (select name from app.services s where s.id = p.service_id) as ride_type
+            p.*, (select name from app.services s where s.id = p.service_id) as ride_type,
+            (select g.name from app.regions g where g.id = u.region_id) as region, u.region_changed_at
        from app.driver_profiles p join app.users u on u.id = p.user_id where p.user_id = $1 and u.deleted_at is null`, [id])).rows[0];
   if (!r) return notFound(c);
   const reqs = new Map<number, string | null>((await db.query("select document_id, note from app.driver_document_requests where driver_id = $1", [id])).rows.map((x) => [Number(x.document_id), x.note]));
@@ -168,7 +170,7 @@ adminDriverApplicationRoutes.post("/admin/driver-applications/:id/review", ...gu
         return c.json({ message: "Approve every required document first.", code: "documents_not_approved", missing: pending, status: 409 }, 409);
       }
       next = "approved";
-      await db.query("update app.users set is_verified_driver = true, service_id = $2 where id = $1", [id, prof.service_id]);
+      await db.query("update app.users set is_verified_driver = true, service_id = $2, region_id = coalesce((select region_id from app.services where id = $2), region_id) where id = $1", [id, prof.service_id]);
       await db.query("delete from app.driver_services where driver_id = $1", [id]);
       await db.query("insert into app.driver_services (driver_id, service_id) values ($1, $2)", [id, prof.service_id]);
     }
