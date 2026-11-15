@@ -8,6 +8,8 @@ import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../components/DropMap.dart';
+import '../components/LiveLocation.dart';
+import '../components/RegionWatcher.dart';
 import '../components/RouteGeometry.dart';
 import '../components/drawer_component.dart';
 import '../drop/services/drop_money.dart';
@@ -44,6 +46,10 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final TextEditingController _search = TextEditingController();
   final DropMapController _map = DropMapController();
+  late final LiveLocation _live = LiveLocation(onFix: _onFix);
+  final RegionWatcher _region = RegionWatcher();
+  bool _pickupAuto = true; // the pickup follows the phone until the passenger chooses another From
+  DateTime _addrAt = DateTime.fromMillisecondsSinceEpoch(0);
   MapConfig mapConfig = const MapConfig();
   bool mapLoaded = false;
   Timer? _poll;
@@ -114,6 +120,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _live.dispose();
     _poll?.cancel();
     _transferTimer?.cancel();
     _idle?.cancel();
@@ -155,6 +162,22 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
     if (mounted) setState(() => phase = _Phase.plan);
   }
 
+  /// Every real GPS fix: ask about a region change, and keep the automatic pickup under the passenger.
+  void _onFix(Position p) {
+    final here = LatLng(p.latitude, p.longitude);
+    if (mounted) _region.check(context, here, onSwitched: _loadHome);
+    final cur = pickup;
+    if (!_pickupAuto || phase != _Phase.plan || pinMode || cur == null) return;
+    if (RouteGeometry.meters(cur, here) < 40) return;
+    setState(() => pickup = here);
+    if (DateTime.now().difference(_addrAt).inSeconds >= 8) {
+      _addrAt = DateTime.now();
+      _addressOf(here, fallback: pickupAddress).then((a) {
+        if (mounted && _pickupAuto && pickup == here) setState(() => pickupAddress = a);
+      });
+    }
+  }
+
   Future<void> _locate() async {
     try {
       if (!await Geolocator.isLocationServiceEnabled()) throw Exception('off');
@@ -163,6 +186,8 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
       if (p == LocationPermission.denied || p == LocationPermission.deniedForever) throw Exception('denied');
       final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
       pickup = LatLng(pos.latitude, pos.longitude);
+      _pickupAuto = true;
+      _live.start(seed: pickup);
       center = pickup!;
       pickupAddress = await _addressOf(pickup!, fallback: 'Your location');
       _map.animateTo(pickup!, zoom: 17);
@@ -266,6 +291,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
     );
     if (r == null || !mounted) return;
     if (r.pickup != null) {
+      _pickupAuto = false;
       setState(() {
         pickup = r.pickup;
         pickupAddress = r.pickupAddress ?? pickupAddress;
@@ -649,6 +675,10 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
       out.add(DropMarker(id: 'pickup', title: 'Pickup', color: Colors.green, point: pickup!));
       if (phase == _Phase.choose) out.add(DropMarker(id: 'drop', title: 'Drop-off', color: Colors.red, point: center));
     }
+    // The passenger: an arrow that moves with the phone and turns as it turns.
+    final me = _live.point;
+    final riding = phase == _Phase.trip && ride?['status'] == 'in_progress';
+    if (me != null && !riding) out.add(DropMarker(id: 'me', title: 'You', color: Colors.blue, point: me, iconKey: 'me', heading: _live.heading));
     return out;
   }
 
@@ -665,18 +695,18 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
         Positioned.fill(
           child: !mapLoaded
               ? const ColoredBox(color: Color(0xFFEFEFEF))
-              : DropMap(
+              : AnimatedBuilder(animation: _live, builder: (_, __) => DropMap(
             provider: mapConfig.provider,
             tileUrl: mapConfig.tileUrl,
             attribution: mapConfig.attribution,
             initialCenter: pickup ?? center,
             controller: _map,
-            showMyLocation: pickup != null,
+            showMyLocation: false,
             markers: _markers,
             routePoints: _route,
             onMove: pinning ? _onCameraMove : null,
             onIdle: pinning ? _onCameraIdle : null,
-          ),
+          )),
         ),
         if (pinning) const Center(child: Padding(padding: EdgeInsets.only(bottom: 36), child: Icon(Icons.location_pin, size: 44, color: Color(0xFFE5441A)))),
         SafeArea(

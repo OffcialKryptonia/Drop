@@ -36,7 +36,7 @@ export type Quote =
       ride_types: RideTypeQuote[];
     };
 
-async function regionAt(db: Client, p: LatLng) {
+export async function regionAt(db: Client, p: LatLng) {
   // A region with a drawn boundary must contain the point; one without a boundary covers everywhere (used last).
   return (
     await db.query(
@@ -149,11 +149,17 @@ export async function listRideTypes(db: Client, pickup: LatLng) {
     )
   ).rows;
   const n = new Map<number, number>(near.map((r) => [Number(r.service_id), r.n as number]));
+  // Drivers working this region who are online right now, wherever they are in it.
+  const inRegion = new Map<number, number>((await db.query(
+    `select p.service_id, count(*)::int as n from app.users u join app.driver_profiles p on p.user_id = u.id
+      where u.is_online and u.active_mode = 'driver' and u.status = 'active' and p.status = 'approved'
+        and u.last_location_update_at > now() - interval '5 minutes' and p.service_id = any($1::bigint[]) group by p.service_id`,
+    [services.map((s) => s.id)])).rows.map((r) => [Number(r.service_id), r.n as number]));
   return {
     ok: true as const,
     ride_types: services.map((s) => ({
       id: Number(s.id), name: s.name, name_i18n: s.name_i18n, category: s.category, icon_url: s.icon_url, photo_url: s.photo_url,
-      map_icon: iconKeyFor(s.category, s.map_icon_key), capacity: s.capacity, badge: s.badge, drivers_nearby: n.get(Number(s.id)) ?? 0,
+      map_icon: iconKeyFor(s.category, s.map_icon_key), capacity: s.capacity, badge: s.badge, drivers_nearby: n.get(Number(s.id)) ?? 0, drivers_in_region: inRegion.get(Number(s.id)) ?? 0,
     })),
   };
 }

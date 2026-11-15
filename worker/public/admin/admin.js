@@ -352,25 +352,83 @@
     api("GET", "/admin/regions").then(function (r) {
       var list = (r.body && r.body.data) || [];
       root.textContent = "";
-      root.appendChild(head("Regions", "The areas where Drop operates.", can("region add") ? h("button", { text: "Add region", on: { click: function () { regionForm(root, null); } } }) : null));
+      root.appendChild(head("Regions", "The areas where Drop operates.", can("region add") ? h("button", { text: "Add region", on: { click: function () { regionForm(root, null, list); } } }) : null));
       var card = h("div", { class: "card" });
       if (!list.length) card.appendChild(h("div", { class: "empty", text: "No regions yet. Add your first operating area." }));
       list.forEach(function (g) {
         var acts = h("div", { class: "acts" });
-        if (can("region edit")) acts.appendChild(h("button", { class: "ghost small", text: "Edit", on: { click: function () { regionForm(root, g); } } }));
+        if (can("region edit")) acts.appendChild(h("button", { class: "ghost small", text: "Edit", on: { click: function () { regionForm(root, g, list.filter(function (x) { return x.id !== g.id; })); } } }));
         if (can("region delete")) acts.appendChild(h("button", { class: "danger small", text: "Delete", on: { click: function () {
           confirmDo("Delete region " + g.name + "?", function () { api("DELETE", "/admin/regions/" + g.id).then(function (x) { toast(x.ok ? "Deleted" : errText(x), !x.ok); if (x.ok) pageRegions(root); }); });
         } } }));
         card.appendChild(h("div", { class: "item" },
           h("div", { class: "main" }, h("div", { class: "t", text: g.name || "Region " + g.id }),
-            h("div", { class: "s", text: g.ride_types + " ride type" + (g.ride_types === 1 ? "" : "s") + " · " + String(g.currency || "NGN").trim() + " · " + g.timezone + " · " + g.distance_unit + (g.coordinates ? " · boundary set" : " · no boundary") }),
+            h("div", { class: "s", text: g.ride_types + " ride type" + (g.ride_types === 1 ? "" : "s") + " · " + String(g.currency || "NGN").trim() + " · " + g.timezone + " · " + g.distance_unit + (g.coordinates ? " · border drawn" : " · no border (covers everywhere)") }),
+            h("div", { class: "s", text: g.drivers + " approved driver" + (g.drivers === 1 ? "" : "s") + " · " + g.drivers_online + " online now · " + g.people + " people in this region" }),
             h("div", { style: "margin-top:8px" }, acts)),
           h("span", { class: "pill " + (g.status ? "on" : ""), text: g.status ? "On" : "Off" })));
       });
       root.appendChild(card);
     });
   }
-  function regionForm(root, g) {
+
+  // ---------- Region border map (Leaflet from cdnjs) ----------
+  function loadLeaflet() {
+    return new Promise(function (resolve, reject) {
+      if (window.L) return resolve(window.L);
+      var css = document.createElement("link"); css.rel = "stylesheet"; css.href = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"; document.head.appendChild(css);
+      var js = document.createElement("script"); js.src = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js";
+      js.onload = function () { resolve(window.L); }; js.onerror = function () { reject(new Error("map")); };
+      document.head.appendChild(js);
+    });
+  }
+  /** Approximate area of a drawn border in km². */
+  function areaKm2(pts) {
+    if (pts.length < 3) return 0;
+    var lat0 = pts.reduce(function (a, p) { return a + p.lat; }, 0) / pts.length, kx = 111.32 * Math.cos(lat0 * Math.PI / 180), ky = 110.57, a = 0;
+    for (var i = 0; i < pts.length; i++) { var p = pts[i], q = pts[(i + 1) % pts.length]; a += (p.lng * kx) * (q.lat * ky) - (q.lng * kx) * (p.lat * ky); }
+    return Math.abs(a) / 2;
+  }
+  /**
+   * A map where the admin taps point after point to draw the region's border. Points can be dragged;
+   * other regions show as grey outlines. state.pts always holds the current border.
+   */
+  function borderMap(box, state, others, onChange) {
+    loadLeaflet().then(function (L) {
+      var has = state.pts.length > 0;
+      var map = L.map(box).setView(has ? [state.pts[0].lat, state.pts[0].lng] : [9.0765, 7.3986], has ? 12 : 6);
+      var street = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(map);
+      var sat = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { maxZoom: 19, attribution: "Esri" });
+      L.control.layers({ "Street": street, "Satellite": sat }, null, { position: "topright" }).addTo(map);
+      others.forEach(function (g) {
+        if (g.coordinates && g.coordinates.length > 2) L.polygon(g.coordinates.map(function (p) { return [p.lat, p.lng]; }), { color: "#888", weight: 2, dashArray: "5 5", fillOpacity: 0.05, interactive: false }).addTo(map).bindTooltip(g.name || "", { permanent: false });
+      });
+      var poly = L.polygon([], { color: "#FC9600", weight: 3, fillOpacity: 0.18, interactive: false }).addTo(map);
+      var handles = [];
+      function ll() { return state.pts.map(function (p) { return [p.lat, p.lng]; }); }
+      function redraw() {
+        poly.setLatLngs(ll());
+        handles.forEach(function (m) { map.removeLayer(m); }); handles = [];
+        state.pts.forEach(function (p, i) {
+          var m = L.marker([p.lat, p.lng], { draggable: true, icon: L.divIcon({ className: "vtx", html: "<span>" + (i + 1) + "</span>", iconSize: [28, 28] }) }).addTo(map);
+          m.on("drag", function (e) { var x = e.target.getLatLng(); state.pts[i] = { lat: x.lat, lng: x.lng }; poly.setLatLngs(ll()); });
+          m.on("dragend", function () { onChange(); });
+          m.on("contextmenu dblclick", function (e) { L.DomEvent.stop(e); state.pts.splice(i, 1); redraw(); });
+          handles.push(m);
+        });
+        onChange();
+      }
+      map.on("click", function (e) { state.pts.push({ lat: Math.round(e.latlng.lat * 1e6) / 1e6, lng: Math.round(e.latlng.lng * 1e6) / 1e6 }); redraw(); });
+      state.undo = function () { state.pts.pop(); redraw(); };
+      state.clear = function () { state.pts = []; redraw(); };
+      state.reload = function (pts) { state.pts = pts; redraw(); if (pts.length) map.fitBounds(poly.getBounds(), { padding: [30, 30] }); };
+      state.goto = function (lat, lng, bounds) { if (bounds) map.fitBounds(bounds); else map.setView([lat, lng], 13); };
+      if (has) { redraw(); map.fitBounds(poly.getBounds(), { padding: [30, 30] }); } else onChange();
+      setTimeout(function () { map.invalidateSize(); }, 200);
+    }).catch(function () { box.textContent = "The map could not load. Check your connection, or type the points in the text box below."; });
+  }
+
+  function regionForm(root, g, others) {
     var pts = (g && g.coordinates || []).map(function (p) { return p.lat + ", " + p.lng; }).join("\n");
     var f = {
       name: text(g && g.name), unit: select([["km", "Kilometres"], ["mile", "Miles"]], g ? g.distance_unit : "km"),
@@ -378,26 +436,56 @@
       status: h("input", { type: "checkbox", checked: g ? g.status : true })
     };
     f.poly.value = pts;
+    others = others || [];
+    var state = { pts: ((g && g.coordinates) || []).map(function (p) { return { lat: Number(p.lat), lng: Number(p.lng) }; }) };
+    var mapBox = h("div", { class: "borderbox", text: "Loading map…" });
+    var mapInfo = h("div", { class: "s", style: "margin-top:6px" });
+    function syncInfo() {
+      f.poly.value = state.pts.map(function (p) { return p.lat + ", " + p.lng; }).join("\n");
+      mapInfo.textContent = state.pts.length ? state.pts.length + " point" + (state.pts.length === 1 ? "" : "s") + (state.pts.length > 2 ? " · about " + areaKm2(state.pts).toFixed(1) + " km²" : " · add at least 3") : "No border drawn yet.";
+    }
+    var search = h("input", { type: "search", placeholder: "Search a city or place" });
+    var mapBar = h("div", { class: "acts", style: "margin:8px 0" }, search,
+      h("button", { class: "ghost small", type: "button", text: "Go", on: { click: function () {
+        var q = search.value.trim(); if (!q) return;
+        fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&q=" + encodeURIComponent(q)).then(function (r) { return r.json(); }).then(function (x) {
+          if (!x.length) return toast("Place not found", true);
+          var b = x[0].boundingbox; if (state.goto) state.goto(Number(x[0].lat), Number(x[0].lon), [[Number(b[0]), Number(b[2])], [Number(b[1]), Number(b[3])]]);
+        }).catch(function () { toast("Search is not available right now", true); });
+      } } }),
+      h("button", { class: "ghost small", type: "button", text: "My location", on: { click: function () {
+        if (!navigator.geolocation) return toast("Location is not available", true);
+        navigator.geolocation.getCurrentPosition(function (p) { if (state.goto) state.goto(p.coords.latitude, p.coords.longitude); }, function () { toast("Allow location in your browser first", true); });
+      } } }),
+      h("button", { class: "ghost small", type: "button", text: "Undo point", on: { click: function () { if (state.undo) state.undo(); } } }),
+      h("button", { class: "danger small", type: "button", text: "Clear border", on: { click: function () { if (state.clear) state.clear(); } } }));
+    f.poly.addEventListener("change", function () {
+      var pts = f.poly.value.split("\n").map(function (x) { return x.trim(); }).filter(Boolean).map(function (l) { var q = l.split(/[ ,]+/); return { lat: Number(q[0]), lng: Number(q[1]) }; });
+      if (pts.every(function (q) { return isFinite(q.lat) && isFinite(q.lng); })) { if (state.reload) state.reload(pts); else state.pts = pts; syncInfo(); }
+    });
     var out = h("p", { class: "msg" });
     root.textContent = "";
     root.appendChild(head(g ? "Edit region" : "Add region", null, h("button", { class: "ghost", text: "Back", on: { click: function () { pageRegions(root); } } })));
     var card = h("div", { class: "card" },
       field("Name", f.name), h("div", { class: "grid2" }, field("Distance unit", f.unit), field("Time zone", f.tz)), field("Currency", f.cur, "Fares in this region are in this currency. Enter the ride type prices in it. Passengers pay from their wallet only when their wallet is in the same currency; otherwise they pay cash."),
-      field("Boundary points (optional)", f.poly, "One point per line as latitude, longitude. At least 3. Drawing the boundary on a map comes with the Google Maps step."),
+      h("div", { class: "f" }, h("label", { class: "f", text: "Region border" }),
+        h("div", { class: "hint", text: "Tap the map to add points around the area, one after another. Drag a point to move it; double-tap or right-click a point to remove it. Passengers and drivers inside this border are asked to switch to this region. With no border the region covers everywhere that is not inside another region." }),
+        mapBar, mapBox, mapInfo,
+        h("details", { style: "margin-top:10px" }, h("summary", { text: "Edit points as text" }), f.poly)),
       h("div", { class: "row" }, h("div", { text: "Region is active" }), h("label", { class: "switch" }, f.status, h("span"))), out);
     var save = h("button", { text: "Save", style: "width:100%;margin-top:14px" });
     save.addEventListener("click", function () {
-      var coords = null, lines = f.poly.value.split("\n").map(function (x) { return x.trim(); }).filter(Boolean);
-      if (lines.length) {
-        coords = lines.map(function (l) { var p = l.split(/[ ,]+/); return { lat: Number(p[0]), lng: Number(p[1]) }; });
-        if (coords.some(function (p) { return !isFinite(p.lat) || !isFinite(p.lng); })) return msg(out, "Each boundary line must be: latitude, longitude.");
-      }
+      var coords = state.pts.length ? state.pts.slice() : null;
+      if (coords && coords.length < 3) return msg(out, "Draw at least 3 points for the border, or clear it.");
       if (!f.name.value.trim()) return msg(out, "Enter a name.");
       save.disabled = true; msg(out, "");
       api(g ? "PUT" : "POST", "/admin/regions" + (g ? "/" + g.id : ""), { name: f.name.value.trim(), distance_unit: f.unit.value, timezone: f.tz.value.trim(), currency: f.cur.value, status: f.status.checked, coordinates: coords })
         .then(function (r) { save.disabled = false; if (r.ok) { toast("Saved"); pageRegions(root); } else msg(out, errText(r)); });
     });
     card.appendChild(save); root.appendChild(card);
+    mapBox.textContent = "";
+    borderMap(mapBox, state, others, syncInfo);
+    syncInfo();
   }
 
   // ---------- Ride options ----------
@@ -1126,7 +1214,7 @@
         var vehicle = [a.vehicle_make, a.vehicle_model, a.vehicle_plate].filter(Boolean).join(" · ");
         box.appendChild(h("div", { class: "item" },
           h("div", { class: "main" }, h("div", { class: "t", text: fullName(a) }),
-            h("div", { class: "s", text: [a.ride_type, vehicle].filter(Boolean).join(" · ") || "No vehicle yet" }),
+            h("div", { class: "s", text: [a.ride_type, a.region ? "Region: " + a.region : null, vehicle].filter(Boolean).join(" · ") || "No vehicle yet" }),
             h("div", { class: "s", text: [a.email, a.contact_number].filter(Boolean).join(" · ") }),
             h("div", { class: "s", text: a.submitted_at ? "Submitted " + new Date(a.submitted_at).toLocaleString() : "Not submitted" }),
             h("div", { style: "margin-top:8px" }, h("button", { class: "ghost small", text: "Open", on: { click: function () { applicationDetail(root, a.id); } } }))),
@@ -1154,7 +1242,7 @@
       var info = h("div", { class: "card" },
         h("div", { class: "bar" }, h("h3", { text: "Application" }), h("span", { class: "pill " + pillFor(d.status), text: APP_STATUS[d.status] || d.status })));
       var rows = [
-        ["Ride type", d.ride_type], ["Date of birth", d.date_of_birth ? String(d.date_of_birth).slice(0, 10) : null], ["Years driving", d.licence_years],
+        ["Ride type", d.ride_type], ["Region", d.region], ["Date of birth", d.date_of_birth ? String(d.date_of_birth).slice(0, 10) : null], ["Years driving", d.licence_years],
         ["Vehicle", [d.vehicle_make, d.vehicle_model, d.vehicle_year, d.vehicle_colour].filter(Boolean).join(" ")], ["Plate", d.vehicle_plate], ["Seats", d.vehicle_seats],
         ["Submitted", d.submitted_at ? new Date(d.submitted_at).toLocaleString() : null], ["Last decision", d.reviewed_at ? new Date(d.reviewed_at).toLocaleString() : null], ["Note to driver", d.review_note]
       ];

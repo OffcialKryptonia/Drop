@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:drop/service/DriverApplicationApi.dart';
 import 'package:drop/drop/widgets/drop_sos_sheet.dart';
 import 'package:drop/components/DropMap.dart';
+import 'package:drop/components/LiveLocation.dart';
+import 'package:drop/components/RegionWatcher.dart';
 import 'package:drop/service/MapConfig.dart';
 import 'package:drop/service/RideApi.dart';
 import 'package:drop/service/ToneService.dart';
@@ -34,7 +36,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
   bool busy = false;
   String? loadError;
   Map<String, dynamic> status = {};
-  StreamSubscription<Position>? _positionSub;
+  late final LiveLocation _live = LiveLocation(onFix: _onFix);
+  final RegionWatcher _region = RegionWatcher();
+  bool _sharing = false; // true while online: only then is the position sent to DROP
   DateTime _lastPing = DateTime.fromMillisecondsSinceEpoch(0);
   Timer? _timer;
   int _secs = 0;
@@ -64,11 +68,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    DriverApplicationApi.driverProfile().then((p) {
-      final k = p['map_icon']?.toString();
-      final n = (p['documents_requested'] as num?)?.toInt() ?? 0;
-      if (mounted) setState(() { if (k != null && k.isNotEmpty) _iconKey = k; _docsRequested = n; });
-    }).catchError((_) {});
+    _loadProfile();
     MapConfig.load().then((c) {
       if (mounted) setState(() {
         mapConfig = c;
@@ -88,7 +88,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
   void dispose() {
     _timer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
-    _positionSub?.cancel();
+    _live.dispose();
     super.dispose();
   }
 
@@ -120,6 +120,29 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     if (mounted) setState(() => loading = false);
   }
 
+  Future<void> _loadProfile() async {
+    try {
+      final p = await DriverApplicationApi.driverProfile();
+      final k = p['map_icon']?.toString();
+      final n = (p['documents_requested'] as num?)?.toInt() ?? 0;
+      if (mounted) setState(() { if (k != null && k.isNotEmpty) _iconKey = k; _docsRequested = n; });
+    } catch (_) {}
+  }
+
+  /// Every real GPS fix (the icon itself glides between fixes, see LiveLocation).
+  void _onFix(Position pos) async {
+    final here = LatLng(pos.latitude, pos.longitude);
+    if (mounted) setState(() { _trackHeading(pos); myPos = here; });
+    _toneIfArrived(here);
+    if (mounted) _region.check(context, here, onSwitched: () { _load(); _pollRides(); _loadProfile(); });
+    if (!_sharing) return;
+    if (DateTime.now().difference(_lastPing).inSeconds < (active != null ? 5 : 20)) return;
+    _lastPing = DateTime.now();
+    try {
+      await DriverApplicationApi.pingLocation(pos.latitude, pos.longitude);
+    } catch (_) {}
+  }
+
   /// Puts the driver on the map as soon as the phone knows where it is (only if location is already allowed).
   Future<void> _locateMe() async {
     try {
@@ -130,6 +153,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
       if (!mounted) return;
       setState(() => myPos = LatLng(pos.latitude, pos.longitude));
       _map.animateTo(myPos!, zoom: 17);
+      _live.start(seed: myPos); // the icon follows the phone from now on, online or not
     } catch (_) {}
   }
 
@@ -154,7 +178,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
   }
 
   RouteSnap? get _mySnap {
-    final me = myPos;
+    final me = _live.point ?? myPos;
     if (me == null) return null;
     final s = RouteGeometry.snap(_routeFull, me);
     return s != null && s.meters < 80 ? s : null;
@@ -167,7 +191,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
   }
 
   /// The vehicle sits exactly on the route line when it is close to it.
-  LatLng? get _vehiclePoint => _mySnap?.point ?? myPos;
+  LatLng? get _vehiclePoint => _mySnap?.point ?? _live.point ?? myPos;
 
   /// Loads the road line: to the pickup while on the way, then pickup -> drop-off.
   void _syncRoute() {
@@ -217,7 +241,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
       }
     }
     final v = _vehiclePoint;
-    if (v != null) out.add(DropMarker(id: 'me', title: 'You', color: Colors.blue, point: v, iconKey: _iconKey, heading: _heading));
+    if (v != null) out.add(DropMarker(id: 'me', title: 'You', color: Colors.blue, point: v, iconKey: _iconKey, heading: _live.running ? _live.heading : _heading));
     return out;
   }
 
@@ -235,23 +259,14 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     return true;
   }
 
-  /// Foreground location only: the stream runs while the app is open and the driver is online.
+  /// Foreground location only: while the driver is online and the app is open, the position is sent to DROP.
   void _startSharing() {
-    if (_positionSub != null) return;
-    _positionSub = Geolocator.getPositionStream(locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 15)).listen((pos) async {
-      if (mounted) setState(() { _trackHeading(pos); myPos = LatLng(pos.latitude, pos.longitude); });
-      _toneIfArrived(LatLng(pos.latitude, pos.longitude));
-      if (DateTime.now().difference(_lastPing).inSeconds < (active != null ? 5 : 20)) return;
-      _lastPing = DateTime.now();
-      try {
-        await DriverApplicationApi.pingLocation(pos.latitude, pos.longitude);
-      } catch (_) {}
-    }, onError: (_) {});
+    _sharing = true;
+    _live.start(seed: myPos);
   }
 
   void _stopSharing() {
-    _positionSub?.cancel();
-    _positionSub = null;
+    _sharing = false;
   }
 
   /// Flips the switch at once and confirms with the server in the background; undoes it with a message if refused.
@@ -599,16 +614,18 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
                   Positioned.fill(
                     child: !mapLoaded
                         ? const ColoredBox(color: Color(0xFFEFEFEF))
-                        : DropMap(
-                            provider: mapConfig.provider,
-                            tileUrl: mapConfig.tileUrl,
-                            styleUrl: mapConfig.styleUrl,
-                            attribution: mapConfig.attribution,
-                            initialCenter: myPos ?? const LatLng(9.0765, 7.3986),
-                            controller: _map,
-                            markers: _markers,
-                            routePoints: _route,
-                          ),
+                        : AnimatedBuilder(
+                            animation: _live,
+                            builder: (_, __) => DropMap(
+                              provider: mapConfig.provider,
+                              tileUrl: mapConfig.tileUrl,
+                              styleUrl: mapConfig.styleUrl,
+                              attribution: mapConfig.attribution,
+                              initialCenter: myPos ?? const LatLng(9.0765, 7.3986),
+                              controller: _map,
+                              markers: _markers,
+                              routePoints: _route,
+                            )),
                   ),
                   SafeArea(child: Padding(padding: const EdgeInsets.all(12), child: Column(mainAxisSize: MainAxisSize.min, children: [_topBar(), if (_docsRequested > 0) _docsBanner()]))),
                   Align(alignment: Alignment.bottomCenter, child: SafeArea(top: false, child: _bottomPanel())),
