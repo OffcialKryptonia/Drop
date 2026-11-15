@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../manage_imports.dart';
 import '../screens/DriverApplicationScreen.dart';
+import '../service/PushService.dart';
 import '../service/DriverApplicationApi.dart' show DriverApplicationApi;
 
 Widget dotIndicator(list, i) {
@@ -515,23 +516,13 @@ oneSignalSettings() async {
     pushAppId = cfg['app_id']?.toString();
   } catch (_) {}
   if (pushAppId == null || pushAppId.isEmpty) return;
-  await Permission.notification.request();
-  OneSignal.Debug.setLogLevel(OSLogLevel.verbose);
-  OneSignal.Debug.setAlertLevel(OSLogLevel.none);
-  OneSignal.consentRequired(false);
-
-  OneSignal.initialize(pushAppId);
-
-  OneSignal.Notifications.addForegroundWillDisplayListener((event) {
-    event.preventDefault();
-    event.notification.display();
-  });
-
-  saveOneSignalPlayerId();
-  if (appStore.isLoggedIn) {
-    updatePlayerId();
-  }
-  OneSignal.Notifications.addClickListener((notification) async {
+  PushService.start(
+    pushAppId,
+    onRegistered: (id) async {
+      await sharedPref.setString(PLAYER_ID, id);
+      if (appStore.isLoggedIn) updatePlayerId(); // the phone's id can arrive after sign-in
+    },
+    onClick: (notification) async {
     final data = notification.notification.additionalData ?? {};
     // A document request or application decision opens the driver application page.
     if (data['type'] == 'documents' || data['type'] == 'application') {
@@ -555,7 +546,9 @@ oneSignalSettings() async {
         launchScreen(getContext, RideDetailScreen(orderId: notId), isNewTask: true);
       }
     }
-  });
+    },
+  );
+  if (appStore.isLoggedIn) updatePlayerId();
 }
 
 Widget chatCallWidget(IconData icon, {String? uid}) {
@@ -619,15 +612,9 @@ bool isDistanceMoreThan100Meters({
   return distanceInMeters > 100;
 }
 
+/// Called after sign-in/sign-up: saves the phone's push id as soon as it is real.
 Future<void> saveOneSignalPlayerId() async {
-  // await OneSignal.shared.getDeviceState().then((value) async {
-  // });
-  OneSignal.User.pushSubscription.addObserver((state) async {
-    if (OneSignal.User.pushSubscription.id.validate().isNotEmpty) {
-      await sharedPref.setString(PLAYER_ID, OneSignal.User.pushSubscription.id.validate());
-      if (appStore.isLoggedIn) updatePlayerId(); // the phone's id can arrive after sign-in
-    }
-  });
+  PushService.syncId();
 }
 
 Future<void> exportedLog({required String logMessage, required String file_name}) async {

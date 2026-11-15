@@ -21,6 +21,7 @@ import '../service/DriverApplicationApi.dart' show ApiFailure, DriverApplication
 import '../service/RouteLineApi.dart';
 import '../service/MapConfig.dart';
 import '../service/RideApi.dart';
+import '../service/PushService.dart';
 import '../service/ToneService.dart';
 import '../utils/Colors.dart';
 
@@ -92,6 +93,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _start();
+    PushService.askPermission(); // the person is signed in here, so this is a good moment to ask
     _checkTransfers();
     _transferTimer = Timer.periodic(const Duration(seconds: 25), (_) => _checkTransfers());
   }
