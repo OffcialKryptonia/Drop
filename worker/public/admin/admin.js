@@ -97,6 +97,7 @@
     { id: "driver-applications", label: "Driver applications", group: "People", perm: "driver_application list", render: pageDriverApplications },
     { id: "ride-types", label: "Ride types", group: "Operations", perm: "service list", render: pageRideTypes },
     { id: "maps", label: "Maps", group: "Operations", perm: "map_settings list", render: pageMaps },
+    { id: "push", label: "Push notifications", group: "System", perm: "push_settings list", render: pagePush },
     { id: "regions", label: "Regions", group: "Operations", perm: "region list", render: pageRegions },
     { id: "ride-options", label: "Ride options", group: "Operations", perm: "service_option list", render: pageOptions },
     { id: "payment-methods", label: "Payment methods", group: "Financial", perm: "payment_gateway list", render: pagePayments },
@@ -342,6 +343,45 @@
         });
       });
       card.appendChild(save);
+      root.appendChild(card);
+    });
+  }
+
+
+  // ---------- Push notifications (OneSignal) ----------
+  function pagePush(root) {
+    loading(root);
+    api("GET", "/admin/push-settings").then(function (r) {
+      var d = (r.body || {}).data;
+      root.textContent = "";
+      root.appendChild(head("Push notifications", "Alerts on people's phones, such as a document request or an application decision. Uses OneSignal."));
+      if (!r.ok || !d) { root.appendChild(h("p", { class: "msg", text: errText(r) })); return; }
+      root.appendChild(h("div", { class: "card" },
+        h("div", { class: "t", text: d.app_id && d.key_set ? "Push is switched on" : "Push is not set up yet" }),
+        h("p", { class: "muted", text: "App ID: " + (d.app_id || "not set") + " · REST key: " + (d.key_set ? "saved (ends " + d.key_last4 + ")" : "not set") + " · Phones registered: " + d.devices }),
+        d.app_id && d.key_set ? null : h("p", { class: "muted", text: "In OneSignal: create an app for DROP (Settings, Keys and IDs), connect Firebase for Android, then paste the App ID and the REST API Key below. The key is stored encrypted and is never shown again." })));
+      var appId = text(d.app_id || "", "OneSignal App ID"), key = h("input", { type: "password", placeholder: d.key_set ? "Saved. Paste a new key only to replace it." : "OneSignal REST API Key", autocomplete: "off" });
+      var out = h("p", { class: "msg" });
+      var card = h("div", { class: "card" }, field("OneSignal App ID", appId), field("REST API Key", key));
+      if (can("push_settings edit")) {
+        var save = h("button", { text: "Save", class: "small", style: "margin-top:10px" });
+        save.addEventListener("click", function () {
+          var body = {}; if (appId.value.trim()) body.app_id = appId.value.trim(); if (key.value.trim()) body.rest_key = key.value.trim();
+          if (!body.app_id && !body.rest_key) return msg(out, "Enter the App ID or the REST key.");
+          save.disabled = true;
+          api("PUT", "/admin/push-settings", body).then(function (x) { save.disabled = false; if (x.ok) { toast("Saved"); pagePush(root); } else msg(out, errText(x)); });
+        });
+        card.appendChild(save);
+        var email = h("input", { type: "email", placeholder: "Email of someone with the new app installed" });
+        var test = h("button", { class: "ghost small", text: "Send test", style: "margin-top:10px" });
+        test.addEventListener("click", function () {
+          if (!email.value.trim()) return msg(out, "Enter an email to send the test to.");
+          test.disabled = true;
+          api("POST", "/admin/push-settings/test", { email: email.value.trim() }).then(function (x) { test.disabled = false; msg(out, x.ok ? x.body.message : errText(x)); });
+        });
+        card.appendChild(h("div", { style: "margin-top:18px" }, field("Send a test notification", email), test));
+      }
+      card.appendChild(out);
       root.appendChild(card);
     });
   }

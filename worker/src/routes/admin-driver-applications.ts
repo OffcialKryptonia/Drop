@@ -5,6 +5,7 @@ import { audit, guard } from "../lib/permissions";
 import { readBody, validationFailed } from "../lib/legacy";
 import { EDITABLE, documentsFor } from "../lib/driver-application";
 import { serveFile } from "./driver-application";
+import { pushLater, sendPush } from "../lib/push";
 
 export const adminDriverApplicationRoutes = new Hono<AppEnv>();
 type C = Context<AppEnv>;
@@ -114,6 +115,12 @@ adminDriverApplicationRoutes.post("/admin/driver-applications/:id/request-docume
       [id, d.document_id, p.data.note ?? null, c.get("user").id]);
   }
   await audit(c, "driver_documents_requested", String(id), { document_ids: wanted.map((d) => Number(d.document_id)), note: p.data.note ?? null });
+  const names = wanted.map((d) => d.name as string);
+  pushLater(c, sendPush(db, c.env, [id], {
+    title: "DROP needs a document from you",
+    body: (names.length === 1 ? `Please upload your ${names[0]}.` : `Please upload: ${names.join(", ")}.`) + (p.data.note ? ` ${p.data.note}` : ""),
+    data: { type: "documents" },
+  }));
   return c.json({ message: `Asked the driver to upload ${wanted.length} document${wanted.length === 1 ? "" : "s"}.`, requested: wanted.map((d) => ({ document_id: Number(d.document_id), name: d.name })) });
 });
 
@@ -185,6 +192,14 @@ adminDriverApplicationRoutes.post("/admin/driver-applications/:id/review", ...gu
       [id, next, admin, action === "approve" || action === "reinstate" || action === "start_review" ? null : note ?? null]);
     await audit(c, `driver_${action}`, String(id), { from: prof.status, to: next, note: note ?? null });
     await db.query("commit");
+    const said: Record<string, string> = {
+      approve: "You are approved. Switch to driver mode from the menu to start earning.",
+      reject: `Your application was not approved.${note ? " " + note : ""}`,
+      needs_changes: `Your application needs changes.${note ? " " + note : ""}`,
+      suspend: "Driver mode is suspended. Please contact DROP support.",
+      reinstate: "Driver mode is back on.",
+    };
+    if (said[action]) pushLater(c, sendPush(db, c.env, [id], { title: "DROP driver application", body: said[action], data: { type: "application" } }));
     return c.json({ message: "Saved", status: next });
   } catch (e) {
     await db.query("rollback").catch(() => undefined);

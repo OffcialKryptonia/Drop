@@ -4,6 +4,8 @@ import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 
 import '../manage_imports.dart';
+import '../screens/DriverApplicationScreen.dart';
+import '../service/DriverApplicationApi.dart' show DriverApplicationApi;
 
 Widget dotIndicator(list, i) {
   return SizedBox(
@@ -506,12 +508,19 @@ void scheduleFunction({required DateTime scheduledTime, required Function functi
 }
 
 oneSignalSettings() async {
+  // The OneSignal app id comes from DROP's server (Admin, Push notifications), so push can be switched on without a new build.
+  String? pushAppId;
+  try {
+    final cfg = await DriverApplicationApi.getJson('push/config').timeout(const Duration(seconds: 8));
+    pushAppId = cfg['app_id']?.toString();
+  } catch (_) {}
+  if (pushAppId == null || pushAppId.isEmpty) return;
   await Permission.notification.request();
   OneSignal.Debug.setLogLevel(OSLogLevel.verbose);
   OneSignal.Debug.setAlertLevel(OSLogLevel.none);
   OneSignal.consentRequired(false);
 
-  OneSignal.initialize(mOneSignalAppIdRider);
+  OneSignal.initialize(pushAppId);
 
   OneSignal.Notifications.addForegroundWillDisplayListener((event) {
     event.preventDefault();
@@ -523,9 +532,15 @@ oneSignalSettings() async {
     updatePlayerId();
   }
   OneSignal.Notifications.addClickListener((notification) async {
-    var notId = notification.notification.additionalData!["id"];
-    log("$notId---" + notification.notification.additionalData!['type'].toString());
-    var notType = notification.notification.additionalData!['type'];
+    final data = notification.notification.additionalData ?? {};
+    // A document request or application decision opens the driver application page.
+    if (data['type'] == 'documents' || data['type'] == 'application') {
+      launchScreen(getContext, const DriverApplicationScreen());
+      return;
+    }
+    var notId = data["id"];
+    log("$notId---" + data['type'].toString());
+    var notType = data['type'];
     if (notId != null) {
       if (notId.toString().contains('CHAT')) {
         LoginResponse user = await getUserDetail(userId: int.parse(notId.toString().replaceAll("CHAT_", "")));
@@ -608,7 +623,10 @@ Future<void> saveOneSignalPlayerId() async {
   // await OneSignal.shared.getDeviceState().then((value) async {
   // });
   OneSignal.User.pushSubscription.addObserver((state) async {
-    if (OneSignal.User.pushSubscription.id.validate().isNotEmpty) await sharedPref.setString(PLAYER_ID, OneSignal.User.pushSubscription.id.validate());
+    if (OneSignal.User.pushSubscription.id.validate().isNotEmpty) {
+      await sharedPref.setString(PLAYER_ID, OneSignal.User.pushSubscription.id.validate());
+      if (appStore.isLoggedIn) updatePlayerId(); // the phone's id can arrive after sign-in
+    }
   });
 }
 
