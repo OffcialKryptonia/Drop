@@ -6,6 +6,7 @@ import 'package:drop/components/DropMap.dart';
 import 'package:drop/service/MapConfig.dart';
 import 'package:drop/service/RideApi.dart';
 import 'package:drop/service/ToneService.dart';
+import 'package:drop/screens/DriverApplicationScreen.dart';
 import 'package:drop/service/RouteLineApi.dart';
 import 'package:drop/components/RouteGeometry.dart';
 import 'package:flutter/material.dart';
@@ -53,6 +54,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
   LatLng? _prevPos;
   double _heading = 0;
   String _iconKey = 'car';
+  int _docsRequested = 0;
 
   bool get online => status['is_online'] == true;
   Map<String, dynamic> get wallet => Map<String, dynamic>.from((status['wallet'] ?? {}) as Map);
@@ -64,7 +66,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     WidgetsBinding.instance.addObserver(this);
     DriverApplicationApi.driverProfile().then((p) {
       final k = p['map_icon']?.toString();
-      if (k != null && k.isNotEmpty && mounted) setState(() => _iconKey = k);
+      final n = (p['documents_requested'] as num?)?.toInt() ?? 0;
+      if (mounted) setState(() { if (k != null && k.isNotEmpty) _iconKey = k; _docsRequested = n; });
     }).catchError((_) {});
     MapConfig.load().then((c) {
       if (mounted) setState(() {
@@ -607,11 +610,38 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
                             routePoints: _route,
                           ),
                   ),
-                  SafeArea(child: Padding(padding: const EdgeInsets.all(12), child: _topBar())),
+                  SafeArea(child: Padding(padding: const EdgeInsets.all(12), child: Column(mainAxisSize: MainAxisSize.min, children: [_topBar(), if (_docsRequested > 0) _docsBanner()]))),
                   Align(alignment: Alignment.bottomCenter, child: SafeArea(top: false, child: _bottomPanel())),
                 ]),
     );
   }
+
+  /// DROP asked this driver to upload documents: tapping opens the page where they can.
+  Widget _docsBanner() => Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Material(
+          color: Colors.deepOrange,
+          borderRadius: BorderRadius.circular(12),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () async {
+              await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const DriverApplicationScreen()));
+              DriverApplicationApi.driverProfile().then((p) {
+                if (mounted) setState(() => _docsRequested = (p['documents_requested'] as num?)?.toInt() ?? 0);
+              }).catchError((_) {});
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              child: Row(children: [
+                const Icon(Icons.upload_file, color: Colors.white),
+                const SizedBox(width: 10),
+                Expanded(child: Text(_docsRequested == 1 ? 'DROP needs 1 document from you. Tap to upload.' : 'DROP needs $_docsRequested documents from you. Tap to upload.', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600))),
+                const Icon(Icons.chevron_right, color: Colors.white),
+              ]),
+            ),
+          ),
+        ),
+      );
 
   Widget _errorView() => Center(
         child: Padding(

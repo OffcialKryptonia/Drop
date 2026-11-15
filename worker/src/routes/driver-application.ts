@@ -58,15 +58,18 @@ driverApplicationRoutes.get("/driver/application", ...mw, async (c) => {
   const db = c.get("db");
   const p = await profileOf(c);
   const u = (await db.query("select first_name, last_name, (profile_image_key is not null) as has_photo from app.users where id = $1", [me.id])).rows[0];
+  const reqs = new Map<number, string | null>((await db.query("select document_id, note from app.driver_document_requests where driver_id = $1", [me.id])).rows.map((x) => [Number(x.document_id), x.note]));
   if (!p) return c.json({ status: "not_started", editable: true, personal: { first_name: u.first_name, last_name: u.last_name, has_photo: u.has_photo }, vehicle: null, documents: [] });
   return c.json({
     status: p.status,
     editable: EDITABLE.includes(p.status),
+    documents_requested: reqs.size,
     review_note: p.review_note,
     submitted_at: p.submitted_at,
     personal: { first_name: u.first_name, last_name: u.last_name, date_of_birth: p.date_of_birth ? String(p.date_of_birth).slice(0, 10) : null, has_photo: u.has_photo },
     vehicle: { service_id: p.service_id, licence_years: p.licence_years, make: p.vehicle_make, model: p.vehicle_model, year: p.vehicle_year, colour: p.vehicle_colour, plate: p.vehicle_plate, seats: p.vehicle_seats },
     documents: (await documentsFor(db, me.id, p.service_id)).map((d) => ({
+      requested: reqs.has(Number(d.document_id)), request_note: reqs.get(Number(d.document_id)) ?? null,
       document_id: d.document_id, name: d.name, required: d.required, has_expiry_date: d.has_expiry_date, uploaded: d.uploaded,
       expire_date: d.expire_date ? String(d.expire_date).slice(0, 10) : null,
       status: !d.uploaded ? "missing" : d.is_verified === 1 ? "approved" : d.is_verified === 2 ? "rejected" : "pending", note: d.admin_note,
@@ -169,7 +172,11 @@ driverApplicationRoutes.put("/driver/documents/:documentId", ...mw, async (c) =>
     if (!validDate(expire) || new Date(expire) <= new Date()) return validationFailed(c, { expire_date: ["Enter the expiry date (it must be in the future)."] });
   }
   const existing = await profileOf(c);
-  const locked = editableOrReply(c, existing);
+  // A locked application still accepts a document the admin has asked for.
+  const asked = existing && !EDITABLE.includes(existing.status)
+    ? (await db.query("select 1 from app.driver_document_requests where driver_id = $1 and document_id = $2", [c.get("user").id, docId])).rowCount! > 0
+    : false;
+  const locked = asked ? null : editableOrReply(c, existing);
   if (locked) return locked;
   const up = await readUpload(c);
   if ("reply" in up) return up.reply;
@@ -186,6 +193,7 @@ driverApplicationRoutes.put("/driver/documents/:documentId", ...mw, async (c) =>
      on conflict (driver_id, document_id) do update set file_key = excluded.file_key, content_type = excluded.content_type,
        size_bytes = excluded.size_bytes, uploaded_at = now(), expire_date = excluded.expire_date, is_verified = 0, admin_note = null, reminder_sent = false`,
     [me.id, docId, key, up.kind.type, up.bytes.length, doc.has_expiry_date ? expire : null]);
+  await db.query("delete from app.driver_document_requests where driver_id = $1 and document_id = $2", [me.id, docId]);
   if (old) await c.env.DOCS!.delete(old).catch(() => undefined);
   return c.json({ message: "Saved" });
 });

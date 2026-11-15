@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { AppEnv } from "../env";
 import { audit, guard } from "../lib/permissions";
 import { readBody, validationFailed } from "../lib/legacy";
-import { documentsFor } from "../lib/driver-application";
+import { EDITABLE, documentsFor } from "../lib/driver-application";
 import { serveFile } from "./driver-application";
 
 export const adminDriverApplicationRoutes = new Hono<AppEnv>();
@@ -47,10 +47,12 @@ adminDriverApplicationRoutes.get("/admin/driver-applications/:id", ...guard("dri
             p.*, (select name from app.services s where s.id = p.service_id) as ride_type
        from app.driver_profiles p join app.users u on u.id = p.user_id where p.user_id = $1 and u.deleted_at is null`, [id])).rows[0];
   if (!r) return notFound(c);
+  const reqs = new Map<number, string | null>((await db.query("select document_id, note from app.driver_document_requests where driver_id = $1", [id])).rows.map((x) => [Number(x.document_id), x.note]));
   const documents = (await documentsFor(db, id, r.service_id)).map((d) => ({
     document_id: d.document_id, name: d.name, required: d.required, has_expiry_date: d.has_expiry_date, uploaded: d.uploaded,
     expire_date: d.expire_date ? String(d.expire_date).slice(0, 10) : null, uploaded_at: d.uploaded_at, content_type: d.content_type,
     status: !d.uploaded ? "missing" : d.is_verified === 1 ? "approved" : d.is_verified === 2 ? "rejected" : "pending", note: d.admin_note,
+    requested: reqs.has(Number(d.document_id)), request_note: reqs.get(Number(d.document_id)) ?? null,
   }));
   const { user_id, ...profile } = r;
   return c.json({ data: { ...profile, id, documents } });
@@ -80,6 +82,46 @@ adminDriverApplicationRoutes.put("/admin/driver-applications/:id/documents/:docI
   if (!r.rowCount) return notFound(c);
   await audit(c, "driver_document", String(id), { document_id: docId, status: p.data.status });
   return c.json({ message: "Saved" });
+});
+
+/**
+ * Ask a driver to upload (or replace) documents, without changing their approval. Works for any driver whose
+ * application is locked (approved, suspended, in review). With no document_ids it asks for every required document
+ * that is missing, rejected or expired.
+ */
+adminDriverApplicationRoutes.post("/admin/driver-applications/:id/request-documents", ...guard("driver_application edit"), async (c) => {
+  const id = idParam(c); if (!id) return notFound(c);
+  const p = z.object({ document_ids: z.array(z.coerce.number().int().positive()).max(50).optional(), note: z.string().trim().max(300).optional() }).safeParse(await readBody(c));
+  if (!p.success) return validationFailed(c, { document_ids: ["Choose the documents to ask for."] });
+  const db = c.get("db");
+  const prof = (await db.query("select status, service_id from app.driver_profiles where user_id = $1", [id])).rows[0];
+  if (!prof) return notFound(c);
+  if (EDITABLE.includes(prof.status)) return c.json({ message: "This driver can already edit their application. Use Ask for changes instead.", code: "already_editable", status: 409 }, 409);
+
+  const docs = await documentsFor(db, id, prof.service_id);
+  const today = new Date();
+  const wanted = p.data.document_ids?.length
+    ? docs.filter((d) => p.data.document_ids!.includes(Number(d.document_id)))
+    : docs.filter((d) => d.required && (!d.uploaded || d.is_verified === 2 || (d.has_expiry_date && d.expire_date && new Date(d.expire_date) <= today)));
+  if (!wanted.length) return c.json({ message: p.data.document_ids?.length ? "Those documents do not apply to this driver." : "Nothing is missing: every required document is uploaded.", code: "nothing_to_request", status: 409 }, 409);
+
+  for (const d of wanted) {
+    await db.query(
+      `insert into app.driver_document_requests (driver_id, document_id, note, requested_by) values ($1,$2,$3,$4)
+       on conflict (driver_id, document_id) do update set note = excluded.note, requested_by = excluded.requested_by, requested_at = now()`,
+      [id, d.document_id, p.data.note ?? null, c.get("user").id]);
+  }
+  await audit(c, "driver_documents_requested", String(id), { document_ids: wanted.map((d) => Number(d.document_id)), note: p.data.note ?? null });
+  return c.json({ message: `Asked the driver to upload ${wanted.length} document${wanted.length === 1 ? "" : "s"}.`, requested: wanted.map((d) => ({ document_id: Number(d.document_id), name: d.name })) });
+});
+
+/** Withdraw a request. */
+adminDriverApplicationRoutes.delete("/admin/driver-applications/:id/request-documents/:docId", ...guard("driver_application edit"), async (c) => {
+  const id = idParam(c), docId = idParam(c, "docId"); if (!id || !docId) return notFound(c);
+  const r = await c.get("db").query("delete from app.driver_document_requests where driver_id = $1 and document_id = $2", [id, docId]);
+  if (!r.rowCount) return notFound(c);
+  await audit(c, "driver_documents_request_cancelled", String(id), { document_id: docId });
+  return c.json({ message: "Request withdrawn" });
 });
 
 const FROM: Record<string, string[]> = {
