@@ -100,6 +100,7 @@ app.route("/api", walletTransferRoutes);
 app.route("/api", adminTransferRoutes);
 app.route("/api", adminPayMyRideRoutes);
 app.route("/api", adminUserRoutes);
+app.route("/api", adminRideRoutes);
 app.route("/api", adminDocumentRoutes);
 app.route("/api", payoutRoutes);
 app.route("/api", adminPayoutRoutes);
