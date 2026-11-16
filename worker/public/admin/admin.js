@@ -1662,13 +1662,16 @@
       });
     }
 
+    var historyQuery = text("", "Search by ride ID or passenger");
+    var historyStatus = select([["", "All statuses"], ["searching", "Searching"], ["accepted", "Driver assigned"], ["arrived", "Driver arrived"], ["in_progress", "In progress"], ["completed", "Completed"], ["cancelled", "Cancelled"], ["expired", "Expired"]], "");
     function loadHistory() {
       historyBox.textContent = ""; historyBox.appendChild(h("p", { class: "muted", text: "Loading Admin bookings…" }));
-      api("GET", "/admin/order-rides").then(function (r) {
+      var qs = "?q=" + encodeURIComponent(historyQuery.value.trim()) + "&status=" + encodeURIComponent(historyStatus.value);
+      api("GET", "/admin/order-rides" + qs).then(function (r) {
         historyBox.textContent = "";
         if (!r.ok) { historyBox.appendChild(h("p", { class: "msg err", text: errText(r) })); return; }
         var list = (r.body && r.body.data) || [];
-        if (!list.length) { historyBox.appendChild(h("div", { class: "empty", text: "No Admin-created rides yet." })); return; }
+        if (!list.length) { historyBox.appendChild(h("div", { class: "empty", text: "No matching Admin-created rides." })); return; }
         list.forEach(function (ride) {
           var status = String(ride.status || "").replace(/_/g, " ");
           var card = h("div", { class: "item or-history" },
@@ -1688,7 +1691,13 @@
         });
       });
     }
-    root.appendChild(h("div", { class: "card" }, head("Admin booking history", "Recent rides booked on behalf of Drop passengers.", h("button", { class: "ghost small", text: "Refresh", on: { click: loadHistory } })), historyBox));
+    var historySearch = h("button", { class: "small", text: "Search", on: { click: loadHistory } });
+    historyQuery.addEventListener("keydown", function (e) { if (e.key === "Enter") loadHistory(); });
+    historyStatus.addEventListener("change", loadHistory);
+    root.appendChild(h("div", { class: "card" },
+      head("Admin booking history", "Recent rides booked on behalf of Drop passengers.", h("button", { class: "ghost small", text: "Refresh", on: { click: loadHistory } })),
+      h("div", { class: "grid2" }, field("Search", historyQuery), field("Status", historyStatus)),
+      historySearch, historyBox));
     loadHistory();
   }
 
