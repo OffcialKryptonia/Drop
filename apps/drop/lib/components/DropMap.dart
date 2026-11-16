@@ -209,8 +209,8 @@ class _DropMapState extends State<DropMap> {
       _mbCircles = await map.annotations.createCircleAnnotationManager();
       _mbPoints = await map.annotations.createPointAnnotationManager();
       if (_mapboxStyleReady) await _syncMapboxAnnotations();
-    } catch (_) {
-      if (mounted) setState(() { _mapboxFailed = true; _mapboxFailureReason = 'Annotation setup failed: $e'; });
+    } catch (e) {
+      if (mounted) setState(() { _mapboxFailed = true; _mapboxFailureReason = 'Mapbox initialization failed: $e'; });
     }
   }
 
