@@ -81,6 +81,7 @@ class _DropMapState extends State<DropMap> {
   mb.PolygonAnnotationManager? _mbPolygons;
   bool _mapboxStyleReady = false;
   bool _mapboxFailed = false;
+  String? _mapboxFailureReason;
   final fm.MapController _osm = fm.MapController();
   bool _osmReady = false;
   Timer? _idle;
@@ -124,6 +125,7 @@ class _DropMapState extends State<DropMap> {
     }
     if (old.provider != widget.provider) {
       _mapboxFailed = false;
+      _mapboxFailureReason = null;
       _mapboxStyleReady = false;
     }
   }
@@ -204,7 +206,7 @@ class _DropMapState extends State<DropMap> {
     if (_isGoogle) return _googleMap();
     if (_isMapLibre) return _mapLibreMap();
     if (widget.provider == 'mapbox') {
-      if (_mapboxFailed) return Stack(children: [_mapLibreMap(), const Positioned(left: 8, right: 8, bottom: 8, child: Material(color: Colors.black87, borderRadius: BorderRadius.all(Radius.circular(8)), child: Padding(padding: EdgeInsets.all(8), child: Text('Mapbox is unavailable. Showing OpenStreetMap instead.', style: TextStyle(color: Colors.white, fontSize: 12)))))]);
+      if (_mapboxFailed) return Stack(children: [_mapLibreMap(), Positioned(left: 8, right: 8, bottom: 8, child: Material(color: Colors.black87, borderRadius: const BorderRadius.all(Radius.circular(8)), child: Padding(padding: const EdgeInsets.all(8), child: Text('Mapbox is unavailable. Showing OpenStreetMap instead. ${_mapboxFailureReason ?? ''}', style: const TextStyle(color: Colors.white, fontSize: 12)))))]);
       return _mapboxMap();
     }
     return _osmMap();
@@ -213,13 +215,17 @@ class _DropMapState extends State<DropMap> {
   Future<void> _onMapboxCreated(mb.MapboxMap map) async {
     _mapbox = map;
     try {
+      await map.setCamera(mb.CameraOptions(
+        center: mb.Point(coordinates: mb.Position(widget.initialCenter.longitude, widget.initialCenter.latitude)),
+        zoom: widget.initialZoom,
+      ));
       _mbPolygons = await map.annotations.createPolygonAnnotationManager();
       _mbLines = await map.annotations.createPolylineAnnotationManager();
       _mbCircles = await map.annotations.createCircleAnnotationManager();
       _mbPoints = await map.annotations.createPointAnnotationManager();
       if (_mapboxStyleReady) await _syncMapboxAnnotations();
-    } catch (_) {
-      if (mounted) setState(() => _mapboxFailed = true);
+    } catch (e) {
+      if (mounted) setState(() { _mapboxFailed = true; _mapboxFailureReason = 'Mapbox initialization failed: $e'; });
     }
   }
 
@@ -283,10 +289,6 @@ class _DropMapState extends State<DropMap> {
   Widget _mapboxMap() => mb.MapWidget(
     key: ValueKey('drop-mapbox-${widget.mapboxStyleUri}'),
     styleUri: widget.mapboxStyleUri,
-    viewport: mb.CameraViewportState(
-      center: mb.Point(coordinates: mb.Position(widget.initialCenter.longitude, widget.initialCenter.latitude)),
-      zoom: widget.initialZoom,
-    ),
     onMapCreated: _onMapboxCreated,
     onStyleLoadedListener: (_) { _mapboxStyleReady = true; _syncMapboxAnnotations(); },
     onCameraChangeListener: (event) {
@@ -294,7 +296,7 @@ class _DropMapState extends State<DropMap> {
       _moved(ll.LatLng(c.lat.toDouble(), c.lng.toDouble()));
     },
     onMapIdleListener: (_) => widget.onIdle?.call(_center),
-    onMapLoadErrorListener: (_) { if (mounted) setState(() => _mapboxFailed = true); },
+    onMapLoadErrorListener: (event) { if (mounted) setState(() { _mapboxFailed = true; _mapboxFailureReason = event.toString(); }); },
   );
 
   String _colorHex(Color color) => '#${color.toARGB32().toRadixString(16).padLeft(8, '0').substring(2)}';
