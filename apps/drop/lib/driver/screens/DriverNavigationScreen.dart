@@ -41,6 +41,7 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
   int _maneuverIndex = 0;
   bool _loading = true;
   bool _rerouting = false;
+  bool _voiceEnabled = true;
   String? _error;
   DateTime _lastRouteRequest = DateTime.fromMillisecondsSinceEpoch(0);
   DateTime _lastCameraUpdate = DateTime.fromMillisecondsSinceEpoch(0);
@@ -120,7 +121,7 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
   }
 
   Future<void> _speakUpcomingTurn(LatLng here, DriverDirectionsRoute route) async {
-    if (route.maneuvers.isEmpty || _maneuverIndex + 1 >= route.maneuvers.length) return;
+    if (!_voiceEnabled || route.maneuvers.isEmpty || _maneuverIndex + 1 >= route.maneuvers.length) return;
     final nextIndex = _maneuverIndex + 1;
     final meters = _distanceToNextTurn(here, route);
     final threshold = meters <= 160 ? 160 : meters <= 550 ? 550 : 0;
@@ -251,7 +252,8 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
                       if (_error != null)
                         Padding(padding: const EdgeInsets.only(top: 6), child: Text(_error!, style: const TextStyle(color: Color(0xFFFFB4AB), fontSize: 13))),
                     ])),
-                    IconButton(onPressed: () => Navigator.of(context).maybePop(), icon: const Icon(Icons.close, color: Colors.white)),
+                    IconButton(tooltip: _voiceEnabled ? 'Mute voice guidance' : 'Enable voice guidance', onPressed: () { setState(() => _voiceEnabled = !_voiceEnabled); if (!_voiceEnabled) _tts.stop(); }, icon: Icon(_voiceEnabled ? Icons.volume_up : Icons.volume_off, color: Colors.white)),
+                    IconButton(tooltip: 'Exit navigation', onPressed: () => Navigator.of(context).maybePop(), icon: const Icon(Icons.close, color: Colors.white)),
                   ]),
                 ),
               ),
