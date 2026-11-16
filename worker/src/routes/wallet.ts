@@ -6,6 +6,7 @@ import { requireAuth } from "../auth/middleware";
 import { loadGateway, loadSecrets } from "../lib/gateway-creds";
 import { createStaticAccount, normalizePhone, pocketfiBase, resolveCustomers, verifySignature } from "../lib/pocketfi";
 import { postToWallet, toMoney } from "../lib/wallet";
+import { pushLater, pushWalletCredit } from "../lib/push";
 import { applyTransferToPayLink } from "../lib/paymyride";
 import { getGlobalMinBalance } from "../lib/commission";
 
@@ -159,6 +160,7 @@ walletRoutes.post("/webhooks/pocketfi", withDb, async (c) => {
     await db.query("update app.payment_events set status = 'credited', user_id = $2 where id = $1", [eventId, owner.user_id]);
     if (owner.wallet_kind === "rider") await applyTransferToPayLink(db, owner.user_id, amount);
     await db.query("commit");
+    pushLater(c, pushWalletCredit(db, c.env, Number(owner.user_id), amount, "was added to your wallet."));
     return c.json({ message: "success" });
   } catch (e) {
     await db.query("rollback").catch(() => undefined);

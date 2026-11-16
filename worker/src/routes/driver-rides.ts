@@ -6,6 +6,7 @@ import { computeCommission, type CommissionRule } from "../lib/commission";
 import { driverOnlineBlock, requireApprovedDriver } from "../lib/roles";
 import { getSetting } from "../lib/driver-application";
 import { completeRide } from "../lib/ride-settlement";
+import { pushLater, pushRideEvent } from "../lib/push";
 
 export const driverRideRoutes = new Hono<AppEnv>();
 type C = Context<AppEnv>;
@@ -106,7 +107,7 @@ driverRideRoutes.post("/driver/requests/:id/accept", ...mw, async (c) => {
     await db.query("begin");
     const r = await db.query(
       `update app.ride_requests r set status = 'accepted', driver_id = $1, accepted_at = now()
-        where r.id = $2 and r.status = 'searching' and r.expires_at > now() and r.rider_id <> $1 and r.service_id = $3 returning r.id`,
+        where r.id = $2 and r.status = 'searching' and r.expires_at > now() and r.rider_id <> $1 and r.service_id = $3 returning r.id, r.rider_id`,
       [me.id, id, u.service_id],
     );
     if (!r.rowCount) {
@@ -115,6 +116,7 @@ driverRideRoutes.post("/driver/requests/:id/accept", ...mw, async (c) => {
     }
     await db.query("update app.users set is_available = false where id = $1", [me.id]);
     await db.query("commit");
+    pushLater(c, pushRideEvent(db, c.env, Number(r.rows[0].rider_id), "accepted", id));
   } catch (e) {
     await db.query("rollback").catch(() => {});
     if ((e as { code?: string }).code === "23505") return c.json({ status: false, code: "already_on_ride", message: "Finish your current ride first." }, 409);
@@ -142,10 +144,11 @@ const idOf = (c: C) => Number(c.req.param("id"));
 /** Move a ride one step forward, only if it is this driver's and in the expected state. */
 async function step(c: C, from: string, to: string, stamp: string) {
   const r = await c.get("db").query(
-    `update app.ride_requests set status = $3, ${stamp} = now() where id = $1 and driver_id = $2 and status = $4 returning id`,
+    `update app.ride_requests set status = $3, ${stamp} = now() where id = $1 and driver_id = $2 and status = $4 returning id, rider_id`,
     [idOf(c), c.get("user").id, to, from],
   );
   if (!r.rowCount) return notYours(c);
+  if (to === "arrived" || to === "in_progress") pushLater(c, pushRideEvent(c.get("db"), c.env, Number(r.rows[0].rider_id), to === "arrived" ? "arrived" : "started", idOf(c)));
   const active = await activeOf(c);
   return c.json({ status: true, data: active ? request(active, await ruleOf(c, active.service_id)) : null });
 }
@@ -159,6 +162,7 @@ driverRideRoutes.post("/driver/rides/:id/start", ...mw, (c) => step(c, "arrived"
 driverRideRoutes.post("/driver/rides/:id/complete", ...mw, async (c) => {
   const done = await completeRide(c.get("db"), idOf(c), c.get("user").id);
   if (!done) return notYours(c);
+  pushLater(c, pushRideEvent(c.get("db"), c.env, Number(done.rider_id), "completed", Number(done.id), { fare: done.fare, currency: done.currency }));
   return c.json({ status: true, data: { id: Number(done.id), status: done.status, fare: Number(done.fare), commission: Number(done.commission), earning: Math.round((Number(done.fare) - Number(done.commission)) * 100) / 100, paid_with: done.paid_with, collect_cash: done.paid_with === "cash" } });
 });
 
@@ -171,13 +175,14 @@ driverRideRoutes.post("/driver/rides/:id/cancel", ...mw, async (c) => {
     const r = await db.query(
       `update app.ride_requests set status = 'searching', driver_id = null, accepted_at = null, arrived_at = null,
               expires_at = now() + make_interval(secs => $3::int)
-        where id = $1 and driver_id = $2 and status in ('accepted', 'arrived') returning id`,
+        where id = $1 and driver_id = $2 and status in ('accepted', 'arrived') returning id, rider_id`,
       [idOf(c), me, await getSetting(db, "ride_request_expiry_seconds", 120)],
     );
     if (!r.rowCount) { await db.query("rollback"); return notYours(c); }
     await db.query("insert into app.ride_request_declines (request_id, driver_id) values ($1, $2) on conflict do nothing", [idOf(c), me]);
     await db.query("update app.users set is_available = true where id = $1", [me]);
     await db.query("commit");
+    pushLater(c, pushRideEvent(db, c.env, Number(r.rows[0].rider_id), "driver_cancelled", idOf(c)));
   } catch (e) { await db.query("rollback").catch(() => {}); throw e; }
   return c.json({ status: true });
 });

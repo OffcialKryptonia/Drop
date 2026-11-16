@@ -10,6 +10,7 @@ import { quoteRide, listRideTypes } from "../lib/ride-pricing";
 import { computeFare } from "../lib/fare";
 import { getSetting } from "../lib/driver-application";
 import { chargeCancellationFee } from "../lib/ride-settlement";
+import { pushLater, pushNearbyDrivers, pushRideEvent } from "../lib/push";
 
 export const rideRoutes = new Hono<AppEnv>();
 type C = Context<AppEnv>;
@@ -157,6 +158,7 @@ rideRoutes.post("/ride/request", ...mw, async (c) => {
         q.distance, q.region.distance_unit, q.route.duration_minutes, q.route.source, fare.total, JSON.stringify(fare), JSON.stringify(options), p.data.payment_method, expiry, q.region.currency],
     );
     const row = (await db.query(`${RIDE_SELECT} where r.id = $1`, [ins.rows[0].id])).rows[0];
+    pushLater(c, pushNearbyDrivers(db, c.env, Number(ins.rows[0].id)));
     return c.json({ status: true, data: ride(row) }, 201);
   } catch (e) {
     if ((e as { code?: string }).code === "23505") return c.json({ status: false, code: "already_has_ride", message: "You already have a ride in progress." }, 409);
@@ -193,6 +195,7 @@ rideRoutes.post("/ride/cancel", ...mw, async (c) => {
     fee = await chargeCancellationFee(db, { ...before, status_before: before.status }, await getSetting(db, "ride_cancel_grace_seconds", 120));
     // The driver who had accepted is free to take other requests again.
     await db.query("update app.users set is_available = true where id = $1 and is_online", [r.rows[0].driver_id]);
+    pushLater(c, pushRideEvent(db, c.env, Number(r.rows[0].driver_id), "rider_cancelled", Number(r.rows[0].id)));
   }
   return c.json({ status: true, id: Number(r.rows[0].id), cancellation_fee: fee });
 });
