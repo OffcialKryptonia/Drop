@@ -140,6 +140,8 @@ class _DropMapState extends State<DropMap> {
         _google?.animateCamera(g.CameraUpdate.newLatLngZoom(g.LatLng(p.latitude, p.longitude), zoom));
       } else if (_isMapLibre && _mapLibreReady) {
         _mapLibre?.animateCamera(ml.CameraUpdate.newLatLngZoom(ml.LatLng(p.latitude, p.longitude), zoom));
+      } else if (widget.provider == 'mapbox' && _mapboxFailed && _mapLibreReady) {
+        _mapLibre?.animateCamera(ml.CameraUpdate.newLatLngZoom(ml.LatLng(p.latitude, p.longitude), zoom));
       } else if (widget.provider == 'mapbox' && !_mapboxFailed && _mapbox != null) {
         _mapbox!.flyTo(mb.CameraOptions(center: mb.Point(coordinates: mb.Position(p.longitude, p.latitude)), zoom: zoom), mb.MapAnimationOptions(duration: 650, startDelay: 0));
       } else if (_osmReady) {
@@ -162,6 +164,8 @@ class _DropMapState extends State<DropMap> {
       if (_isGoogle) {
         _google?.animateCamera(g.CameraUpdate.newLatLngBounds(g.LatLngBounds(southwest: g.LatLng(south, west), northeast: g.LatLng(north, east)), 80));
       } else if (_isMapLibre && _mapLibreReady) {
+        _mapLibre?.animateCamera(ml.CameraUpdate.newLatLngZoom(ml.LatLng(center.latitude, center.longitude), zoom));
+      } else if (widget.provider == 'mapbox' && _mapboxFailed && _mapLibreReady) {
         _mapLibre?.animateCamera(ml.CameraUpdate.newLatLngZoom(ml.LatLng(center.latitude, center.longitude), zoom));
       } else if (widget.provider == 'mapbox' && !_mapboxFailed && _mapbox != null) {
         _mapbox!.flyTo(mb.CameraOptions(center: mb.Point(coordinates: mb.Position(center.longitude, center.latitude)), zoom: zoom), mb.MapAnimationOptions(duration: 650, startDelay: 0));

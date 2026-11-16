@@ -137,7 +137,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     final here = LatLng(pos.latitude, pos.longitude);
     if (mounted) setState(() { _trackHeading(pos); myPos = here; });
     _toneIfArrived(here);
-    if (mounted) _region.check(context, here, onSwitched: () { _load(); _pollRides(); _loadProfile(); });
+    if (mounted) _region.check(context, here, onSwitched: () { _load(); _pollRides(); _loadProfile(); }, regionBoundaries: regionBoundaries, useMapboxGeometry: mapConfig.isMapbox && mapConfig.mapboxRegionBorderingEnabled, accuracyMeters: pos.accuracy);
     if (!_sharing) return;
     if (DateTime.now().difference(_lastPing).inSeconds < (active != null ? 5 : 20)) return;
     _lastPing = DateTime.now();
