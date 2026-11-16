@@ -6,6 +6,7 @@ import 'package:drop/components/RouteGeometry.dart';
 import 'package:drop/driver/services/DriverDirectionsApi.dart';
 import 'package:drop/service/MapConfig.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 
@@ -31,6 +32,8 @@ class DriverNavigationScreen extends StatefulWidget {
 
 class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
   final DropMapController _map = DropMapController();
+  final FlutterTts _tts = FlutterTts();
+  final Set<String> _spokenCues = <String>{};
   StreamSubscription<Position>? _positionSubscription;
   LatLng? _position;
   DriverDirectionsRoute? _route;
@@ -45,13 +48,26 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
   void initState() {
     super.initState();
     _position = widget.initialPosition;
+    _configureVoice();
     _loadRoute();
     _startLocation();
+  }
+
+  Future<void> _configureVoice() async {
+    try {
+      await _tts.setLanguage('en-NG');
+      await _tts.setSpeechRate(0.46);
+      await _tts.setVolume(1.0);
+      await _tts.setPitch(1.0);
+    } catch (_) {
+      try { await _tts.setLanguage('en-US'); } catch (_) {}
+    }
   }
 
   @override
   void dispose() {
     _positionSubscription?.cancel();
+    _tts.stop();
     super.dispose();
   }
 
@@ -91,6 +107,32 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
     }
   }
 
+  double _distanceToNextTurn(LatLng here, DriverDirectionsRoute route) {
+    final nextIndex = (_maneuverIndex + 1).clamp(0, route.maneuvers.length - 1);
+    return RouteGeometry.meters(here, route.maneuvers[nextIndex].location);
+  }
+
+  double _routeBearing(LatLng here, DriverDirectionsRoute route) {
+    final snap = RouteGeometry.snap(route.points, here);
+    final next = ((snap?.index ?? 0) + 1).clamp(0, route.points.length - 1);
+    return RouteGeometry.bearing(here, route.points[next]);
+  }
+
+  Future<void> _speakUpcomingTurn(LatLng here, DriverDirectionsRoute route) async {
+    if (route.maneuvers.isEmpty || _maneuverIndex + 1 >= route.maneuvers.length) return;
+    final nextIndex = _maneuverIndex + 1;
+    final meters = _distanceToNextTurn(here, route);
+    final threshold = meters <= 160 ? 160 : meters <= 550 ? 550 : 0;
+    if (threshold == 0) return;
+    final cue = '$nextIndex-$threshold';
+    if (!_spokenCues.add(cue)) return;
+    final instruction = route.maneuvers[nextIndex].instruction;
+    try {
+      await _tts.stop();
+      await _tts.speak(threshold == 550 ? 'In 500 metres, $instruction' : 'In 150 metres, $instruction');
+    } catch (_) {}
+  }
+
   void _onPosition(Position position) {
     final here = LatLng(position.latitude, position.longitude);
     if (!mounted) return;
@@ -109,16 +151,29 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
         next++;
       }
       if (next != _maneuverIndex) setState(() => _maneuverIndex = next);
+      _speakUpcomingTurn(here, route);
     }
     if (DateTime.now().difference(_lastCameraUpdate).inMilliseconds > 900) {
       _lastCameraUpdate = DateTime.now();
-      _map.animateTo(here, zoom: 17);
+      final heading = position.speed >= 2 && position.heading >= 0 ? position.heading : _routeBearing(here, route);
+      _map.followDriver(here, zoom: 17.5, bearing: heading, pitch: 55);
     }
   }
 
   String _distance(double meters) => meters >= 1000
       ? '${(meters / 1000).toStringAsFixed(1)} km'
       : '${meters.round()} m';
+
+  double get _remainingMeters {
+    final route = _route;
+    if (route == null || _position == null) return route?.distanceMeters ?? 0;
+    final snap = RouteGeometry.snap(route.points, _position!);
+    if (snap == null) return route.distanceMeters;
+    final points = RouteGeometry.remaining(route.points, snap);
+    var total = 0.0;
+    for (var i = 0; i < points.length - 1; i++) { total += RouteGeometry.meters(points[i], points[i + 1]); }
+    return total;
+  }
 
   String _duration(double seconds) {
     final minutes = (seconds / 60).round();
@@ -186,6 +241,8 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
                         style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w800)),
                       if (maneuver != null && maneuver.roadName.isNotEmpty)
                         Padding(padding: const EdgeInsets.only(top: 4), child: Text(maneuver.roadName, style: const TextStyle(color: Colors.white70, fontSize: 14))),
+                      if (route != null && route.maneuvers.length > _maneuverIndex + 1 && _position != null)
+                        Padding(padding: const EdgeInsets.only(top: 5), child: Text('Next turn in ${_distance(_distanceToNextTurn(_position!, route))}', style: const TextStyle(color: Color(0xFF8CC8FF), fontSize: 14, fontWeight: FontWeight.w700))),
                       if (_error != null)
                         Padding(padding: const EdgeInsets.only(top: 6), child: Text(_error!, style: const TextStyle(color: Color(0xFFFFB4AB), fontSize: 13))),
                     ])),
@@ -210,8 +267,8 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
                   child: Column(mainAxisSize: MainAxisSize.min, children: [
                     Row(children: [
-                      Expanded(child: _metric('DISTANCE LEFT', route == null ? '—' : _distance(route.distanceMeters), Icons.route)),
-                      Expanded(child: _metric('EST. TIME', route == null ? '—' : _duration(route.durationSeconds), Icons.schedule)),
+                      Expanded(child: _metric('DISTANCE LEFT', route == null ? '—' : _distance(_remainingMeters), Icons.route)),
+                      Expanded(child: _metric('EST. TIME', route == null ? '—' : _duration(route.durationSeconds * (_remainingMeters / (route.distanceMeters <= 0 ? 1 : route.distanceMeters)).clamp(0.0, 1.0)), Icons.schedule)),
                       Expanded(child: _metric('DESTINATION', widget.destinationLabel, Icons.flag_outlined)),
                     ]),
                     const SizedBox(height: 14),
