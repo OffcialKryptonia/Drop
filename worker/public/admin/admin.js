@@ -1641,7 +1641,7 @@
         "Estimated fare: " + selectedFare.textContent
       ].join("\n");
       if (!window.confirm("Confirm this Admin-initiated booking?\n\n" + summary)) return;
-      var key = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now()) + "-" + Math.random().toString(16).slice(2);
+      var key = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) { var r = Math.random() * 16 | 0; return (c === "x" ? r : (r & 3 | 8)).toString(16); });
       var button = resultBox.querySelector("button"); if (button) button.disabled = true;
       api("POST", "/admin/order-ride", {
         passenger_id: state.passenger.id, pickup: state.pickup, dropoff: state.dropoff,
@@ -1676,7 +1676,7 @@
               h("div", { class: "t", text: "Ride #" + ride.id + " · " + status }),
               h("div", { class: "s", text: (ride.passenger && ride.passenger.name || "Passenger") + " · " + (ride.passenger && ride.passenger.phone || "") + " · " + (ride.service && ride.service.name || "") }),
               h("div", { class: "s", text: (ride.pickup && ride.pickup.address || "") + " → " + (ride.dropoff && ride.dropoff.address || "") }),
-              h("div", { class: "s", text: naira(ride.fare) + " " + (ride.currency || "") + " · " + ride.payment_method + " · " + (ride.driver && ride.driver.name || "Awaiting driver") + " · " + new Date(ride.created_at).toLocaleString() })));
+              h("div", { class: "s", text: naira(ride.fare) + " " + (ride.currency || "") + " · " + ride.payment_method + " · " + (ride.driver && ride.driver.name || "Awaiting driver") + " · Booked by " + (ride.admin && ride.admin.name || "Admin") + " · " + new Date(ride.created_at).toLocaleString() })));
           if (["searching", "accepted", "arrived"].indexOf(ride.status) >= 0 && can("ride_order edit")) {
             card.appendChild(h("button", { class: "danger small", text: "Cancel", on: { click: function () {
               var reason = window.prompt("Why is this Admin booking being cancelled?");
