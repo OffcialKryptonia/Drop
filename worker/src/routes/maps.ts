@@ -66,12 +66,15 @@ mapRoutes.put("/admin/map-settings", ...guard("map_settings edit"), async (c) =>
     await db.query("delete from app.settings where key = 'mapbox_public_token_verified_at'");
     token = tokenInput;
   }
-  const enabled = p.data.mapbox_enabled ?? current.mapbox_enabled;
-  const regionEnabled = p.data.mapbox_region_bordering_enabled ?? current.mapbox_region_bordering_enabled;
+  const credentialsChanged = tokenInput === null || Boolean(tokenInput?.trim());
+  const styleChanged = p.data.mapbox_style_uri !== undefined && p.data.mapbox_style_uri.trim() !== current.mapbox_style_uri;
+  if (styleChanged) await db.query("delete from app.settings where key = 'mapbox_public_token_verified_at'");
+  const enabled = credentialsChanged || styleChanged ? false : (p.data.mapbox_enabled ?? current.mapbox_enabled);
+  const regionEnabled = credentialsChanged || styleChanged ? false : (p.data.mapbox_region_bordering_enabled ?? current.mapbox_region_bordering_enabled);
   const verified = token && (await db.query("select 1 from app.settings where key = 'mapbox_public_token_verified_at'")).rowCount;
   if (enabled && (!token || !verified)) return c.json({ message: "Save a Mapbox public token and pass Test Connection before enabling Mapbox." }, 422);
   if (regionEnabled && !enabled) return c.json({ message: "Enable and validate Mapbox before enabling Mapbox region bordering." }, 422);
-  if (p.data.provider === "mapbox" && !enabled) return c.json({ message: "Enable and validate Mapbox before selecting it." }, 422);
+  if (p.data.provider === "mapbox" && !enabled && !credentialsChanged && !styleChanged) return c.json({ message: "Enable and validate Mapbox before selecting it." }, 422);
 
   await saveSetting(db, "map_provider", p.data.provider);
   await saveSetting(db, "osm_tile_url", p.data.osm_tile_url);
@@ -80,7 +83,7 @@ mapRoutes.put("/admin/map-settings", ...guard("map_settings edit"), async (c) =>
   await saveSetting(db, "mapbox_region_bordering_enabled", regionEnabled ? "true" : "false");
   await saveSetting(db, "mapbox_style_uri", p.data.mapbox_style_uri?.trim() || DEFAULT_MAPBOX_STYLE);
   await db.query("delete from app.settings where key = 'google_maps_failed_at'");
-  await audit(c, "map_settings", "map_provider", { provider: p.data.provider, mapbox_enabled: enabled, mapbox_region_bordering_enabled: regionEnabled, token_changed: tokenInput !== undefined && tokenInput !== "" });
+  await audit(c, "map_settings", "map_provider", { provider: p.data.provider, mapbox_enabled: enabled, mapbox_region_bordering_enabled: regionEnabled, token_changed: credentialsChanged, style_changed: styleChanged });
   return c.json({ message: "Saved" });
 });
 

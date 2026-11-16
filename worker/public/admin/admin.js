@@ -679,7 +679,7 @@
             api("POST", "/admin/map-settings/test", {}).then(function (x) { msg(out, x.ok ? ((x.body || {}).message || "Connection successful.") : errText(x), !x.ok); if (x.ok) pageMaps(root); });
           } } }),
           h("button", { class: "ghost small", text: "Remove saved token", on: { click: function () {
-            confirmDo("Remove the saved Mapbox public token?", function () { saveMapSettings({ mapbox_public_token: null }); });
+            confirmDo("Remove the saved Mapbox public token?", function () { token.value = ""; saveMapSettings({ mapbox_public_token: null }); });
           } } })),
         tokenStatus,
         field("Mapbox style URI (optional)", style, "Default: mapbox://styles/mapbox/streets-v12. You may use a Mapbox Studio style."),
@@ -687,7 +687,7 @@
         h("p", { class: "muted", text: "When enabled, existing service-region polygons are rendered by Mapbox when Mapbox is the selected map provider. Region membership, ride eligibility and switching remain controlled by the Worker/PostGIS backend." }));
       function saveMapSettings(extra) {
         var body = Object.assign({ provider: provider.value, osm_tile_url: tiles.value.trim(), osm_routing_url: routing.value.trim(), mapbox_enabled: enabled.checked, mapbox_region_bordering_enabled: borders.checked, mapbox_style_uri: style.value.trim() }, extra || {});
-        if (token.value.trim()) body.mapbox_public_token = token.value.trim();
+        if (!Object.prototype.hasOwnProperty.call(extra || {}, "mapbox_public_token") && token.value.trim()) body.mapbox_public_token = token.value.trim();
         api("PUT", "/admin/map-settings", body).then(function (x) { if (x.ok) { toast("Saved"); pageMaps(root); } else msg(out, errText(x)); });
       }
       if (!d.encryption_configured) card.appendChild(h("p", { class: "msg", text: "Configure SETTINGS_ENCRYPTION_KEY (32+ characters) in the Cloudflare Worker before saving Mapbox credentials." }));

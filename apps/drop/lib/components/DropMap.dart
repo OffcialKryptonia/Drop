@@ -140,7 +140,7 @@ class _DropMapState extends State<DropMap> {
         _google?.animateCamera(g.CameraUpdate.newLatLngZoom(g.LatLng(p.latitude, p.longitude), zoom));
       } else if (_isMapLibre && _mapLibreReady) {
         _mapLibre?.animateCamera(ml.CameraUpdate.newLatLngZoom(ml.LatLng(p.latitude, p.longitude), zoom));
-      } else if (widget.provider == 'mapbox' && _mapbox != null) {
+      } else if (widget.provider == 'mapbox' && !_mapboxFailed && _mapbox != null) {
         _mapbox!.flyTo(mb.CameraOptions(center: mb.Point(coordinates: mb.Position(p.longitude, p.latitude)), zoom: zoom), mb.MapAnimationOptions(duration: 650, startDelay: 0));
       } else if (_osmReady) {
         _osm.move(p, zoom);
@@ -150,10 +150,10 @@ class _DropMapState extends State<DropMap> {
 
   void _fit(List<ll.LatLng> points) {
     if (points.isEmpty) return;
-    final south = points.map((p) => p.latitude).reduce(math.min);
-    final north = points.map((p) => p.latitude).reduce(math.max);
-    final west = points.map((p) => p.longitude).reduce(math.min);
-    final east = points.map((p) => p.longitude).reduce(math.max);
+    final south = points.map((p) => p.latitude).reduce((a, b) => a < b ? a : b);
+    final north = points.map((p) => p.latitude).reduce((a, b) => a > b ? a : b);
+    final west = points.map((p) => p.longitude).reduce((a, b) => a < b ? a : b);
+    final east = points.map((p) => p.longitude).reduce((a, b) => a > b ? a : b);
     if (south == north && west == east) { _animateTo(points.first, 17); return; }
     final center = ll.LatLng((south + north) / 2, (west + east) / 2);
     final span = math.max((north - south).abs(), (east - west).abs());
@@ -163,7 +163,7 @@ class _DropMapState extends State<DropMap> {
         _google?.animateCamera(g.CameraUpdate.newLatLngBounds(g.LatLngBounds(southwest: g.LatLng(south, west), northeast: g.LatLng(north, east)), 80));
       } else if (_isMapLibre && _mapLibreReady) {
         _mapLibre?.animateCamera(ml.CameraUpdate.newLatLngZoom(ml.LatLng(center.latitude, center.longitude), zoom));
-      } else if (widget.provider == 'mapbox' && _mapbox != null) {
+      } else if (widget.provider == 'mapbox' && !_mapboxFailed && _mapbox != null) {
         _mapbox!.flyTo(mb.CameraOptions(center: mb.Point(coordinates: mb.Position(center.longitude, center.latitude)), zoom: zoom), mb.MapAnimationOptions(duration: 650, startDelay: 0));
       } else if (_osmReady) {
         _osm.fitCamera(fm.CameraFit.bounds(bounds: fm.LatLngBounds(ll.LatLng(south, west), ll.LatLng(north, east)), padding: const EdgeInsets.all(80)));
@@ -175,7 +175,7 @@ class _DropMapState extends State<DropMap> {
     _center = c;
     widget.onMove?.call(c);
     _idle?.cancel();
-    if (!_isGoogle && !_isMapLibre && widget.provider != 'mapbox') _idle = Timer(const Duration(milliseconds: 450), () => widget.onIdle?.call(_center));
+    if (!_isGoogle && !_isMapLibre && (widget.provider != 'mapbox' || _mapboxFailed)) _idle = Timer(const Duration(milliseconds: 450), () => widget.onIdle?.call(_center));
   }
 
   @override

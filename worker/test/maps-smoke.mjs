@@ -32,6 +32,7 @@ try {
   for (const k of ["map_provider", "osm_tile_url", "osm_routing_url", "mapbox_enabled", "mapbox_region_bordering_enabled", "mapbox_style_uri", "mapbox_public_token_enc", "mapbox_public_token_verified_at"]) {
     const o = old.find((x) => x.key === k);
     if (o) await db.query("update app.settings set value = $2::jsonb where key = $1", [k, JSON.stringify(o.value)]);
+    else await db.query("delete from app.settings where key = $1", [k]);
   }
   await db.query("delete from app.settings where key = 'google_maps_failed_at'");
 }
