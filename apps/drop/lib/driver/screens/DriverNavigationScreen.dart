@@ -146,8 +146,10 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
     }
     if (snap != null) {
       var next = _maneuverIndex;
-      while (next < route.maneuvers.length - 1 &&
-          RouteGeometry.meters(here, route.maneuvers[next].location) < 35) {
+      // Maneuver coordinates mark the start of each step. Advance only when
+      // the vehicle reaches the NEXT step, not when it remains near the last one.
+      while (next + 1 < route.maneuvers.length &&
+          RouteGeometry.meters(here, route.maneuvers[next + 1].location) < 35) {
         next++;
       }
       if (next != _maneuverIndex) setState(() => _maneuverIndex = next);
@@ -200,7 +202,7 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
     final route = _route;
     final maneuver = route == null || route.maneuvers.isEmpty
         ? null
-        : route.maneuvers[_maneuverIndex.clamp(0, route.maneuvers.length - 1)];
+        : route.maneuvers[(_maneuverIndex + 1).clamp(0, route.maneuvers.length - 1)];
     return Scaffold(
       backgroundColor: const Color(0xFF101820),
       body: Stack(children: [
