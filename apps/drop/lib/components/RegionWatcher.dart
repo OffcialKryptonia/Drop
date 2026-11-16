@@ -18,7 +18,8 @@ class RegionWatcher {
   bool _hasPolygonSample = false;
   DateTime _lastBoundaryProbe = DateTime.fromMillisecondsSinceEpoch(0);
 
-  /// Call with every position. It only contacts the server after ~700 m of movement or 90 seconds.
+  /// Call with every position. Normal server checks remain throttled at ~700 m / 90 seconds;
+  /// a reliable Mapbox GeoJSON boundary transition may request an earlier server check.
   Future<void> check(
     BuildContext context,
     LatLng here, {

@@ -266,7 +266,7 @@ class _DropMapState extends State<DropMap> {
   Widget _mapboxMap() => mb.MapWidget(
     key: ValueKey('drop-mapbox-${widget.mapboxStyleUri}'),
     styleUri: widget.mapboxStyleUri,
-    cameraOptions: mb.CameraOptions(
+    viewport: mb.CameraViewportState(
       center: mb.Point(coordinates: mb.Position(widget.initialCenter.longitude, widget.initialCenter.latitude)),
       zoom: widget.initialZoom,
     ),
