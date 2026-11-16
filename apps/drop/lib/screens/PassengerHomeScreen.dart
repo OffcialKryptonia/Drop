@@ -20,6 +20,7 @@ import '../drop/widgets/drop_sos_sheet.dart';
 import '../service/DriverApplicationApi.dart' show ApiFailure, DriverApplicationApi;
 import '../service/RouteLineApi.dart';
 import '../service/MapConfig.dart';
+import '../service/RegionApi.dart';
 import '../service/RideApi.dart';
 import '../service/PushService.dart';
 import '../service/ToneService.dart';
@@ -52,6 +53,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
   bool _pickupAuto = true; // the pickup follows the phone until the passenger chooses another From
   DateTime _addrAt = DateTime.fromMillisecondsSinceEpoch(0);
   MapConfig mapConfig = const MapConfig();
+  List<List<LatLng>> regionBoundaries = const [];
   bool mapLoaded = false;
   Timer? _poll;
   Timer? _idle;
@@ -148,6 +150,9 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
 
   Future<void> _start() async {
     mapConfig = await MapConfig.load();
+    if (mapConfig.isMapbox && mapConfig.mapboxRegionBorderingEnabled) {
+      try { regionBoundaries = await RegionApi.boundaries(); } catch (_) { regionBoundaries = const []; }
+    }
     if (mounted) setState(() => mapLoaded = true);
     DropMoney.load();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -727,6 +732,9 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
             provider: mapConfig.provider,
             tileUrl: mapConfig.tileUrl,
             attribution: mapConfig.attribution,
+            mapboxStyleUri: mapConfig.mapboxStyleUri,
+            showRegionBorders: mapConfig.mapboxRegionBorderingEnabled,
+            regionBoundaries: regionBoundaries,
             initialCenter: pickup ?? center,
             controller: _map,
             showMyLocation: false,
