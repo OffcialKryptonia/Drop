@@ -683,7 +683,7 @@
         h("div", { class: "row", style: "gap:8px;flex-wrap:wrap" }, show,
           h("button", { class: "ghost small", text: "Test Connection", on: { click: function () {
             saveMapSettings(null, function () {
-              api("POST", "/admin/map-settings/test", {}).then(function (x) { msg(out, x.ok ? ((x.body || {}).message || "Connection successful.") : errText(x), !x.ok); if (x.ok) pageMaps(root); });
+              api("POST", "/admin/map-settings/test", {}).then(function (x) { msg(out, x.ok ? ((x.body || {}).message || "Connection successful.") : errText(x), x.ok); if (x.ok) pageMaps(root); });
             });
           } } }),
           h("button", { class: "ghost small", text: "Remove saved token", on: { click: function () {
