@@ -7,6 +7,7 @@ on:
   push:
     branches:
       - fix/mapbox-style-camera-follow
+      - feat/driver-navigation-enhanced
 
 permissions:
   contents: write
