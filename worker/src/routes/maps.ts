@@ -74,16 +74,18 @@ mapRoutes.put("/admin/map-settings", ...guard("map_settings edit"), async (c) =>
   const verified = token && (await db.query("select 1 from app.settings where key = 'mapbox_public_token_verified_at'")).rowCount;
   if (enabled && (!token || !verified)) return c.json({ message: "Save a Mapbox public token and pass Test Connection before enabling Mapbox." }, 422);
   if (regionEnabled && !enabled) return c.json({ message: "Enable and validate Mapbox before enabling Mapbox region bordering." }, 422);
-  if (p.data.provider === "mapbox" && !enabled && !credentialsChanged && !styleChanged) return c.json({ message: "Enable and validate Mapbox before selecting it." }, 422);
+  let selectedProvider = p.data.provider;
+  if (!enabled && selectedProvider === "mapbox" && current.provider === "mapbox") selectedProvider = "auto";
+  if (selectedProvider === "mapbox" && !enabled) return c.json({ message: "Enable and validate Mapbox before selecting it." }, 422);
 
-  await saveSetting(db, "map_provider", p.data.provider);
+  await saveSetting(db, "map_provider", selectedProvider);
   await saveSetting(db, "osm_tile_url", p.data.osm_tile_url);
   await saveSetting(db, "osm_routing_url", p.data.osm_routing_url);
   await saveSetting(db, "mapbox_enabled", enabled ? "true" : "false");
   await saveSetting(db, "mapbox_region_bordering_enabled", regionEnabled ? "true" : "false");
   await saveSetting(db, "mapbox_style_uri", p.data.mapbox_style_uri?.trim() || DEFAULT_MAPBOX_STYLE);
   await db.query("delete from app.settings where key = 'google_maps_failed_at'");
-  await audit(c, "map_settings", "map_provider", { provider: p.data.provider, mapbox_enabled: enabled, mapbox_region_bordering_enabled: regionEnabled, token_changed: credentialsChanged, style_changed: styleChanged });
+  await audit(c, "map_settings", "map_provider", { provider: selectedProvider, mapbox_enabled: enabled, mapbox_region_bordering_enabled: regionEnabled, token_changed: credentialsChanged, style_changed: styleChanged });
   return c.json({ message: "Saved" });
 });
 

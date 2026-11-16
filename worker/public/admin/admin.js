@@ -659,7 +659,13 @@
       var tiles = text(d.osm_tile_url, "https://tile.openstreetmap.org/{z}/{x}/{y}.png");
       var routing = text(d.osm_routing_url, "https://router.project-osrm.org");
       var enabled = h("input", { type: "checkbox" }); enabled.checked = !!d.mapbox_enabled;
-      var borders = h("input", { type: "checkbox" }); borders.checked = !!d.mapbox_region_bordering_enabled;
+      var borders = h("input", { type: "checkbox" }); borders.checked = !!d.mapbox_region_bordering_enabled; borders.disabled = !enabled.checked;
+      Array.from(provider.options).forEach(function (option) { if (option.value === "mapbox") option.disabled = !d.mapbox_enabled || !d.mapbox_configured; });
+      enabled.addEventListener("change", function () {
+        borders.disabled = !enabled.checked;
+        if (!enabled.checked) borders.checked = false;
+        Array.from(provider.options).forEach(function (option) { if (option.value === "mapbox") option.disabled = !enabled.checked || !d.mapbox_configured; });
+      });
       var style = text(d.mapbox_style_uri || "mapbox://styles/mapbox/streets-v12");
       var token = h("input", { type: "password", autocomplete: "new-password", placeholder: d.mapbox_public_token_masked || "pk...." });
       var show = h("button", { class: "ghost small", type: "button", text: "Show" });
@@ -676,7 +682,9 @@
         field("Mapbox public access token", token, "Enter a new token to replace the saved token. Leave blank to keep it."),
         h("div", { class: "row", style: "gap:8px;flex-wrap:wrap" }, show,
           h("button", { class: "ghost small", text: "Test Connection", on: { click: function () {
-            api("POST", "/admin/map-settings/test", {}).then(function (x) { msg(out, x.ok ? ((x.body || {}).message || "Connection successful.") : errText(x), !x.ok); if (x.ok) pageMaps(root); });
+            saveMapSettings(null, function () {
+              api("POST", "/admin/map-settings/test", {}).then(function (x) { msg(out, x.ok ? ((x.body || {}).message || "Connection successful.") : errText(x), !x.ok); if (x.ok) pageMaps(root); });
+            });
           } } }),
           h("button", { class: "ghost small", text: "Remove saved token", on: { click: function () {
             confirmDo("Remove the saved Mapbox public token?", function () { token.value = ""; saveMapSettings({ mapbox_public_token: null }); });
@@ -685,10 +693,13 @@
         field("Mapbox style URI (optional)", style, "Default: mapbox://styles/mapbox/streets-v12. You may use a Mapbox Studio style."),
         h("div", { class: "row" }, h("span", { text: "Use Mapbox for Region Bordering" }), h("label", { class: "switch" }, borders, h("span"))),
         h("p", { class: "muted", text: "When enabled, existing service-region polygons are rendered by Mapbox when Mapbox is the selected map provider. Region membership, ride eligibility and switching remain controlled by the Worker/PostGIS backend." }));
-      function saveMapSettings(extra) {
+      function saveMapSettings(extra, after) {
         var body = Object.assign({ provider: provider.value, osm_tile_url: tiles.value.trim(), osm_routing_url: routing.value.trim(), mapbox_enabled: enabled.checked, mapbox_region_bordering_enabled: borders.checked, mapbox_style_uri: style.value.trim() }, extra || {});
         if (!Object.prototype.hasOwnProperty.call(extra || {}, "mapbox_public_token") && token.value.trim()) body.mapbox_public_token = token.value.trim();
-        api("PUT", "/admin/map-settings", body).then(function (x) { if (x.ok) { toast("Saved"); pageMaps(root); } else msg(out, errText(x)); });
+        api("PUT", "/admin/map-settings", body).then(function (x) {
+          if (x.ok) { if (after) after(); else { toast("Saved"); pageMaps(root); } }
+          else msg(out, errText(x));
+        });
       }
       if (!d.encryption_configured) card.appendChild(h("p", { class: "msg", text: "Configure SETTINGS_ENCRYPTION_KEY (32+ characters) in the Cloudflare Worker before saving Mapbox credentials." }));
       if (can("map_settings edit")) {

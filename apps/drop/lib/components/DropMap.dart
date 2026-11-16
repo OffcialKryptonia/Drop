@@ -142,6 +142,8 @@ class _DropMapState extends State<DropMap> {
         _mapLibre?.animateCamera(ml.CameraUpdate.newLatLngZoom(ml.LatLng(p.latitude, p.longitude), zoom));
       } else if (widget.provider == 'mapbox' && _mapboxFailed && _mapLibreReady) {
         _mapLibre?.animateCamera(ml.CameraUpdate.newLatLngZoom(ml.LatLng(p.latitude, p.longitude), zoom));
+      } else if (widget.provider == 'mapbox' && _mapboxFailed && _mapLibreReady) {
+        _mapLibre?.animateCamera(ml.CameraUpdate.newLatLngZoom(ml.LatLng(p.latitude, p.longitude), zoom));
       } else if (widget.provider == 'mapbox' && !_mapboxFailed && _mapbox != null) {
         _mapbox!.flyTo(mb.CameraOptions(center: mb.Point(coordinates: mb.Position(p.longitude, p.latitude)), zoom: zoom), mb.MapAnimationOptions(duration: 650, startDelay: 0));
       } else if (_osmReady) {

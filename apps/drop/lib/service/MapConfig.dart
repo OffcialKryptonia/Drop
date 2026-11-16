@@ -36,6 +36,27 @@ class MapConfig {
   bool get isMapLibre => provider == 'maplibre';
   bool get isMapbox => provider == 'mapbox';
 
+  static MapConfig fromApiResponse(Map body) {
+    final tile = body['osm_tile_url']?.toString() ?? '';
+    final token = body['mapbox_public_token']?.toString() ?? '';
+    final requestedProvider = body['provider']?.toString();
+    final provider = requestedProvider == 'google'
+        ? 'google'
+        : requestedProvider == 'mapbox' && token.startsWith('pk.')
+            ? 'mapbox'
+            : 'maplibre';
+    return MapConfig(
+      provider: provider,
+      tileUrl: tile.contains('{z}') ? tile : defaultTileUrl,
+      attribution: body['attribution']?.toString() ?? '© OpenStreetMap contributors',
+      styleUrl: body['maplibre_style_url']?.toString().startsWith('https://') == true ? body['maplibre_style_url'].toString() : defaultStyleUrl,
+      mapboxStyleUri: body['mapbox_style_uri']?.toString().startsWith('mapbox://styles/') == true ? body['mapbox_style_uri'].toString() : defaultMapboxStyleUri,
+      mapboxPublicToken: provider == 'mapbox' ? token : '',
+      mapboxRegionBorderingEnabled: body['mapbox_region_bordering_enabled'] == true,
+      fallbackReason: body['mapbox_fallback_reason']?.toString(),
+    );
+  }
+
   static MapConfig? _cached;
 
   static Future<MapConfig> load({bool refresh = false}) async {
@@ -45,27 +66,8 @@ class MapConfig {
       final body = jsonDecode(utf8.decode(r.bodyBytes));
       if (r.statusCode == 200 && body is Map) {
         final tile = body['osm_tile_url']?.toString() ?? '';
-        final token = body['mapbox_public_token']?.toString() ?? '';
-        final requestedProvider = body['provider']?.toString();
-        final provider = requestedProvider == 'google'
-            ? 'google'
-            : requestedProvider == 'mapbox' && token.startsWith('pk.')
-                ? 'mapbox'
-                : 'maplibre';
-        if (provider == 'mapbox') {
-          // Mapbox accepts a public token at runtime; no build-time token or source-code secret is needed.
-          MapboxOptions.setAccessToken(token);
-        }
-        _cached = MapConfig(
-          provider: provider,
-          tileUrl: tile.contains('{z}') ? tile : defaultTileUrl,
-          attribution: body['attribution']?.toString() ?? '© OpenStreetMap contributors',
-          styleUrl: body['maplibre_style_url']?.toString().startsWith('https://') == true ? body['maplibre_style_url'].toString() : defaultStyleUrl,
-          mapboxStyleUri: body['mapbox_style_uri']?.toString().startsWith('mapbox://styles/') == true ? body['mapbox_style_uri'].toString() : defaultMapboxStyleUri,
-          mapboxPublicToken: provider == 'mapbox' ? token : '',
-          mapboxRegionBorderingEnabled: body['mapbox_region_bordering_enabled'] == true,
-          fallbackReason: body['mapbox_fallback_reason']?.toString(),
-        );
+        _cached = fromApiResponse(body);
+        if (_cached!.isMapbox) MapboxOptions.setAccessToken(_cached!.mapboxPublicToken);
         final icons = body['vehicle_icons'];
         VehicleIcons.configure(icons is Map ? {for (final e in icons.entries) e.key.toString(): e.value.toString()} : const {});
         return _cached!;
