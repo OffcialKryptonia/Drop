@@ -20,6 +20,8 @@ mapRoutes.get("/map-config", withDb, async (c) => {
   return c.json({
     status: true, provider: s.active, osm_tile_url: s.osm_tile_url,
     attribution: s.active === "mapbox" ? "© Mapbox" : "© OpenStreetMap contributors",
+    mapbox_enabled: s.mapbox_enabled,
+    mapbox_configured: s.mapbox_configured,
     mapbox_style_uri: s.active === "mapbox" ? s.mapbox_style_uri : null,
     mapbox_public_token: s.active === "mapbox" ? s.mapbox_public_token : null,
     mapbox_region_bordering_enabled: s.mapbox_region_bordering_enabled,

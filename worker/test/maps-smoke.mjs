@@ -12,7 +12,9 @@ await db.query("delete from app.settings where key in ('mapbox_public_token_enc'
 await db.query("insert into app.settings (key, value) values ('mapbox_enabled', 'false'::jsonb), ('mapbox_region_bordering_enabled', 'false'::jsonb) on conflict (key) do update set value = excluded.value");
 const body = (o) => ({ provider: "auto", osm_tile_url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png", osm_routing_url: "https://router.project-osrm.org", ...o });
 try {
-  ok("map-config needs no sign-in and has no secrets", (await call("GET", "/map-config")).status === 200);
+  const publicConfig = await call("GET", "/map-config");
+  ok("map-config needs no sign-in and has no secrets", publicConfig.status === 200 && publicConfig.json.mapbox_public_token == null);
+  ok("map-config exposes only safe Mapbox status flags", typeof publicConfig.json.mapbox_enabled === "boolean" && typeof publicConfig.json.mapbox_configured === "boolean");
   const boundaries = await call("GET", "/region/boundaries", A);
   ok("region boundaries are returned as GeoJSON", boundaries.status === 200 && boundaries.json.type === "FeatureCollection");
   ok("admin settings need sign-in", (await call("GET", "/admin/map-settings")).status === 401);
