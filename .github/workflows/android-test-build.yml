@@ -4,6 +4,9 @@ name: Android test build
 # and publishes it as a pre-release you can download straight onto an Android phone.
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - fix/mapbox-style-camera-follow
 
 permissions:
   contents: write
