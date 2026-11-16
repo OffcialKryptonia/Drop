@@ -222,16 +222,16 @@ class _DropMapState extends State<DropMap> {
           if (coordinates.first.lng != coordinates.last.lng || coordinates.first.lat != coordinates.last.lat) coordinates.add(coordinates.first);
           await polygons.create(mb.PolygonAnnotationOptions(
             geometry: mb.Polygon(coordinates: [coordinates]),
-            fillColor: const Color(0xFF1769AA).value,
+            fillColor: const Color(0xFF1769AA).toARGB32(),
             fillOpacity: 0.08,
-            fillOutlineColor: const Color(0xFF1769AA).value,
+            fillOutlineColor: const Color(0xFF1769AA).toARGB32(),
           ));
         }
       }
       if (widget.routePoints.length > 1) {
         await lines.create(mb.PolylineAnnotationOptions(
           geometry: mb.LineString(coordinates: widget.routePoints.map((p) => mb.Position(p.longitude, p.latitude)).toList()),
-          lineColor: const Color(0xFF1A73E8).value,
+          lineColor: const Color(0xFF1A73E8).toARGB32(),
           lineWidth: 5,
           lineOpacity: 0.9,
           lineJoin: mb.LineJoin.ROUND,
@@ -252,8 +252,8 @@ class _DropMapState extends State<DropMap> {
           await circles.create(mb.CircleAnnotationOptions(
             geometry: geometry,
             circleRadius: 8,
-            circleColor: marker.color.value,
-            circleStrokeColor: Colors.white.value,
+            circleColor: marker.color.toARGB32(),
+            circleStrokeColor: Colors.white.toARGB32(),
             circleStrokeWidth: 2,
           ));
         }
@@ -280,7 +280,7 @@ class _DropMapState extends State<DropMap> {
     onMapLoadErrorListener: (_) { if (mounted) setState(() => _mapboxFailed = true); },
   );
 
-  String _colorHex(Color color) => '#${color.value.toRadixString(16).padLeft(8, '0').substring(2)}';
+  String _colorHex(Color color) => '#${color.toARGB32().toRadixString(16).padLeft(8, '0').substring(2)}';
 
   Future<void> _syncMapLibreMarkers() async {
     if (!_mapLibreStyleReady || _mapLibre == null) return;
