@@ -37,9 +37,11 @@ const reopen = (c: C, p: { status: string } | null) =>
 /** What the app needs to draw the registration form: rules, ride types and required documents. All admin data. */
 driverApplicationRoutes.get("/driver/requirements", ...mw, async (c) => {
   const db = c.get("db");
+  // Only the ride types of the applicant's own region. Someone not placed in a region yet sees them all.
+  const region = (await db.query("select region_id from app.users where id = $1", [c.get("user").id])).rows[0]?.region_id ?? null;
   const vehicles = (await db.query(
     `select id, name, category, icon_url, photo_url, capacity from app.services
-      where status = true and deleted_at is null order by sort_order, id`)).rows;
+      where status = true and deleted_at is null and ($1::bigint is null or region_id = $1::bigint) order by sort_order, id`, [region])).rows;
   const documents = (await db.query(
     `select d.id, d.name, d.is_required as required, d.has_expiry_date,
             coalesce((select array_agg(r.service_id order by r.service_id) from app.document_requirements r where r.document_id = d.id), '{}') as service_ids
