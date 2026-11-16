@@ -670,7 +670,7 @@
       var token = h("input", { type: "password", autocomplete: "new-password", placeholder: d.mapbox_public_token_masked || "pk...." });
       var show = h("button", { class: "ghost small", type: "button", text: "Show" });
       show.addEventListener("click", function () { token.type = token.type === "password" ? "text" : "password"; show.textContent = token.type === "password" ? "Show" : "Hide"; });
-      var tokenStatus = h("p", { class: "muted", text: "Public token: " + (d.mapbox_public_token_set ? d.mapbox_public_token_masked + " saved" : "not configured") + " · Connection: " + (d.mapbox_connection_status || "not tested") + (d.mapbox_last_verified_at ? " · Last verified: " + d.mapbox_last_verified_at : "") });
+      var tokenStatus = h("p", { class: "muted", text: "Public token: " + (d.mapbox_public_token_set ? d.mapbox_public_token_masked + " saved" : "not configured") + " · Connection: " + (d.mapbox_connection_status || "not tested") + (d.mapbox_last_verified_at ? " · Last verified: " + d.mapbox_last_verified_at : "") + (d.mapbox_last_updated_at ? " · Last configuration update: " + d.mapbox_last_updated_at : "") });
       var out = h("p", { class: "msg" });
       var card = h("div", { class: "card" },
         field("Map service", provider, "Mapbox can be selected only after its public token passes Test Connection."),

@@ -84,6 +84,7 @@ mapRoutes.put("/admin/map-settings", ...guard("map_settings edit"), async (c) =>
   await saveSetting(db, "mapbox_enabled", enabled ? "true" : "false");
   await saveSetting(db, "mapbox_region_bordering_enabled", regionEnabled ? "true" : "false");
   await saveSetting(db, "mapbox_style_uri", p.data.mapbox_style_uri?.trim() || DEFAULT_MAPBOX_STYLE);
+  await saveSetting(db, "mapbox_config_updated_at", new Date().toISOString());
   await db.query("delete from app.settings where key = 'google_maps_failed_at'");
   await audit(c, "map_settings", "map_provider", { provider: selectedProvider, mapbox_enabled: enabled, mapbox_region_bordering_enabled: regionEnabled, token_changed: credentialsChanged, style_changed: styleChanged });
   return c.json({ message: "Saved" });

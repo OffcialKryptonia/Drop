@@ -61,6 +61,7 @@ export async function mapSettings(db: Client, env: Bindings) {
     mapbox_style_uri: await text(db, "mapbox_style_uri", DEFAULT_MAPBOX_STYLE),
     mapbox_region_bordering_enabled: regionBorderingEnabled,
     mapbox_last_verified_at: verifiedAt || null,
+    mapbox_last_updated_at: await text(db, "mapbox_config_updated_at", ""),
   };
 }
 
