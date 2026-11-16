@@ -65,7 +65,6 @@ class MapConfig {
       final r = await http.get(Uri.parse('${mBaseUrl}map-config'), headers: {'Accept': 'application/json'}).timeout(const Duration(seconds: 8));
       final body = jsonDecode(utf8.decode(r.bodyBytes));
       if (r.statusCode == 200 && body is Map) {
-        final tile = body['osm_tile_url']?.toString() ?? '';
         _cached = fromApiResponse(body);
         if (_cached!.isMapbox) MapboxOptions.setAccessToken(_cached!.mapboxPublicToken);
         final icons = body['vehicle_icons'];

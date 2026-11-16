@@ -1,8 +1,8 @@
 import 'dart:math' as math;
 
-import 'DriverApplicationApi.dart';
-
 import 'package:latlong2/latlong.dart';
+
+import 'DriverApplicationApi.dart';
 
 /// Which DROP region a phone is in, and moving a person's service region when they cross a border.
 class RegionApi {

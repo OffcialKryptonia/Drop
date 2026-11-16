@@ -25,6 +25,7 @@ try {
   ok("admin settings never return the Mapbox token", !("mapbox_public_token" in adminSettings));
   ok("Mapbox cannot be selected before validation", (await call("PUT", "/admin/map-settings", A, body({ provider: "mapbox" }))).status === 422);
   ok("Mapbox test requires a saved token", (await call("POST", "/admin/map-settings/test", A, {})).status === 422);
+  ok("region bordering cannot be enabled while Mapbox is disabled", (await call("PUT", "/admin/map-settings", A, body({ mapbox_enabled: false, mapbox_region_bordering_enabled: true }))).status === 422);
   ok("bad provider rejected", (await call("PUT", "/admin/map-settings", A, body({ provider: "bing" }))).status >= 400);
   ok("tile address must have {z}/{x}/{y}", (await call("PUT", "/admin/map-settings", A, body({ osm_tile_url: "https://example.com/tiles.png" }))).status >= 400);
   ok("insecure address rejected", (await call("PUT", "/admin/map-settings", A, body({ osm_routing_url: "http://router.example.com" }))).status >= 400);

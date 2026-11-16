@@ -701,6 +701,7 @@
           else msg(out, errText(x));
         });
       }
+      if (!can("map_settings edit")) card.querySelectorAll("input,select,button").forEach(function (control) { control.disabled = true; });
       if (!d.encryption_configured) card.appendChild(h("p", { class: "msg", text: "Configure SETTINGS_ENCRYPTION_KEY (32+ characters) in the Cloudflare Worker before saving Mapbox credentials." }));
       if (can("map_settings edit")) {
         var save = h("button", { text: "Save Configuration", class: "small", style: "margin-top:10px" });

@@ -33,4 +33,4 @@ The Mapbox SDK's built-in logo and attribution controls are left enabled. Keep t
 
 ## 6. Build compatibility
 
-The repository's Android test workflow uses Flutter 3.47.x. The selected Mapbox Flutter v2 package requires Dart 3.6 or newer; the app's minimum Dart constraint is set accordingly. No Flutter, Gradle, Android SDK or unrelated package upgrade is included. Changing provider, token or style in Admin does not require an APK rebuild after this integration has been shipped.
+The repository's Android test workflow uses Flutter 3.47.x. The selected Mapbox Flutter v2 package requires Dart 3.4.4 or newer; the app's minimum Dart constraint is set accordingly. No Flutter, Gradle, Android SDK or unrelated package upgrade is included. Changing provider, token or style in Admin does not require an APK rebuild after this integration has been shipped.
