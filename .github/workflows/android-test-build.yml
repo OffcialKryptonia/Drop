@@ -86,18 +86,6 @@ jobs:
           yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses > /dev/null || true
           "$SDKMANAGER" --sdk_root="$SDK_ROOT" "ndk;29.0.13113456"
 
-      - name: Configure optional Mapbox SDK download credential
-        env:
-          MAPBOX_SDK_REGISTRY_TOKEN: ${{ secrets.SDK_REGISTRY_TOKEN }}
-        run: |
-          if [ -n "$MAPBOX_SDK_REGISTRY_TOKEN" ]; then
-            mkdir -p "$HOME/.gradle"
-            printf 'SDK_REGISTRY_TOKEN=%s\\n' "$MAPBOX_SDK_REGISTRY_TOKEN" >> "$HOME/.gradle/gradle.properties"
-            echo "SDK_REGISTRY_TOKEN=$MAPBOX_SDK_REGISTRY_TOKEN" >> "$GITHUB_ENV"
-          else
-            echo "::notice::No SDK_REGISTRY_TOKEN secret supplied. Recent Mapbox SDK releases may not require it; if Gradle requests registry authentication, add a restricted DOWNLOADS:READ token as the SDK_REGISTRY_TOKEN repository secret."
-          fi
-
       - run: flutter pub get
 
       # GitHub's download server sometimes answers 504 when Gradle is fetched, so a failed build is retried (3 attempts).

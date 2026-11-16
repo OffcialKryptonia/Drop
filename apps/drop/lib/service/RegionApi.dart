@@ -1,5 +1,6 @@
-import 'DriverApplicationApi.dart';
 import 'dart:math' as math;
+
+import 'DriverApplicationApi.dart';
 
 import 'package:latlong2/latlong.dart';
 

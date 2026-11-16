@@ -142,8 +142,6 @@ class _DropMapState extends State<DropMap> {
         _mapLibre?.animateCamera(ml.CameraUpdate.newLatLngZoom(ml.LatLng(p.latitude, p.longitude), zoom));
       } else if (widget.provider == 'mapbox' && _mapboxFailed && _mapLibreReady) {
         _mapLibre?.animateCamera(ml.CameraUpdate.newLatLngZoom(ml.LatLng(p.latitude, p.longitude), zoom));
-      } else if (widget.provider == 'mapbox' && _mapboxFailed && _mapLibreReady) {
-        _mapLibre?.animateCamera(ml.CameraUpdate.newLatLngZoom(ml.LatLng(p.latitude, p.longitude), zoom));
       } else if (widget.provider == 'mapbox' && !_mapboxFailed && _mapbox != null) {
         _mapbox!.flyTo(mb.CameraOptions(center: mb.Point(coordinates: mb.Position(p.longitude, p.latitude)), zoom: zoom), mb.MapAnimationOptions(duration: 650, startDelay: 0));
       } else if (_osmReady) {
@@ -198,10 +196,10 @@ class _DropMapState extends State<DropMap> {
   Future<void> _onMapboxCreated(mb.MapboxMap map) async {
     _mapbox = map;
     try {
-      _mbPoints = await map.annotations.createPointAnnotationManager();
-      _mbCircles = await map.annotations.createCircleAnnotationManager();
-      _mbLines = await map.annotations.createPolylineAnnotationManager();
       _mbPolygons = await map.annotations.createPolygonAnnotationManager();
+      _mbLines = await map.annotations.createPolylineAnnotationManager();
+      _mbCircles = await map.annotations.createCircleAnnotationManager();
+      _mbPoints = await map.annotations.createPointAnnotationManager();
       if (_mapboxStyleReady) await _syncMapboxAnnotations();
     } catch (_) {
       if (mounted) setState(() => _mapboxFailed = true);
