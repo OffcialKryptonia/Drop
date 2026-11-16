@@ -7,7 +7,7 @@ let fails = 0;
 const ok = (n, c, x = "") => { console.log(c ? "PASS" : "FAIL", n, c ? "" : x); if (!c) fails++; };
 const call = async (m, p, t, b) => { const r = await fetch(API + p, { method: m, headers: { Accept: "application/json", ...(b ? { "Content-Type": "application/json" } : {}), ...(t ? { Authorization: "Bearer " + t } : {}) }, body: b ? JSON.stringify(b) : undefined }); return { status: r.status, json: await r.json().catch(() => ({})) }; };
 const A = (await call("POST", "/login", null, { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, user_type: "admin" })).json.data?.api_token;
-const old = (await db.query("select key, value from app.settings where key in ('map_provider','osm_tile_url','osm_routing_url','mapbox_enabled','mapbox_region_bordering_enabled','mapbox_style_uri','mapbox_public_token_enc','mapbox_public_token_verified_at')")).rows;
+const old = (await db.query("select key, value from app.settings where key in ('map_provider','osm_tile_url','osm_routing_url','mapbox_enabled','mapbox_region_bordering_enabled','mapbox_style_uri','mapbox_public_token_enc','mapbox_public_token_verified_at','mapbox_config_updated_at')")).rows;
 const body = (o) => ({ provider: "auto", osm_tile_url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png", osm_routing_url: "https://router.project-osrm.org", ...o });
 try {
   ok("map-config needs no sign-in and has no secrets", (await call("GET", "/map-config")).status === 200);
@@ -30,7 +30,7 @@ try {
   ok("tile address must have {z}/{x}/{y}", (await call("PUT", "/admin/map-settings", A, body({ osm_tile_url: "https://example.com/tiles.png" }))).status >= 400);
   ok("insecure address rejected", (await call("PUT", "/admin/map-settings", A, body({ osm_routing_url: "http://router.example.com" }))).status >= 400);
 } finally {
-  for (const k of ["map_provider", "osm_tile_url", "osm_routing_url", "mapbox_enabled", "mapbox_region_bordering_enabled", "mapbox_style_uri", "mapbox_public_token_enc", "mapbox_public_token_verified_at"]) {
+  for (const k of ["map_provider", "osm_tile_url", "osm_routing_url", "mapbox_enabled", "mapbox_region_bordering_enabled", "mapbox_style_uri", "mapbox_public_token_enc", "mapbox_public_token_verified_at", "mapbox_config_updated_at"]) {
     const o = old.find((x) => x.key === k);
     if (o) await db.query("update app.settings set value = $2::jsonb where key = $1", [k, JSON.stringify(o.value)]);
     else await db.query("delete from app.settings where key = $1", [k]);

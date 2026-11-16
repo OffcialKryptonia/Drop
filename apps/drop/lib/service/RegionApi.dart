@@ -12,7 +12,7 @@ class RegionApi {
   /// Public shape data for optional Mapbox region overlays. It is advisory/rendering data only;
   /// the Worker/PostGIS endpoints remain authoritative for membership and switching.
   static Future<List<List<LatLng>>> boundaries() async {
-    final response = await DriverApplicationApi.getJson('region/boundaries');
+    final response = await DriverApplicationApi.getJson('region/boundaries').timeout(const Duration(seconds: 8));
     final features = response['features'];
     if (features is! List) return const [];
     final result = <List<LatLng>>[];
