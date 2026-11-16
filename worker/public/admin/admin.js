@@ -1533,7 +1533,7 @@
         if (!list.length) { userResults.appendChild(h("p", { class: "empty", text: "No matching registered passenger found." })); return; }
         list.forEach(function (u) {
           var active = u.status === "active" && u.active_mode === "rider" && (u.user_type === "rider" || u.user_type === "driver");
-          var detail = [u.username ? "@" + u.username : "", u.country_code || "" + (u.contact_number || ""), u.email || "", u.status, u.active_mode === "rider" ? "Passenger mode" : "Not in Passenger mode"].filter(Boolean).join(" · ");
+          var detail = [u.username ? "@" + u.username : "", (u.country_code || "") + (u.contact_number || ""), u.email || "", u.status, u.active_mode === "rider" ? "Passenger mode" : "Not in Passenger mode"].filter(Boolean).join(" · ");
           var b = h("button", { class: "ghost small", text: active ? "Select" : "Unavailable", disabled: !active });
           b.addEventListener("click", function () {
             state.passenger = u; userResults.textContent = "";
