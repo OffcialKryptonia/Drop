@@ -36,6 +36,7 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
   final Set<String> _spokenCues = <String>{};
   StreamSubscription<Position>? _positionSubscription;
   LatLng? _position;
+  double _heading = 0;
   DriverDirectionsRoute? _route;
   int _maneuverIndex = 0;
   bool _loading = true;
@@ -136,8 +137,11 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
   void _onPosition(Position position) {
     final here = LatLng(position.latitude, position.longitude);
     if (!mounted) return;
-    setState(() => _position = here);
     final route = _route;
+    if (route != null) {
+      _heading = position.speed >= 2 && position.heading >= 0 ? position.heading : _routeBearing(here, route);
+    }
+    setState(() => _position = here);
     if (route == null) return;
     final snap = RouteGeometry.snap(route.points, here);
     if (snap != null && snap.meters > 65) {
@@ -157,8 +161,7 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
     }
     if (DateTime.now().difference(_lastCameraUpdate).inMilliseconds > 900) {
       _lastCameraUpdate = DateTime.now();
-      final heading = position.speed >= 2 && position.heading >= 0 ? position.heading : _routeBearing(here, route);
-      _map.followDriver(here, zoom: 17.5, bearing: heading, pitch: 55);
+      _map.followDriver(here, zoom: 17.5, bearing: _heading, pitch: 55);
     }
   }
 
@@ -193,7 +196,7 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
   }
 
   List<DropMarker> get _markers => [
-    if (_position != null) DropMarker(id: 'driver', title: 'You', point: _position!, color: Colors.blue),
+    if (_position != null) DropMarker(id: 'driver', title: 'You', point: _position!, color: Colors.blue, iconKey: 'car', heading: _heading),
     DropMarker(id: 'destination', title: widget.destinationLabel, point: widget.destination, color: Colors.red),
   ];
 
