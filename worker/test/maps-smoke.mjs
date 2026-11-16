@@ -9,6 +9,7 @@ const call = async (m, p, t, b) => { const r = await fetch(API + p, { method: m,
 const A = (await call("POST", "/login", null, { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, user_type: "admin" })).json.data?.api_token;
 const old = (await db.query("select key, value from app.settings where key in ('map_provider','osm_tile_url','osm_routing_url','mapbox_enabled','mapbox_region_bordering_enabled','mapbox_style_uri','mapbox_public_token_enc','mapbox_public_token_verified_at','mapbox_config_updated_at')")).rows;
 await db.query("delete from app.settings where key in ('mapbox_public_token_enc','mapbox_public_token_verified_at')");
+await db.query("insert into app.settings (key, value) values ('mapbox_enabled', 'false'::jsonb), ('mapbox_region_bordering_enabled', 'false'::jsonb) on conflict (key) do update set value = excluded.value");
 const body = (o) => ({ provider: "auto", osm_tile_url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png", osm_routing_url: "https://router.project-osrm.org", ...o });
 try {
   ok("map-config needs no sign-in and has no secrets", (await call("GET", "/map-config")).status === 200);
