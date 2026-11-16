@@ -5,7 +5,7 @@ import { withDb } from "../db";
 import { audit, guard } from "../lib/permissions";
 import { readBody, validationFailed } from "../lib/legacy";
 import { encryptValue } from "../lib/crypto";
-import { pushConfig, sendPush } from "../lib/push";
+import { pushConfig, sendPushDetailed } from "../lib/push";
 
 export const pushRoutes = new Hono<AppEnv>();
 
@@ -47,6 +47,6 @@ pushRoutes.post("/admin/push-settings/test", ...guard("push_settings edit"), asy
   const cfg = await pushConfig(db, c.env);
   if (!cfg.appId || !cfg.restKey) return c.json({ message: "Save the App ID and REST key first.", status: 409 }, 409);
   if (!u.player_id) return c.json({ message: "That person has not allowed notifications on a phone with the new app yet.", status: 409 }, 409);
-  const n = await sendPush(db, c.env, [Number(u.id)], { title: "DROP", body: "Test notification from the DROP admin." });
-  return n ? c.json({ message: "Sent. It should arrive in a few seconds." }) : c.json({ message: "OneSignal did not accept it. Check the App ID and REST key.", status: 502 }, 502);
+  const r = await sendPushDetailed(db, c.env, [Number(u.id)], { title: "DROP", body: "Test notification from the DROP admin." });
+  return r.sent ? c.json({ message: "Sent. It should arrive in a few seconds." }) : c.json({ message: r.error || "OneSignal did not accept it.", status: 502 }, 502);
 });
