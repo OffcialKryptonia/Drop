@@ -8,7 +8,7 @@ import { computeFare } from "../lib/fare";
 import { userCurrency } from "../lib/currency";
 import { getSetting } from "../lib/driver-application";
 import { chargeCancellationFee } from "../lib/ride-settlement";
-import { pushLater, pushNearbyDrivers, sendPush, pushRideEvent } from "../lib/push";
+import { pushLater, pushNearbyDrivers, sendPush } from "../lib/push";
 
 export const adminRideRoutes = new Hono<AppEnv>();
 
@@ -195,6 +195,6 @@ adminRideRoutes.post("/admin/order-rides/:id/cancel", ...guard("ride_order edit"
     pushLater(c, sendPush(db, c.env, [Number(changed.rows[0].driver_id)], { title: "Ride cancelled by Drop Support", body: "Drop Support cancelled this booking. You can accept other requests.", data: { type: "ride", event: "admin_cancelled", ride_id: String(id) } }));
   }
   await audit(c, "admin_ride_cancelled", String(id), { passenger_id: Number(before.rider_id), reason, cancellation_fee: fee });
-  pushLater(c, pushRideEvent(db, c.env, Number(before.rider_id), "rider_cancelled", id));
+  pushLater(c, sendPush(db, c.env, [Number(before.rider_id)], { title: "Ride cancelled by Drop Support", body: "Drop Support cancelled the ride booked on your behalf.", data: { type: "ride", event: "admin_cancelled", ride_id: String(id) } }));
   return c.json({ status: true, id, cancellation_fee: fee });
 });
