@@ -642,42 +642,73 @@
     if (!pm.data.length) list.appendChild(h("div", { class: "empty", text: "No payment methods yet." }));
   }
 
-  // ---------- Maps (Google / OpenStreetMap switch) ----------
+  // ---------- Maps (Google / OpenStreetMap / Mapbox) ----------
   function pageMaps(root) {
     loading(root);
     api("GET", "/admin/map-settings").then(function (r) {
       var d = (r.body || {}).data;
       if (!r.ok || !d) { root.textContent = ""; root.appendChild(head("Maps", "")); root.appendChild(h("p", { class: "msg", text: errText(r) })); return; }
       root.textContent = "";
-      root.appendChild(head("Maps", "Choose which map service the apps and fare routing use. Google Maps stays available; OpenStreetMap needs no Google account."));
-
+      root.appendChild(head("Maps", "Choose the map renderer used by the unified passenger and driver app. Existing providers remain available."));
       var status = h("div", { class: "card" });
-      status.appendChild(h("div", { class: "t", text: "Right now the apps use: " + (d.active === "google" ? "Google Maps" : "OpenStreetMap") }));
-      status.appendChild(h("p", { class: "muted", text: "Google server key: " + (d.google_server_key_set ? "set" : "not set") + (d.google_failed_recently ? " \u00B7 Google did not answer recently (" + d.google_failed_at + ")" : "") }));
+      status.appendChild(h("div", { class: "t", text: "Active map provider: " + (d.active === "google" ? "Google Maps" : d.active === "mapbox" ? "Mapbox" : "OpenStreetMap / MapLibre") }));
+      status.appendChild(h("p", { class: "muted", text: "Google server key: " + (d.google_server_key_set ? "set" : "not set") + (d.google_failed_recently ? " · Google recently failed (" + d.google_failed_at + ")" : "") }));
+      if (d.fallback_reason) status.appendChild(h("p", { class: "msg", text: d.fallback_reason }));
       root.appendChild(status);
-
-      var provider = select([["auto", "Automatic (Google when it works, otherwise OpenStreetMap)"], ["google", "Always Google Maps"], ["osm", "Always OpenStreetMap"]], d.provider);
+      var provider = select([["auto", "Automatic (Google when configured, otherwise OpenStreetMap)"], ["google", "Google Maps"], ["osm", "OpenStreetMap / MapLibre"], ["mapbox", "Mapbox"]], d.provider);
       var tiles = text(d.osm_tile_url, "https://tile.openstreetmap.org/{z}/{x}/{y}.png");
       var routing = text(d.osm_routing_url, "https://router.project-osrm.org");
+      var enabled = h("input", { type: "checkbox" }); enabled.checked = !!d.mapbox_enabled;
+      var borders = h("input", { type: "checkbox" }); borders.checked = !!d.mapbox_region_bordering_enabled; borders.disabled = !enabled.checked;
+      Array.from(provider.options).forEach(function (option) { if (option.value === "mapbox") option.disabled = !d.mapbox_enabled || !d.mapbox_configured; });
+      enabled.addEventListener("change", function () {
+        borders.disabled = !enabled.checked;
+        if (!enabled.checked) borders.checked = false;
+        Array.from(provider.options).forEach(function (option) { if (option.value === "mapbox") option.disabled = !enabled.checked || !d.mapbox_configured; });
+      });
+      var style = text(d.mapbox_style_uri || "mapbox://styles/mapbox/streets-v12");
+      var token = h("input", { type: "password", autocomplete: "new-password", placeholder: d.mapbox_public_token_masked || "pk...." });
+      var show = h("button", { class: "ghost small", type: "button", text: "Show" });
+      show.addEventListener("click", function () { token.type = token.type === "password" ? "text" : "password"; show.textContent = token.type === "password" ? "Show" : "Hide"; });
+      var tokenStatus = h("p", { class: "muted", text: "Public token: " + (d.mapbox_public_token_set ? d.mapbox_public_token_masked + " saved" : "not configured") + " · Connection: " + (d.mapbox_connection_status || "not tested") + (d.mapbox_last_verified_at ? " · Last verified: " + d.mapbox_last_verified_at : "") + (d.mapbox_last_updated_at ? " · Last configuration update: " + d.mapbox_last_updated_at : "") });
       var out = h("p", { class: "msg" });
       var card = h("div", { class: "card" },
-        field("Map service", provider, "Automatic switches to OpenStreetMap by itself when Google is not set up or stops answering. Pick one to force it."),
-        field("OpenStreetMap tile address", tiles, "Where map pictures come from. The free openstreetmap.org tiles are for light use only; for real traffic use a provider such as MapTiler or Stadia and paste its address here."),
-        field("OpenStreetMap route service", routing, "Used for road distance and time. The free public OSRM server is for light use; paste your own or a provider address for real traffic."));
-      if (can("map_settings edit")) {
-        var save = h("button", { text: "Save", class: "small", style: "margin-top:10px" });
-        save.addEventListener("click", function () {
-          save.disabled = true;
-          api("PUT", "/admin/map-settings", { provider: provider.value, osm_tile_url: tiles.value.trim(), osm_routing_url: routing.value.trim() }).then(function (x) {
-            save.disabled = false;
-            if (x.ok) { toast("Saved"); pageMaps(root); } else msg(out, errText(x));
-          });
+        field("Map service", provider, "Mapbox can be selected only after its public token passes Test Connection."),
+        field("OpenStreetMap tile address", tiles, "Existing MapLibre/raster fallback. Keep the {z}, {x} and {y} placeholders."),
+        field("OpenStreetMap route service", routing, "Routing remains separate from map rendering."),
+        h("h3", { text: "Mapbox configuration" }),
+        h("p", { class: "muted", text: "Use a restricted public pk. token. No secret sk. token is required for mobile map rendering." }),
+        h("div", { class: "row" }, h("span", { text: "Enable Mapbox" }), h("label", { class: "switch" }, enabled, h("span"))),
+        field("Mapbox public access token", token, "Enter a new token to replace the saved token. Leave blank to keep it."),
+        h("div", { class: "row", style: "gap:8px;flex-wrap:wrap" }, show,
+          h("button", { class: "ghost small", text: "Test Connection", on: { click: function () {
+            saveMapSettings(null, function () {
+              api("POST", "/admin/map-settings/test", {}).then(function (x) { msg(out, x.ok ? ((x.body || {}).message || "Connection successful.") : errText(x), x.ok); if (x.ok) pageMaps(root); });
+            });
+          } } }),
+          h("button", { class: "ghost small", text: "Remove saved token", on: { click: function () {
+            confirmDo("Remove the saved Mapbox public token?", function () { token.value = ""; saveMapSettings({ mapbox_public_token: null }); });
+          } } })),
+        tokenStatus,
+        field("Mapbox style URI (optional)", style, "Default: mapbox://styles/mapbox/streets-v12. You may use a Mapbox Studio style."),
+        h("div", { class: "row" }, h("span", { text: "Use Mapbox for Region Bordering" }), h("label", { class: "switch" }, borders, h("span"))),
+        h("p", { class: "muted", text: "When enabled, existing service-region polygons are supplied as GeoJSON for Mapbox-compatible point-in-polygon and boundary-proximity checks, regardless of the selected map renderer. If Mapbox is selected, the same polygons are also drawn as fill/outline layers. Region membership, ride eligibility and switching remain controlled by the Worker/PostGIS backend." }));
+      function saveMapSettings(extra, after) {
+        var body = Object.assign({ provider: provider.value, osm_tile_url: tiles.value.trim(), osm_routing_url: routing.value.trim(), mapbox_enabled: enabled.checked, mapbox_region_bordering_enabled: borders.checked, mapbox_style_uri: style.value.trim() }, extra || {});
+        if (!Object.prototype.hasOwnProperty.call(extra || {}, "mapbox_public_token") && token.value.trim()) body.mapbox_public_token = token.value.trim();
+        api("PUT", "/admin/map-settings", body).then(function (x) {
+          if (x.ok) { if (after) after(); else { toast("Saved"); pageMaps(root); } }
+          else msg(out, errText(x));
         });
+      }
+      if (!can("map_settings edit")) card.querySelectorAll("input,select,button").forEach(function (control) { control.disabled = true; });
+      if (!d.encryption_configured) card.appendChild(h("p", { class: "msg", text: "Configure SETTINGS_ENCRYPTION_KEY (32+ characters) in the Cloudflare Worker before saving Mapbox credentials." }));
+      if (can("map_settings edit")) {
+        var save = h("button", { text: "Save Configuration", class: "small", style: "margin-top:10px" });
+        save.addEventListener("click", function () { save.disabled = true; saveMapSettings(); setTimeout(function () { save.disabled = false; }, 500); });
         card.appendChild(save);
       }
-      card.appendChild(out);
-      root.appendChild(card);
-      mapIconsCard(root);
+      card.appendChild(out); root.appendChild(card); mapIconsCard(root);
     });
   }
 

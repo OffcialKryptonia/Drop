@@ -14,13 +14,38 @@ class RegionWatcher {
   LatLng? _lastAt;
   DateTime _lastCheck = DateTime.fromMillisecondsSinceEpoch(0);
   bool _busy = false;
+  int? _lastPolygonIndex;
+  bool _hasPolygonSample = false;
+  DateTime _lastBoundaryProbe = DateTime.fromMillisecondsSinceEpoch(0);
 
-  /// Call with every position. It only contacts the server after ~700 m of movement or 90 seconds.
-  Future<void> check(BuildContext context, LatLng here, {required VoidCallback onSwitched}) async {
+  /// Call with every position. Normal server checks remain throttled at ~700 m / 90 seconds;
+  /// a reliable Mapbox GeoJSON boundary transition may request an earlier server check.
+  Future<void> check(
+    BuildContext context,
+    LatLng here, {
+    required VoidCallback onSwitched,
+    List<List<LatLng>> regionBoundaries = const [],
+    bool useMapboxGeometry = false,
+    double accuracyMeters = double.infinity,
+  }) async {
     if (_busy || _asking) return;
+    final now = DateTime.now();
+    var crossedBoundary = false;
+    // Mapbox receives the same service-region GeoJSON used by the server. A reliable local
+    // polygon transition (GPS accuracy <= 80m and within 100m of an edge) can request an
+    // earlier server check; it can never authorise a region change by itself.
+    if (useMapboxGeometry && regionBoundaries.isNotEmpty && accuracyMeters <= 80) {
+      final candidate = RegionApi.containingPolygonIndex(here, regionBoundaries) ?? -1;
+      crossedBoundary = _hasPolygonSample && candidate != _lastPolygonIndex &&
+          RegionApi.isNearBoundary(here, regionBoundaries, withinMeters: 100) &&
+          now.difference(_lastBoundaryProbe).inSeconds >= 20;
+      _lastPolygonIndex = candidate;
+      _hasPolygonSample = true;
+      if (crossedBoundary) _lastBoundaryProbe = now;
+    }
     final moved = _lastAt == null ? double.infinity : const Distance()(_lastAt!, here);
-    final waited = DateTime.now().difference(_lastCheck).inSeconds;
-    if (moved < 700 && waited < 90) return;
+    final waited = now.difference(_lastCheck).inSeconds;
+    if (moved < 700 && waited < 90 && !crossedBoundary) return;
     _busy = true;
     _lastAt = here;
     _lastCheck = DateTime.now();

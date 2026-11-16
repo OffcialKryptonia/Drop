@@ -6,7 +6,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 version: 1.0.0+1
 
 environment:
-  sdk: ">=3.4.0 <4.0.0"
+  sdk: ">=3.4.4 <4.0.0"
 
 dependencies:
   flutter:
@@ -47,6 +47,8 @@ dependencies:
   google_maps_flutter: ^2.9.0
   # Premium vector maps and offline regions (Android/iOS)
   maplibre_gl: ^0.27.1
+  # Optional Mapbox renderer (v2 line supports this project’s Flutter/Dart toolchain).
+  mapbox_maps_flutter: ^2.31.1
   # IMAGES
   image_picker: ^1.2.0
   # CONNECTIVITY

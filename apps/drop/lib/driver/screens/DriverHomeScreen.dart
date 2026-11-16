@@ -6,6 +6,7 @@ import 'package:drop/components/DropMap.dart';
 import 'package:drop/components/LiveLocation.dart';
 import 'package:drop/components/RegionWatcher.dart';
 import 'package:drop/service/MapConfig.dart';
+import 'package:drop/service/RegionApi.dart';
 import 'package:drop/service/RideApi.dart';
 import 'package:drop/service/ToneService.dart';
 import 'package:drop/screens/DriverApplicationScreen.dart';
@@ -49,6 +50,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final DropMapController _map = DropMapController();
   MapConfig mapConfig = const MapConfig();
+  List<List<LatLng>> regionBoundaries = const [];
   bool mapLoaded = false;
   LatLng? myPos;
   String? _fitKey;
@@ -69,11 +71,12 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _loadProfile();
-    MapConfig.load().then((c) {
-      if (mounted) setState(() {
-        mapConfig = c;
-        mapLoaded = true;
-      });
+    MapConfig.load().then((c) async {
+      mapConfig = c;
+      if (c.mapboxRegionBorderingEnabled) {
+        try { regionBoundaries = await RegionApi.boundaries(); } catch (_) { regionBoundaries = const []; }
+      }
+      if (mounted) setState(() { mapConfig = c; mapLoaded = true; });
     });
     _locateMe();
     _load(resume: true);
@@ -134,7 +137,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     final here = LatLng(pos.latitude, pos.longitude);
     if (mounted) setState(() { _trackHeading(pos); myPos = here; });
     _toneIfArrived(here);
-    if (mounted) _region.check(context, here, onSwitched: () { _load(); _pollRides(); _loadProfile(); });
+    if (mounted) _region.check(context, here, onSwitched: () { _load(); _pollRides(); _loadProfile(); }, regionBoundaries: regionBoundaries, useMapboxGeometry: mapConfig.mapboxRegionBorderingEnabled, accuracyMeters: pos.accuracy);
     if (!_sharing) return;
     if (DateTime.now().difference(_lastPing).inSeconds < (active != null ? 5 : 20)) return;
     _lastPing = DateTime.now();
@@ -621,6 +624,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
                               tileUrl: mapConfig.tileUrl,
                               styleUrl: mapConfig.styleUrl,
                               attribution: mapConfig.attribution,
+                              mapboxStyleUri: mapConfig.mapboxStyleUri,
+                              showRegionBorders: mapConfig.mapboxRegionBorderingEnabled,
+                              regionBoundaries: regionBoundaries,
                               initialCenter: myPos ?? const LatLng(9.0765, 7.3986),
                               controller: _map,
                               markers: _markers,
