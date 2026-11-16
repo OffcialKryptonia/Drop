@@ -692,7 +692,7 @@
         tokenStatus,
         field("Mapbox style URI (optional)", style, "Default: mapbox://styles/mapbox/streets-v12. You may use a Mapbox Studio style."),
         h("div", { class: "row" }, h("span", { text: "Use Mapbox for Region Bordering" }), h("label", { class: "switch" }, borders, h("span"))),
-        h("p", { class: "muted", text: "When enabled, existing service-region polygons are rendered by Mapbox when Mapbox is the selected map provider. Region membership, ride eligibility and switching remain controlled by the Worker/PostGIS backend." }));
+        h("p", { class: "muted", text: "When enabled, existing service-region polygons are supplied as GeoJSON for Mapbox-compatible point-in-polygon and boundary-proximity checks, regardless of the selected map renderer. If Mapbox is selected, the same polygons are also drawn as fill/outline layers. Region membership, ride eligibility and switching remain controlled by the Worker/PostGIS backend." }));
       function saveMapSettings(extra, after) {
         var body = Object.assign({ provider: provider.value, osm_tile_url: tiles.value.trim(), osm_routing_url: routing.value.trim(), mapbox_enabled: enabled.checked, mapbox_region_bordering_enabled: borders.checked, mapbox_style_uri: style.value.trim() }, extra || {});
         if (!Object.prototype.hasOwnProperty.call(extra || {}, "mapbox_public_token") && token.value.trim()) body.mapbox_public_token = token.value.trim();

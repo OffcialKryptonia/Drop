@@ -17,7 +17,7 @@ In your Mapbox account, create a **public** access token beginning with `pk.`. G
 3. Select **Test Connection**. The Worker checks that the token can read the configured style and stores the verification timestamp.
 4. Enable Mapbox.
 5. Select Mapbox as the map provider and save.
-6. Optionally enable **Use Mapbox for Region Bordering**. This draws the existing active service-region polygons and enables local GeoJSON boundary-transition hints in the app.
+6. Optionally enable **Use Mapbox for Region Bordering**. This enables local GeoJSON point-in-polygon and boundary-proximity hints independently of the selected map renderer. When Mapbox is the selected renderer, the same polygons are also drawn on the map.
 
 Replacing the token or changing the style invalidates the previous connection test and temporarily disables Mapbox until the new configuration is tested and enabled again. Disabling Mapbox while it is selected returns provider selection to Automatic. The API never returns a secret token; the public token is returned to the app only when Mapbox is the active renderer.
 

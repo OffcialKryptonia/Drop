@@ -150,7 +150,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
 
   Future<void> _start() async {
     mapConfig = await MapConfig.load();
-    if (mapConfig.isMapbox && mapConfig.mapboxRegionBorderingEnabled) {
+    if (mapConfig.mapboxRegionBorderingEnabled) {
       try { regionBoundaries = await RegionApi.boundaries(); } catch (_) { regionBoundaries = const []; }
     }
     if (mounted) setState(() => mapLoaded = true);
@@ -174,7 +174,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
   /// Every real GPS fix: ask about a region change, and keep the automatic pickup under the passenger.
   void _onFix(Position p) {
     final here = LatLng(p.latitude, p.longitude);
-    if (mounted) _region.check(context, here, onSwitched: _loadHome, regionBoundaries: regionBoundaries, useMapboxGeometry: mapConfig.isMapbox && mapConfig.mapboxRegionBorderingEnabled, accuracyMeters: p.accuracy);
+    if (mounted) _region.check(context, here, onSwitched: _loadHome, regionBoundaries: regionBoundaries, useMapboxGeometry: mapConfig.mapboxRegionBorderingEnabled, accuracyMeters: p.accuracy);
     final cur = pickup;
     if (!_pickupAuto || phase != _Phase.plan || pinMode || cur == null) return;
     if (RouteGeometry.meters(cur, here) < 40) return;

@@ -73,7 +73,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     _loadProfile();
     MapConfig.load().then((c) async {
       mapConfig = c;
-      if (c.isMapbox && c.mapboxRegionBorderingEnabled) {
+      if (c.mapboxRegionBorderingEnabled) {
         try { regionBoundaries = await RegionApi.boundaries(); } catch (_) { regionBoundaries = const []; }
       }
       if (mounted) setState(() { mapConfig = c; mapLoaded = true; });
@@ -137,7 +137,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     final here = LatLng(pos.latitude, pos.longitude);
     if (mounted) setState(() { _trackHeading(pos); myPos = here; });
     _toneIfArrived(here);
-    if (mounted) _region.check(context, here, onSwitched: () { _load(); _pollRides(); _loadProfile(); }, regionBoundaries: regionBoundaries, useMapboxGeometry: mapConfig.isMapbox && mapConfig.mapboxRegionBorderingEnabled, accuracyMeters: pos.accuracy);
+    if (mounted) _region.check(context, here, onSwitched: () { _load(); _pollRides(); _loadProfile(); }, regionBoundaries: regionBoundaries, useMapboxGeometry: mapConfig.mapboxRegionBorderingEnabled, accuracyMeters: pos.accuracy);
     if (!_sharing) return;
     if (DateTime.now().difference(_lastPing).inSeconds < (active != null ? 5 : 20)) return;
     _lastPing = DateTime.now();
