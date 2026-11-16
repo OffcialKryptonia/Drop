@@ -451,6 +451,21 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     await _rideAction(() => RideApi.driverCancel(id), thenSay: 'Trip cancelled.');
   }
 
+  Future<void> _startNavigation(double lat, double lng, String label) async {
+    if (mapConfig.isMapbox && mapConfig.mapboxPublicToken.startsWith('pk.')) {
+      await Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => DriverNavigationScreen(
+          mapConfig: mapConfig,
+          destination: LatLng(lat, lng),
+          destinationLabel: label,
+          initialPosition: _live.point ?? myPos,
+        ),
+      ));
+      return;
+    }
+    await _openMaps(lat, lng);
+  }
+
   /// Turn-by-turn navigation in the driver's own navigation app. Follows the admin map switch:
   /// Google Maps in Google mode, otherwise any installed navigation app (or OpenStreetMap in the browser).
   Future<void> _openMaps(double lat, double lng) async {
@@ -563,7 +578,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
         _addrRow(Icons.location_on, primaryColor, (drop['address'] ?? '').toString()),
         const SizedBox(height: 12),
         OutlinedButton.icon(
-          onPressed: () => _openMaps(_num(target['lat']), _num(target['lng'])),
+          onPressed: () => _startNavigation(_num(target['lat']), _num(target['lng']), toDrop ? 'Drop-off' : 'Pickup'),
           icon: const Icon(Icons.navigation_outlined),
           label: Text(toDrop ? 'Navigate to drop-off' : 'Navigate to pickup'),
         ),
