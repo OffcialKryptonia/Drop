@@ -97,6 +97,7 @@
     { id: "driver-applications", label: "Driver applications", group: "People", perm: "driver_application list", render: pageDriverApplications },
     { id: "ride-types", label: "Ride types", group: "Operations", perm: "service list", render: pageRideTypes },
     { id: "maps", label: "Maps", group: "Operations", perm: "map_settings list", render: pageMaps },
+    { id: "order-ride", label: "Order Ride", group: "Operations", perm: "ride_order list", render: pageOrderRide },
     { id: "push", label: "Push notifications", group: "System", perm: "push_settings list", render: pagePush },
     { id: "regions", label: "Regions", group: "Operations", perm: "region list", render: pageRegions },
     { id: "ride-options", label: "Ride options", group: "Operations", perm: "service_option list", render: pageOptions },
@@ -1497,6 +1498,198 @@
       api(u ? "PUT" : "POST", "/admin/sub-admins" + (u ? "/" + u.id : ""), body).then(function (x) { save.disabled = false; if (x.ok) { toast("Saved"); pageSubAdmins(root); } else msg(out, errText(x)); });
     });
     card.appendChild(save); root.appendChild(card);
+  }
+
+
+  // ---------- Admin-initiated ride booking ----------
+  function pageOrderRide(root) {
+    root.textContent = "";
+    root.classList.add("order-ride");
+    var state = { passenger: null, pickup: null, dropoff: null, quote: null, service: null, options: [], payment: "cash" };
+    var searchUsers = text("", "Search by name, username, phone or email");
+    var userResults = h("div");
+    var pickupInput = text("", "Search pickup address");
+    var dropInput = text("", "Search destination address");
+    var pickupResults = h("div"), dropResults = h("div");
+    var pickupSelected = h("div", { class: "hint" }), dropSelected = h("div", { class: "hint" });
+    var quoteBox = h("div"), resultBox = h("div"), historyBox = h("div");
+    var userSearchBtn = h("button", { text: "Search passenger", class: "small" });
+    var quoteBtn = h("button", { text: "Calculate fare estimate", class: "small", disabled: true });
+    var out = h("p", { class: "msg" });
+    var selectedFare = h("div", { class: "t" });
+    root.appendChild(head("Order Ride", "Book a genuine Drop ride for an existing passenger. The passenger remains the ride owner."));
+    root.appendChild(h("div", { class: "card" },
+      h("h3", { text: "1. Select passenger" }),
+      field("Find an existing passenger", searchUsers),
+      userSearchBtn, userResults));
+    function userSearch() {
+      var q = searchUsers.value.trim();
+      if (q.length < 2) { toast("Enter at least 2 characters.", true); return; }
+      userSearchBtn.disabled = true;
+      api("GET", "/admin/order-ride/users?q=" + encodeURIComponent(q)).then(function (r) {
+        userSearchBtn.disabled = false; userResults.textContent = "";
+        var list = (r.body && r.body.data) || [];
+        if (!r.ok) { userResults.appendChild(h("p", { class: "msg err", text: errText(r) })); return; }
+        if (!list.length) { userResults.appendChild(h("p", { class: "empty", text: "No matching registered passenger found." })); return; }
+        list.forEach(function (u) {
+          var active = u.status === "active" && u.active_mode === "rider" && (u.user_type === "rider" || u.user_type === "driver");
+          var detail = [u.username ? "@" + u.username : "", u.country_code || "" + (u.contact_number || ""), u.email || "", u.status, u.active_mode === "rider" ? "Passenger mode" : "Not in Passenger mode"].filter(Boolean).join(" · ");
+          var b = h("button", { class: "ghost small", text: active ? "Select" : "Unavailable", disabled: !active });
+          b.addEventListener("click", function () {
+            state.passenger = u; userResults.textContent = "";
+            userResults.appendChild(h("div", { class: "or-selected" },
+              h("div", { class: "t", text: u.display_name || u.username || ("User #" + u.id) }),
+              h("div", { class: "s", text: detail + " · ID " + u.id }),
+              h("button", { class: "ghost small", text: "Change passenger", on: { click: function () { state.passenger = null; pageOrderRide(root); } } })));
+            updateQuoteButton();
+          });
+          userResults.appendChild(h("div", { class: "item" },
+            h("div", { class: "main" }, h("div", { class: "t", text: (u.display_name || u.username || "User") + " · " + u.user_type }), h("div", { class: "s", text: detail })),
+            b));
+        });
+      });
+    }
+    userSearchBtn.addEventListener("click", userSearch);
+    searchUsers.addEventListener("keydown", function (e) { if (e.key === "Enter") userSearch(); });
+
+    var locationCard = h("div", { class: "card" },
+      h("h3", { text: "2. Pickup and destination" }),
+      field("Pickup", pickupInput), pickupResults, pickupSelected,
+      field("Destination", dropInput), dropResults, dropSelected);
+    function updateQuoteButton() { quoteBtn.disabled = !(state.passenger && state.pickup && state.dropoff); }
+    function placeSearch(input, target, which) {
+      var q = input.value.trim();
+      if (q.length < 2) { toast("Enter at least 2 characters for the location.", true); return; }
+      target.textContent = ""; target.appendChild(h("p", { class: "muted", text: "Searching locations…" }));
+      api("GET", "/places/search?q=" + encodeURIComponent(q)).then(function (r) {
+        target.textContent = "";
+        var hits = (r.body && r.body.data) || [];
+        if (!r.ok || !hits.length) { target.appendChild(h("p", { class: "empty", text: r.ok ? "No location results. Try a more specific search." : errText(r) })); return; }
+        hits.forEach(function (hit) {
+          target.appendChild(h("button", { class: "ghost or-place", type: "button",
+            on: { click: function () {
+              state[which] = { lat: Number(hit.lat), lng: Number(hit.lng), address: [hit.title, hit.subtitle].filter(Boolean).join(", ") };
+              input.value = state[which].address;
+              target.textContent = "";
+              var dest = which === "pickup" ? pickupSelected : dropSelected;
+              dest.textContent = "Selected: " + state[which].address + " · " + state[which].lat.toFixed(6) + ", " + state[which].lng.toFixed(6);
+              updateQuoteButton(); quoteBox.textContent = ""; resultBox.textContent = ""; state.quote = null;
+            } } }, h("span", { class: "t", text: hit.title }), h("span", { class: "s", text: hit.subtitle || (hit.lat + ", " + hit.lng) })));
+        });
+      });
+    }
+    var pickupSearchBtn = h("button", { class: "ghost small", text: "Search pickup" });
+    var dropSearchBtn = h("button", { class: "ghost small", text: "Search destination" });
+    pickupSearchBtn.addEventListener("click", function () { placeSearch(pickupInput, pickupResults, "pickup"); });
+    dropSearchBtn.addEventListener("click", function () { placeSearch(dropInput, dropResults, "dropoff"); });
+    pickupInput.addEventListener("keydown", function (e) { if (e.key === "Enter") placeSearch(pickupInput, pickupResults, "pickup"); });
+    dropInput.addEventListener("keydown", function (e) { if (e.key === "Enter") placeSearch(dropInput, dropResults, "dropoff"); });
+    locationCard.appendChild(h("div", { class: "row" }, pickupSearchBtn, dropSearchBtn));
+    root.appendChild(locationCard);
+
+    quoteBtn.addEventListener("click", function () {
+      quoteBtn.disabled = true; msg(out, "Calculating server-side fare estimate…");
+      api("POST", "/admin/order-ride/estimate", { pickup: state.pickup, dropoff: state.dropoff }).then(function (r) {
+        quoteBtn.disabled = false; quoteBox.textContent = ""; resultBox.textContent = ""; state.quote = null;
+        if (!r.ok) { msg(out, errText(r)); return; }
+        state.quote = r.body; state.service = null; state.options = [];
+        msg(out, "Fare estimate ready.", true);
+        var types = r.body.ride_types || [];
+        if (!types.length) { quoteBox.appendChild(h("p", { class: "empty", text: "No ride types are currently available for this route." })); return; }
+        var typeSelect = select(types.map(function (t) { return [t.id, t.name + " · " + naira(t.fare) + " · " + t.drivers_nearby + " nearby drivers"]; }), types[0].id);
+        state.service = types[0];
+        typeSelect.addEventListener("change", function () { state.service = types.filter(function (t) { return String(t.id) === typeSelect.value; })[0] || null; state.options = []; renderQuoteOptions(); });
+        var optionBox = h("div"), payment = select([], "");
+        function renderQuoteOptions() {
+          optionBox.textContent = ""; payment.textContent = "";
+          var t = state.service; if (!t) return;
+          state.options = [];
+          (r.body.options || []).forEach(function (o) {
+            var cb = h("input", { type: "checkbox" });
+            cb.addEventListener("change", function () { if (cb.checked) state.options.push(o.id); else state.options = state.options.filter(function (id) { return id !== o.id; }); updateEstimateTotal(); });
+            optionBox.appendChild(h("label", { class: "or-option" }, cb, h("span", { text: o.name + " · " + naira(o.price) })));
+          });
+          payment = select((t.payment_methods || []).map(function (m) { return [m, m.replace(/_/g, " ").replace(/^./, function (x) { return x.toUpperCase(); })]; }), (t.payment_methods || [])[0]);
+          payment.addEventListener("change", function () { state.payment = payment.value; });
+          state.payment = payment.value;
+          updateEstimateTotal();
+          resultBox.textContent = "";
+          resultBox.appendChild(h("div", { class: "card" },
+            h("h3", { text: "3. Ride configuration" }),
+            field("Ride type", typeSelect),
+            field("Optional extras", optionBox),
+            field("Payment method", payment),
+            h("p", { class: "muted", text: "Only ride types and payment methods currently enabled for this route are shown. Scheduled booking is not offered here because the current booking API supports immediate requests only." }),
+            selectedFare,
+            h("button", { text: "Review and confirm booking", on: { click: confirmBooking } })));
+        }
+        function updateEstimateTotal() {
+          var extra = (r.body.options || []).filter(function (o) { return state.options.indexOf(o.id) >= 0; }).reduce(function (a, o) { return a + Number(o.price); }, 0);
+          selectedFare.textContent = "Estimated total: " + naira(Number(state.service.fare) + extra) + " · " + Number(r.body.distance).toFixed(1) + " " + r.body.distance_unit + " · " + Math.round(r.body.duration_minutes) + " min";
+        }
+        renderQuoteOptions();
+      });
+    });
+    root.appendChild(h("div", { class: "card" }, h("h3", { text: "Fare estimate" }), quoteBtn, out, quoteBox, resultBox));
+
+    function confirmBooking() {
+      if (!state.passenger || !state.pickup || !state.dropoff || !state.service || !state.quote) return;
+      var summary = [
+        "Passenger: " + (state.passenger.display_name || state.passenger.username),
+        "Pickup: " + state.pickup.address, "Destination: " + state.dropoff.address,
+        "Ride: " + state.service.name, "Payment: " + state.payment,
+        "Estimated fare: " + selectedFare.textContent
+      ].join("\n");
+      if (!window.confirm("Confirm this Admin-initiated booking?\n\n" + summary)) return;
+      var key = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now()) + "-" + Math.random().toString(16).slice(2);
+      var button = resultBox.querySelector("button"); if (button) button.disabled = true;
+      api("POST", "/admin/order-ride", {
+        passenger_id: state.passenger.id, pickup: state.pickup, dropoff: state.dropoff,
+        service_id: state.service.id, payment_method: state.payment, option_ids: state.options, idempotency_key: key
+      }).then(function (r) {
+        if (button) button.disabled = false;
+        if (!r.ok) { toast(errText(r), true); return; }
+        var ride = r.body.data || {};
+        resultBox.textContent = "";
+        resultBox.appendChild(h("div", { class: "card" },
+          h("div", { class: "pill on", text: "Ride request created" }),
+          h("h3", { text: "Ride #" + ride.id }),
+          h("p", { class: "muted", text: "Status: " + ride.status + " · Passenger: " + (ride.passenger && ride.passenger.name || "") }),
+          h("p", { text: "The passenger has been notified where push notifications are configured. Nearby eligible drivers have been notified through the existing dispatch flow." }),
+          h("button", { class: "ghost small", text: "View booking history", on: { click: function () { loadHistory(); historyBox.scrollIntoView({ behavior: "smooth" }); } } })));
+        toast("Ride request created");
+        loadHistory();
+      });
+    }
+
+    function loadHistory() {
+      historyBox.textContent = ""; historyBox.appendChild(h("p", { class: "muted", text: "Loading Admin bookings…" }));
+      api("GET", "/admin/order-rides").then(function (r) {
+        historyBox.textContent = "";
+        if (!r.ok) { historyBox.appendChild(h("p", { class: "msg err", text: errText(r) })); return; }
+        var list = (r.body && r.body.data) || [];
+        if (!list.length) { historyBox.appendChild(h("div", { class: "empty", text: "No Admin-created rides yet." })); return; }
+        list.forEach(function (ride) {
+          var status = String(ride.status || "").replace(/_/g, " ");
+          var card = h("div", { class: "item or-history" },
+            h("div", { class: "main" },
+              h("div", { class: "t", text: "Ride #" + ride.id + " · " + status }),
+              h("div", { class: "s", text: (ride.passenger && ride.passenger.name || "Passenger") + " · " + (ride.passenger && ride.passenger.phone || "") + " · " + (ride.service && ride.service.name || "") }),
+              h("div", { class: "s", text: (ride.pickup && ride.pickup.address || "") + " → " + (ride.dropoff && ride.dropoff.address || "") }),
+              h("div", { class: "s", text: naira(ride.fare) + " " + (ride.currency || "") + " · " + ride.payment_method + " · " + (ride.driver && ride.driver.name || "Awaiting driver") + " · " + new Date(ride.created_at).toLocaleString() })));
+          if (["searching", "accepted", "arrived"].indexOf(ride.status) >= 0 && can("ride_order edit")) {
+            card.appendChild(h("button", { class: "danger small", text: "Cancel", on: { click: function () {
+              var reason = window.prompt("Why is this Admin booking being cancelled?");
+              if (!reason || reason.trim().length < 3) return;
+              api("POST", "/admin/order-rides/" + ride.id + "/cancel", { reason: reason.trim() }).then(function (x) { toast(x.ok ? "Ride cancelled" : errText(x), !x.ok); loadHistory(); });
+            } } }));
+          }
+          historyBox.appendChild(card);
+        });
+      });
+    }
+    root.appendChild(h("div", { class: "card" }, head("Admin booking history", "Recent rides booked on behalf of Drop passengers.", h("button", { class: "ghost small", text: "Refresh", on: { click: loadHistory } })), historyBox));
+    loadHistory();
   }
 
   // ---------- boot ----------
