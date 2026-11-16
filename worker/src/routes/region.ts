@@ -85,3 +85,15 @@ regionRoutes.put("/region/me", ...mw, async (c) => {
   }
   return c.json({ status: true, message: `You are now in ${label(here)}.`, region: { id: Number(here.id), name: label(here), currency: String(here.currency).trim() }, service });
 });
+
+
+/** Active service-region polygons for optional Mapbox border rendering. The Worker/PostGIS remains authoritative. */
+regionRoutes.get("/region/boundaries", ...mw, async (c) => {
+  const rows = await c.get("db").query("select id, name, coordinates from app.regions where status and coordinates is not null order by id");
+  const features = rows.rows.filter((r) => Array.isArray(r.coordinates) && r.coordinates.length >= 3).map((r) => {
+    const ring = (r.coordinates as { lat: number; lng: number }[]).map((p) => [p.lng, p.lat]);
+    if (ring.length && (ring[0][0] !== ring[ring.length - 1][0] || ring[0][1] !== ring[ring.length - 1][1])) ring.push(ring[0]);
+    return { type: "Feature", properties: { id: Number(r.id), name: r.name }, geometry: { type: "Polygon", coordinates: [ring] } };
+  });
+  return c.json({ type: "FeatureCollection", features });
+});
