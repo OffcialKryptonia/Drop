@@ -7,6 +7,7 @@ import { loadGateway, loadSecrets } from "../lib/gateway-creds";
 import { userCurrency } from "../lib/currency";
 import { creditPaidLink, getPayLinkSettings } from "../lib/paymyride";
 import { postToWallet, toMoney } from "../lib/wallet";
+import { pushLater, pushWalletCredit } from "../lib/push";
 import { readBody, validationFailed } from "../lib/legacy";
 
 export const payMyRideRoutes = new Hono<AppEnv>();
@@ -182,6 +183,7 @@ payMyRideRoutes.post("/webhooks/korapay", withDb, async (c) => {
     }
     await db.query("update app.payment_events set status = 'credited', user_id = $2 where id = $1", [ev.rows[0].id, link.user_id]);
     await db.query("commit");
+    pushLater(c, pushWalletCredit(db, c.env, Number(link.user_id), amount, "was paid toward your ride."));
     return c.json({ message: "success" });
   } catch (e) {
     await db.query("rollback").catch(() => undefined);

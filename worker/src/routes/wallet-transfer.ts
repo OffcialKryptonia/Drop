@@ -6,6 +6,7 @@ import { requireAuth } from "../auth/middleware";
 import { hashPassword, verifyPassword } from "../auth/password";
 import { userCurrency } from "../lib/currency";
 import { InsufficientFunds, postToWallet, toMoney } from "../lib/wallet";
+import { pushLater, pushWalletCredit } from "../lib/push";
 import { readBody, validationFailed } from "../lib/legacy";
 
 export const walletTransferRoutes = new Hono<AppEnv>();
@@ -142,6 +143,7 @@ walletTransferRoutes.post("/wallet/transfer", withDb, requireAuth, async (c) => 
     });
     const t = (await db.query("insert into app.wallet_transfers (sender_id, recipient_id, amount, note) values ($1,$2,$3,$4) returning id", [me.id, to.id, amount, note])).rows[0];
     await db.query("commit");
+    pushLater(c, pushWalletCredit(db, c.env, Number(to.id), amount, `received from @${me.username}.`));
     return c.json({ message: `Sent ${amount} to @${to.username}`, balance: Number(out.balance), transfer: { id: Number(t.id), amount: n, to: { username: to.username, name: publicName(to) } } });
   } catch (err) {
     await db.query("rollback").catch(() => undefined);
