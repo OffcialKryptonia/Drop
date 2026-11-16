@@ -42,6 +42,7 @@ type Row = Record<string, unknown>;
 const ride = (r: Row) => ({
   id: Number(r.id),
   status: r.status,
+  booking_source: r.booking_source ?? "passenger",
   service: { id: Number(r.service_id), name: r.service_name ?? null, category: r.service_category ?? null, map_icon: iconKeyFor(r.service_category as string, r.service_map_icon as string) },
   pickup: { lat: r.pickup_lat, lng: r.pickup_lng, address: r.pickup_address },
   dropoff: { lat: r.dropoff_lat, lng: r.dropoff_lng, address: r.dropoff_address },
