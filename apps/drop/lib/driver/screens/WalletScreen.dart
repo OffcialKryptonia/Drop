@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_mobx/flutter_mobx.dart';
-import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import 'package:drop/driver/screens/PaymentScreen.dart';
 import 'package:drop/driver/screens/WithDrawScreen.dart';
 import 'package:drop/driver/utils/Extensions/dataTypeExtensions.dart';
+
+import 'package:drop/drop/design/drop_design.dart';
+import 'package:drop/drop/widgets/drop_money.dart';
+import 'package:drop/drop/widgets/drop_ride_ui.dart';
+import 'package:drop/service/DriverApplicationApi.dart';
 
 import '../main.dart';
 import '../network/RestApis.dart';
@@ -43,7 +48,8 @@ class WalletScreenState extends State<WalletScreen> {
   VirtualAccountData? virtualAccount;
   bool accountLoading = true;
   String? accountError;
-  bool accountUnavailable = false; // feature not switched on yet: hide the card
+  bool accountUnavailable = false; // feature not switched on yet: show a calm note instead of an error
+  num? minimumBalance; // balance needed to go online, from /driver/status
 
   @override
   void initState() {
@@ -66,7 +72,21 @@ class WalletScreenState extends State<WalletScreen> {
   void init() async {
     getBankDetail();
     getWalletData();
-    if (currentPage == 1) loadVirtualAccount();
+    if (currentPage == 1) {
+      loadVirtualAccount();
+      loadMinimum();
+    }
+  }
+
+  Future<void> loadMinimum() async {
+    try {
+      final r = await DriverApplicationApi.driverStatus();
+      final w = r['wallet'] ?? (r['data'] is Map ? r['data']['wallet'] : null);
+      if (w is Map && w['minimum'] != null) {
+        minimumBalance = DropMoney.toNum(w['minimum']);
+        setState(() {});
+      }
+    } catch (_) {}
   }
 
   Future<void> loadVirtualAccount() async {
@@ -81,7 +101,8 @@ class WalletScreenState extends State<WalletScreen> {
     }).catchError((error) {
       accountLoading = false;
       final text = error.toString();
-      if (text.toLowerCase().contains('not available yet')) {
+      final lower = text.toLowerCase();
+      if (lower.contains('not available') || lower.contains('unavailable')) {
         accountUnavailable = true;
       } else {
         accountError = text;
@@ -90,255 +111,170 @@ class WalletScreenState extends State<WalletScreen> {
     });
   }
 
+  Widget _copyAccount(String number) => DropActionButton(
+        label: language.copyAccountNumber,
+        icon: Icons.copy,
+        onPressed: () => Clipboard.setData(ClipboardData(text: number)).then((_) => toast(language.accountNumberCopied)),
+      );
+
   Widget bankTransferCard() {
-    if (accountUnavailable) return SizedBox();
     final account = virtualAccount;
+    final hasAccount = account != null && account.accountNumber.validate().isNotEmpty;
+    Widget body;
+    if (accountLoading) {
+      body = Row(children: [
+        const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+        const SizedBox(width: 12),
+        Expanded(child: Text(language.gettingAccountNumber, style: TextStyle(color: DropColors.mutedText(context)))),
+      ]);
+    } else if (hasAccount) {
+      body = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        if (account.bankName.validate().isNotEmpty) Text(account.bankName.validate().toUpperCase(), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 0.6, color: DropColors.mutedText(context))),
+        const SizedBox(height: 4),
+        SelectableText(account.accountNumber.validate(), style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, letterSpacing: 1.2, color: DropColors.text(context))),
+        if (account.accountName.validate().isNotEmpty) Text(account.accountName.validate(), style: TextStyle(fontSize: 15, color: DropColors.text(context))),
+        const SizedBox(height: 8),
+        Text(language.transferHint, style: TextStyle(fontSize: 13, color: DropColors.mutedText(context))),
+        const SizedBox(height: 12),
+        _copyAccount(account.accountNumber.validate()),
+      ]);
+    } else if (accountUnavailable) {
+      body = Text('Bank transfer top-up is not available yet. You can still add money with the button above.', style: TextStyle(fontSize: 14, color: DropColors.mutedText(context)));
+    } else {
+      body = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('We could not load your account number. Check your connection and try again.', style: TextStyle(fontSize: 14, color: DropColors.mutedText(context))),
+        const SizedBox(height: 12),
+        DropActionButton(label: language.tryAgain, onPressed: () => loadVirtualAccount()),
+      ]);
+    }
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.all(16),
-      margin: EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        border: Border.all(color: primaryColor.withValues(alpha: 0.5)),
-        borderRadius: BorderRadius.circular(defaultRadius),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.account_balance, color: primaryColor, size: 20),
-              SizedBox(width: 8),
-              Expanded(child: Text(language.fundByTransfer, style: boldTextStyle())),
-            ],
-          ),
-          SizedBox(height: 12),
-          if (accountLoading)
-            Text(language.gettingAccountNumber, style: secondaryTextStyle())
-          else if (account != null && account.accountNumber.validate().isNotEmpty) ...[
-            if (account.bankName.validate().isNotEmpty)
-              Text(account.bankName.validate().toUpperCase(), style: secondaryTextStyle(size: 12)),
-            SizedBox(height: 4),
-            Row(
-              children: [
-                Expanded(
-                  child: SelectableText(
-                    account.accountNumber.validate(),
-                    style: boldTextStyle(size: 26),
-                  ),
-                ),
-                IconButton(
-                  tooltip: language.copyAccountNumber,
-                  icon: Icon(Icons.copy, color: primaryColor),
-                  onPressed: () {
-                    Clipboard.setData(ClipboardData(text: account.accountNumber.validate())).then((_) {
-                      toast(language.accountNumberCopied);
-                    });
-                  },
-                ),
-              ],
-            ),
-            if (account.accountName.validate().isNotEmpty)
-              Text(account.accountName.validate(), style: primaryTextStyle()),
-            SizedBox(height: 12),
-            Text(language.transferHint, style: secondaryTextStyle(size: 12)),
-            SizedBox(height: 12),
-            AppButtonWidget(
-              text: language.copyAccountNumber,
-              width: MediaQuery.of(context).size.width,
-              onTap: () {
-                Clipboard.setData(ClipboardData(text: account.accountNumber.validate())).then((_) {
-                  toast(language.accountNumberCopied);
-                });
-              },
-            ),
-          ] else ...[
-            Text(accountError.validate(), style: secondaryTextStyle()),
-            SizedBox(height: 12),
-            AppButtonWidget(
-              text: language.tryAgain,
-              width: MediaQuery.of(context).size.width,
-              onTap: () => loadVirtualAccount(),
-            ),
-          ],
-        ],
-      ),
+      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: 20),
+      decoration: BoxDecoration(color: DropColors.surface(context), borderRadius: BorderRadius.circular(16), border: Border.all(color: DropColors.hairline(context))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(Icons.account_balance, color: DropColors.primary, size: 20),
+          const SizedBox(width: 8),
+          Expanded(child: Text(language.fundByTransfer, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: DropColors.text(context)))),
+        ]),
+        const SizedBox(height: 12),
+        body,
+      ]),
     );
   }
 
-  getWalletData() async {
-    await getWalletList(pageData: currentPage).then((value) {
-      appStore.setLoading(false);
+  /// The balance card says what the number means, and offers the one action that fits it.
+  Widget balanceCard() {
+    final negative = totalAmount < -0.005;
+    final zero = totalAmount.abs() <= 0.005;
+    final label = negative ? 'You owe DROP' : (zero ? 'No balance' : language.availableBalance);
+    final note = negative ? 'Commission on cash trips. Pay it to keep going online.' : (zero ? 'Add money to cover DROP commission on cash trips.' : null);
+    final bg = negative ? const Color(0xFFB3261E) : DropColors.primary;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 6),
+        FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: DropMoneyText(totalAmount, style: const TextStyle(color: Colors.white, fontSize: 40, fontWeight: FontWeight.w900))),
+        if (note != null) ...[
+          const SizedBox(height: 6),
+          Text(note, style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.3)),
+        ],
+        if (minimumBalance != null) ...[
+          const SizedBox(height: 8),
+          Text('Minimum balance to go online: ${DropMoney.format(minimumBalance)}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+        ],
+        const SizedBox(height: 16),
+        SizedBox(
+          height: 52,
+          width: double.infinity,
+          child: FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.white, foregroundColor: bg, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(DropRadius.button))),
+            onPressed: _showAddMoney,
+            child: FittedBox(fit: BoxFit.scaleDown, child: Text(negative ? 'Pay commission' : language.addMoney, maxLines: 1, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800))),
+          ),
+        ),
+      ]),
+    );
+  }
 
-      currentPage = value.pagination!.currentPage!;
-      totalPage = value.pagination!.totalPages!;
-      if (value.walletBalance != null) totalAmount = value.walletBalance!.totalAmount!;
-      if (currentPage == 1) {
-        walletData.clear();
+  String _rowTitle(WalletModel d) {
+    switch ((d.transactionType ?? '').toLowerCase()) {
+      case 'topup':
+        return 'Wallet top-up';
+      case 'commission':
+        return 'DROP commission \u00B7 cash trip';
+      case 'ride_earning':
+        return 'Trip earning';
+      case 'transfer_in':
+        return 'Money received';
+      case 'transfer_out':
+        return 'Money sent';
+      case 'withdrawal':
+        return 'Withdrawal';
+      case 'refund':
+        return 'Refund';
+      case 'paymyride':
+        return 'PayMyRide';
+      case 'adjustment':
+        return 'Adjustment by DROP';
+      default:
+        return d.type == DEBIT ? language.moneyDebit : language.moneyDeposited;
+    }
+  }
+
+  String _dayLabel(String? raw) {
+    final dt = DateTime.tryParse(raw ?? '')?.toLocal();
+    if (dt == null) return '';
+    final now = DateTime.now();
+    final d0 = DateTime(now.year, now.month, now.day);
+    final diff = d0.difference(DateTime(dt.year, dt.month, dt.day)).inDays;
+    if (diff == 0) return 'Today';
+    if (diff == 1) return 'Yesterday';
+    return DateFormat('d MMM yyyy').format(dt);
+  }
+
+  Widget _txRow(WalletModel d) {
+    final credit = d.type == CREDIT;
+    final color = credit ? DropColors.success : Colors.red;
+    final time = DateTime.tryParse(d.createdAt ?? '')?.toLocal();
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        CircleAvatar(radius: 20, backgroundColor: color.withValues(alpha: 0.12), child: Icon(credit ? Icons.arrow_downward : Icons.arrow_upward, size: 20, color: color)),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(_rowTitle(d), maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: DropColors.text(context))),
+            if (time != null) Text(DateFormat('hh:mm a').format(time), style: TextStyle(fontSize: 12, color: DropColors.mutedText(context))),
+          ]),
+        ),
+        const SizedBox(width: 8),
+        DropMoneyText(credit ? (d.amount ?? 0) : -(d.amount ?? 0), signed: true, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: color)),
+      ]),
+    );
+  }
+
+  List<Widget> _transactions() {
+    final out = <Widget>[];
+    String? last;
+    for (final d in walletData) {
+      final day = _dayLabel(d.createdAt);
+      if (day != last) {
+        out.add(Padding(padding: const EdgeInsets.only(top: 12, bottom: 2), child: Text(day, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: DropColors.mutedText(context)))));
+        last = day;
       }
-      walletData.addAll(value.data ?? []);
-      setState(() {});
-    }).catchError((error) {
-      appStore.setLoading(false);
-      log(error.toString());
-    });
+      out.add(_txRow(d));
+    }
+    return out;
   }
 
-  getBankDetail() async {
-    await getUserDetail(userId: sharedPref.getInt(USER_ID)).then((value) {
-      userBankAccount = value.data!.userBankAccount;
-      setState(() {});
-    }).then((value) {
-      log(value);
-    });
-  }
-
-  @override
-  void setState(fn) {
-    if (mounted) super.setState(fn);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(language.wallet, style: boldTextStyle(color: appTextPrimaryColorWhite)),
-      ),
-      body: Observer(builder: (context) {
-        return Stack(
-          children: [
-            SingleChildScrollView(
-              physics: BouncingScrollPhysics(),
-              padding: EdgeInsets.fromLTRB(16, 20, 16, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Align(
-                    alignment: Alignment.center,
-                    child: Container(
-                      padding: EdgeInsets.all(16),
-                      margin: EdgeInsets.only(bottom: 16),
-                      decoration: BoxDecoration(color: primaryColor, borderRadius: BorderRadius.circular(defaultRadius)),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(language.availableBalance, style: secondaryTextStyle(color: Colors.white)),
-                          SizedBox(height: 8),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            mainAxisSize: MainAxisSize.max,
-                            children: [
-                              printAmountWidget(amount: totalAmount.toStringAsFixed(digitAfterDecimal), size: 22, color: Colors.white),
-                            ],
-                          )
-                        ],
-                      ),
-                    ),
-                  ),
-                  bankTransferCard(),
-                  Text(language.recentTransactions, style: primaryTextStyle()),
-                  AnimationLimiter(
-                    child: ListView.builder(
-                      padding: EdgeInsets.only(top: 8, bottom: 8),
-                      physics: NeverScrollableScrollPhysics(),
-                      itemCount: walletData.length,
-                      shrinkWrap: true,
-                      itemBuilder: (_, index) {
-                        WalletModel data = walletData[index];
-
-                        return AnimationConfiguration.staggeredList(
-                          delay: Duration(milliseconds: 200),
-                          position: index,
-                          duration: Duration(milliseconds: 375),
-                          child: SlideAnimation(
-                            child: Container(
-                              margin: EdgeInsets.only(top: 8, bottom: 8),
-                              padding: EdgeInsets.all(8),
-                              decoration: BoxDecoration(border: Border.all(color: Colors.grey.withValues(alpha: 0.4)), borderRadius: BorderRadius.circular(defaultRadius)),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Container(
-                                        decoration: BoxDecoration(borderRadius: BorderRadius.circular(defaultRadius), color: Colors.grey.withValues(alpha: 0.2)),
-                                        padding: EdgeInsets.all(8),
-                                        child: Icon(data.type == CREDIT ? Icons.add : Icons.remove, color: primaryColor),
-                                      ),
-                                      SizedBox(width: 8),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(data.type == DEBIT ? language.moneyDebit : language.moneyDeposited, style: boldTextStyle(size: 16)),
-                                            SizedBox(height: 4),
-                                            Text(printDate(data.createdAt!), style: secondaryTextStyle(size: 12)),
-                                          ],
-                                        ),
-                                      ),
-                                      Row(
-                                        children: [
-                                          Text("${data.type == CREDIT ? "+" : "-"} ", style: boldTextStyle(color: data.type == CREDIT ? Colors.green : Colors.red)),
-                                          printAmountWidget(amount: " ${data.amount!.toStringAsFixed(digitAfterDecimal)}", color: data.type == CREDIT ? Colors.green : Colors.red)
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                  if (data.description != null) Text(data.description!, style: secondaryTextStyle(size: 12)),
-                                ],
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  )
-                ],
-              ),
-            ),
-            Visibility(
-              visible: appStore.isLoading,
-              child: loaderWidget(),
-            ),
-            !appStore.isLoading && walletData.isEmpty ? emptyWidget() : SizedBox(),
-          ],
-        );
-      }),
-      bottomNavigationBar: Padding(
-        padding: EdgeInsets.all(16),
-        child: Row(
-          children: [
-            if (totalAmount > 0)
-              Expanded(
-                child: AppButtonWidget(
-                  text: language.withDraw,
-                  width: MediaQuery.of(context).size.width,
-                  onTap: () async {
-                    if (userBankAccount != null && userBankAccount!.accountNumber.validate().isNotEmpty)
-                      launchScreen(
-                          context,
-                          WithDrawScreen(
-                            bankInfo: userBankAccount!,
-                            onTap: () {
-                              init();
-                            },
-                          ));
-                    else {
-                      toast(language.bankInfoNotFound);
-                      // if (res != null) {
-                      getBankDetail();
-                      // }
-                    }
-                  },
-                ),
-              ),
-            if (totalAmount > 0) SizedBox(width: 16),
-            Expanded(
-              child: AppButtonWidget(
-                text: language.addMoney,
-                onTap: () {
-                  showModalBottomSheet(
+  void _showAddMoney() {
+    showModalBottomSheet(
                     context: context,
                     isScrollControlled: true,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.only(topLeft: Radius.circular(defaultRadius), topRight: Radius.circular(defaultRadius))),
@@ -470,12 +406,91 @@ class WalletScreenState extends State<WalletScreen> {
                       );
                     },
                   );
-                },
+  }
+
+  getWalletData() async {
+    await getWalletList(pageData: currentPage).then((value) {
+      appStore.setLoading(false);
+
+      currentPage = value.pagination!.currentPage!;
+      totalPage = value.pagination!.totalPages!;
+      if (value.walletBalance != null) totalAmount = value.walletBalance!.totalAmount!;
+      if (currentPage == 1) {
+        walletData.clear();
+      }
+      walletData.addAll(value.data ?? []);
+      setState(() {});
+    }).catchError((error) {
+      appStore.setLoading(false);
+      log(error.toString());
+    });
+  }
+
+  getBankDetail() async {
+    await getUserDetail(userId: sharedPref.getInt(USER_ID)).then((value) {
+      userBankAccount = value.data!.userBankAccount;
+      setState(() {});
+    }).then((value) {
+      log(value);
+    });
+  }
+
+  @override
+  void setState(fn) {
+    if (mounted) super.setState(fn);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final canWithdraw = totalAmount > 0;
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(language.wallet, style: boldTextStyle(color: appTextPrimaryColorWhite)),
+      ),
+      body: Observer(builder: (context) {
+        return Stack(
+          children: [
+            SingleChildScrollView(
+              controller: scrollController,
+              physics: const BouncingScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  balanceCard(),
+                  bankTransferCard(),
+                  Text(language.recentTransactions, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: DropColors.text(context))),
+                  ..._transactions(),
+                  if (!appStore.isLoading && walletData.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 32),
+                      child: Center(child: Text('No transactions yet. Your top-ups, earnings and commission will show here.', textAlign: TextAlign.center, style: TextStyle(fontSize: 15, color: DropColors.mutedText(context)))),
+                    ),
+                ],
               ),
             ),
+            Visibility(visible: appStore.isLoading, child: loaderWidget()),
           ],
-        ),
-      ),
+        );
+      }),
+      bottomNavigationBar: canWithdraw
+          ? SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: DropActionButton(
+                  label: language.withDraw,
+                  onPressed: () {
+                    if (userBankAccount != null && userBankAccount!.accountNumber.validate().isNotEmpty) {
+                      launchScreen(context, WithDrawScreen(bankInfo: userBankAccount!, onTap: () => init()));
+                    } else {
+                      toast(language.bankInfoNotFound);
+                      getBankDetail();
+                    }
+                  },
+                ),
+              ),
+            )
+          : null,
     );
   }
 }

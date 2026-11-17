@@ -1,6 +1,10 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:drop/service/DriverApplicationApi.dart';
+import 'package:drop/drop/design/drop_design.dart';
+import 'package:drop/drop/widgets/drop_money.dart';
+import 'package:drop/drop/widgets/drop_ride_ui.dart';
 import 'package:drop/drop/widgets/drop_sos_sheet.dart';
 import 'package:drop/components/DropMap.dart';
 import 'package:drop/components/LiveLocation.dart';
@@ -61,6 +65,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
   double _heading = 0;
   String _iconKey = 'car';
   int _docsRequested = 0;
+  final Map<int, int> _reqTotal = {}; // longest countdown seen per request, for the ring
+  final Set<int> _expiredShown = {};
 
   bool get online => status['is_online'] == true;
   Map<String, dynamic> get wallet => Map<String, dynamic>.from((status['wallet'] ?? {}) as Map);
@@ -83,7 +89,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       _secs++;
       if (_secs % 4 == 0) _pollRides();
-      if (mounted && requests.isNotEmpty) setState(() {});
+      if (mounted && requests.any((r) => _secondsLeft(r) == 0 && _expiredShown.add((r['id'] as num?)?.toInt() ?? -1))) setState(() {});
     });
   }
 
@@ -312,13 +318,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
 
   double _num(dynamic v) => v is num ? v.toDouble() : (double.tryParse(v?.toString() ?? '') ?? 0);
 
-  String _naira(dynamic v) {
-    final n = _num(v);
-    final t = n.toStringAsFixed(n == n.roundToDouble() ? 0 : 2);
-    final parts = t.split('.');
-    final whole = parts[0].replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (m) => ',');
-    return '\u20A6$whole${parts.length > 1 ? '.${parts[1]}' : ''}';
-  }
+  String _naira(dynamic v) => DropMoney.format(v);
 
   final Set<int> _heardRequests = {};
   bool _requestsPrimed = false;
@@ -397,16 +397,21 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     } catch (_) {}
   }
 
-  Future<bool> _confirm(String title, String text, String yes) async {
-    final ok = await showDialog<bool>(
+  Future<bool> _confirm(String title, String text, String yes, {bool danger = false}) async {
+    final ok = await showModalBottomSheet<bool>(
       context: context,
-      builder: (c) => AlertDialog(
-        title: Text(title),
-        content: Text(text),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Not yet')),
-          TextButton(onPressed: () => Navigator.pop(c, true), child: Text(yes)),
-        ],
+      backgroundColor: Colors.transparent,
+      builder: (c) => DropSheet(
+        maxHeightFactor: 0.6,
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(title, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: DropColors.text(c))),
+          const SizedBox(height: 8),
+          Text(text, style: TextStyle(fontSize: 15, height: 1.35, color: DropColors.mutedText(c))),
+          const SizedBox(height: 20),
+          DropActionButton(label: yes, primary: true, danger: danger, onPressed: () => Navigator.pop(c, true)),
+          const SizedBox(height: 10),
+          DropActionButton(label: 'Not yet', onPressed: () => Navigator.pop(c, false)),
+        ]),
       ),
     );
     return ok == true;
@@ -421,21 +426,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     try {
       final res = _asMap((await RideApi.complete(id))['data']);
       ToneService.play(ToneEvent.driverPayment);
-      if (mounted) {
-        await showDialog<void>(
-          context: context,
-          builder: (c) => AlertDialog(
-            title: const Text('Trip complete'),
-            content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Fare ${_naira(res['fare'])}'),
-              Text('DROP commission ${_naira(res['commission'])}'),
-              Text('Your earning ${_naira(res['earning'])}', style: const TextStyle(fontWeight: FontWeight.w800)),
-              if (res['collect_cash'] == true) Padding(padding: const EdgeInsets.only(top: 10), child: Text('Collect ${_naira(res['fare'])} in cash from the passenger.', style: const TextStyle(fontWeight: FontWeight.w700))),
-            ]),
-            actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text('OK'))],
-          ),
-        );
-      }
+      _load(); // the wallet chip behind the receipt updates at once
+      if (mounted) await _showReceipt(res);
     } on ApiFailure catch (e) {
       _say(e.message);
     }
@@ -446,7 +438,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
 
   Future<void> _cancelTrip(Map<String, dynamic> a) async {
     final id = (a['id'] as num).toInt();
-    if (!await _confirm('Cancel this trip?', 'The request goes back to other drivers. Cancelling too often can affect your account.', 'Cancel trip')) return;
+    if (!await _confirm('Cancel this trip?', 'The request goes back to other drivers. Cancelling too often can affect your account.', 'Cancel trip', danger: true)) return;
     await _rideAction(() => RideApi.driverCancel(id), thenSay: 'Trip cancelled.');
   }
 
@@ -486,48 +478,150 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     return d < 0 ? 0 : d;
   }
 
-  Widget _addrRow(IconData icon, Color color, String text) => Padding(
-        padding: const EdgeInsets.only(top: 6),
-        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Icon(icon, size: 18, color: color),
-          const SizedBox(width: 8),
-          Expanded(child: Text(text.isEmpty ? 'Selected place' : text)),
-        ]),
-      );
+  /// What the driver sees when a trip ends: the earning first, then the breakdown and what to do about the money.
+  Future<void> _showReceipt(Map<String, dynamic> res) {
+    final cash = res['collect_cash'] == true;
+    final commission = DropMoney.toNum(res['commission']);
+    return showModalBottomSheet<void>(
+      context: context,
+      isDismissible: false,
+      enableDrag: false,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (c) => PopScope(
+        canPop: false,
+        child: DropSheet(
+          maxHeightFactor: 0.92,
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Center(
+              child: CircleAvatar(
+                radius: 28,
+                backgroundColor: DropColors.success.withValues(alpha: 0.14),
+                child: Icon(Icons.check_rounded, color: DropColors.success, size: 34),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text('Trip complete', textAlign: TextAlign.center, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: DropColors.text(c))),
+            const SizedBox(height: 4),
+            Text('You earned', textAlign: TextAlign.center, style: TextStyle(fontSize: 14, color: DropColors.mutedText(c))),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: DropMoneyText(res['earning'], style: TextStyle(fontSize: 40, fontWeight: FontWeight.w900, color: DropColors.text(c))),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(color: DropColors.surface(c), borderRadius: BorderRadius.circular(16), border: Border.all(color: DropColors.hairline(c))),
+              child: Column(children: [
+                DropReceiptRow(label: 'Fare', amount: DropMoneyText(res['fare'])),
+                DropReceiptRow(label: 'DROP commission', amount: DropMoneyText(-commission)),
+                Divider(height: 12, color: DropColors.hairline(c)),
+                DropReceiptRow(label: 'Your earning', amount: DropMoneyText(res['earning']), bold: true),
+              ]),
+            ),
+            const SizedBox(height: 12),
+            if (cash)
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(color: DropColors.primary.withValues(alpha: 0.10), borderRadius: BorderRadius.circular(14), border: Border.all(color: DropColors.primary, width: 1.2)),
+                child: Row(children: [
+                  Icon(Icons.payments_outlined, color: DropColors.primary),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text.rich(
+                      TextSpan(style: TextStyle(fontSize: 16, color: DropColors.text(c)), children: [
+                        const TextSpan(text: 'Collect '),
+                        TextSpan(text: DropMoney.format(res['fare']), style: const TextStyle(fontWeight: FontWeight.w900)),
+                        const TextSpan(text: ' in cash from the passenger.'),
+                      ]),
+                    ),
+                  ),
+                ]),
+              )
+            else
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(color: DropColors.success.withValues(alpha: 0.10), borderRadius: BorderRadius.circular(14)),
+                child: Row(children: [
+                  Icon(Icons.account_balance_wallet_outlined, color: DropColors.success),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text('Paid from the passenger’s wallet. Your earning has been added to your wallet.', style: TextStyle(fontSize: 15, color: DropColors.text(c)))),
+                ]),
+              ),
+            if (cash && commission > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text('${DropMoney.format(commission)} DROP commission was taken from your wallet.', style: TextStyle(fontSize: 13, color: DropColors.mutedText(c))),
+              ),
+            const SizedBox(height: 16),
+            DropActionButton(label: 'Done', primary: true, onPressed: () => Navigator.pop(c)),
+            if (cash && commission > 0)
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(c);
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => WalletScreen())).then((_) => _load());
+                },
+                child: const Text('View wallet'),
+              ),
+          ]),
+        ),
+      ),
+    );
+  }
 
-  Widget _requestCard(Map<String, dynamic> r) {
+  Widget _requestCard(Map<String, dynamic> r, {required int index, required int total}) {
     final pickup = _asMap(r['pickup']);
     final drop = _asMap(r['dropoff']);
-    final left = _secondsLeft(r);
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: primaryColor, width: 1.5)),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Expanded(child: Text(_naira(r['fare']), style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w900))),
-          Text('${left}s', style: TextStyle(color: left < 20 ? Colors.red : Colors.grey.shade700, fontWeight: FontWeight.w700)),
-        ]),
-        Text('You earn ${_naira(r['earning'])} \u00B7 ${r['payment_method'] == 'wallet' ? 'wallet' : 'cash'}', style: TextStyle(color: Colors.grey.shade700)),
-        const SizedBox(height: 4),
-        Text('Pickup ${_num(r['pickup_distance_km']).toStringAsFixed(1)} km away (~${r['pickup_eta_minutes']} min) \u00B7 trip ${_num(r['distance']).toStringAsFixed(1)} ${r['distance_unit'] ?? 'km'}, ~${_num(r['duration_minutes']).round()} min',
-            style: TextStyle(color: Colors.grey.shade700, fontSize: 13)),
-        _addrRow(Icons.my_location, Colors.green, (pickup['address'] ?? '').toString()),
-        _addrRow(Icons.location_on, primaryColor, (drop['address'] ?? '').toString()),
-        const SizedBox(height: 12),
-        Row(children: [
-          Expanded(child: OutlinedButton(onPressed: rideBusy ? null : () => _decline(r), child: const Text('Decline'))),
-          const SizedBox(width: 10),
+    final id = (r['id'] as num?)?.toInt() ?? 0;
+    final seen = _reqTotal[id] = math.max(_reqTotal[id] ?? 0, _secondsLeft(r));
+    final cash = r['payment_method'] != 'wallet';
+    final unit = (r['distance_unit'] ?? 'km').toString();
+    final eta = r['pickup_eta_minutes'];
+    final tripMin = _num(r['duration_minutes']).round();
+    return DropSwipeDecision(
+      enabled: !rideBusy,
+      onAccept: () => _accept(r),
+      onDecline: () => _decline(r),
+      child: DropSheet(
+      maxHeightFactor: 0.7,
+      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
           Expanded(
-            flex: 2,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: primaryColor, foregroundColor: Colors.white),
-              onPressed: rideBusy ? null : () => _accept(r),
-              child: rideBusy ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Accept', style: TextStyle(fontWeight: FontWeight.w800)),
-            ),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              if (total > 1) Text('New request · ${index + 1} of $total', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: DropColors.mutedText(context))),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: DropMoneyText(r['fare'], style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: DropColors.text(context))),
+              ),
+              Text.rich(TextSpan(style: TextStyle(fontSize: 15, color: DropColors.mutedText(context)), children: [
+                const TextSpan(text: 'You earn '),
+                TextSpan(text: DropMoney.format(r['earning']), style: TextStyle(fontWeight: FontWeight.w800, color: DropColors.success)),
+              ])),
+            ]),
           ),
+          const SizedBox(width: 12),
+          DropCountdownRing(expiresAt: DateTime.tryParse(r['expires_at']?.toString() ?? ''), totalSeconds: seen),
+        ]),
+        const SizedBox(height: 10),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          DropFactChip(icon: cash ? Icons.payments_outlined : Icons.account_balance_wallet_outlined, text: cash ? 'Cash' : 'Wallet'),
+          DropFactChip(icon: Icons.my_location, text: '${_num(r['pickup_distance_km']).toStringAsFixed(1)} km${eta != null ? ' · $eta min' : ''} to pickup'),
+          DropFactChip(icon: Icons.route, text: 'Trip ${_num(r['distance']).toStringAsFixed(1)} $unit · $tripMin min'),
+        ]),
+        const SizedBox(height: 14),
+        DropStopTimeline(pickup: (pickup['address'] ?? '').toString(), dropoff: (drop['address'] ?? '').toString()),
+        const SizedBox(height: 10),
+        Center(child: Text('Swipe down to accept \u00B7 up to decline', style: TextStyle(fontSize: 12, color: DropColors.mutedText(context)))),
+        const SizedBox(height: 10),
+        Row(children: [
+          Expanded(flex: 2, child: DropActionButton(label: 'Decline', onPressed: rideBusy ? null : () => _decline(r))),
+          const SizedBox(width: 12),
+          Expanded(flex: 3, child: DropActionButton(label: 'Accept', primary: true, loading: rideBusy, onPressed: rideBusy ? null : () => _accept(r))),
         ]),
       ]),
-    );
+    ));
   }
 
   Widget _activeTrip(Map<String, dynamic> a) {
@@ -536,62 +630,70 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     final drop = _asMap(a['dropoff']);
     final rider = _asMap(a['rider']);
     final toDrop = status == 'in_progress';
-    final title = status == 'accepted' ? 'Go to the pickup point' : (status == 'arrived' ? 'Waiting for the passenger' : 'Trip in progress');
     final target = toDrop ? drop : pickup;
     final cash = a['payment_method'] != 'wallet';
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.green, width: 1.5)),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    final name = (rider['first_name'] ?? '').toString();
+    final phone = (rider['contact_number'] ?? '').toString();
+    final pillText = status == 'accepted' ? 'Heading to pickup' : (status == 'arrived' ? 'Waiting for passenger' : 'Trip in progress');
+    final pillColor = status == 'in_progress' ? DropColors.success : DropColors.primary;
+    final pillIcon = status == 'accepted' ? Icons.navigation : (status == 'arrived' ? Icons.hourglass_top : Icons.directions_car);
+    final primaryLabel = status == 'accepted' ? 'I have arrived' : (status == 'arrived' ? 'Start trip' : 'Complete trip');
+    return DropSheet(
+      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Row(children: [
-          Expanded(child: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800))),
-          Text(_naira(a['fare']), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+          Expanded(child: Align(alignment: Alignment.centerLeft, child: DropStatusPill(text: pillText, color: pillColor, icon: pillIcon))),
+          const SizedBox(width: 12),
+          DropMoneyText(a['fare'], style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: DropColors.text(context))),
         ]),
-        Text(cash ? 'Passenger pays cash \u00B7 you earn ${_naira(a['earning'])}' : 'Paid from wallet \u00B7 you earn ${_naira(a['earning'])}', style: TextStyle(color: Colors.grey.shade700)),
-        if ((rider['first_name'] ?? '').toString().isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Row(children: [
-              const Icon(Icons.person_outline, size: 18),
-              const SizedBox(width: 8),
-              Expanded(child: Text(rider['first_name'].toString(), style: const TextStyle(fontWeight: FontWeight.w700))),
-              if ((rider['contact_number'] ?? '').toString().isNotEmpty) IconButton(onPressed: () => _callRider(rider['contact_number'].toString()), icon: Icon(Icons.call, color: primaryColor)),
-            ]),
+        const SizedBox(height: 10),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          DropFactChip(icon: cash ? Icons.payments_outlined : Icons.account_balance_wallet_outlined, text: cash ? 'Passenger pays cash' : 'Paid from wallet'),
+          DropFactChip(icon: Icons.trending_up, text: 'You earn ${DropMoney.format(a['earning'])}', color: DropColors.success),
+        ]),
+        if (name.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          Row(children: [
+            CircleAvatar(radius: 22, backgroundColor: DropColors.primary.withValues(alpha: 0.12), child: Text(name.characters.first.toUpperCase(), style: TextStyle(fontWeight: FontWeight.w900, color: DropColors.primary))),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: DropColors.text(context))),
+                Text('Passenger', style: TextStyle(fontSize: 13, color: DropColors.mutedText(context))),
+              ]),
+            ),
+            if (phone.isNotEmpty) DropRoundAction(icon: Icons.call, label: 'Call passenger', onPressed: () => _callRider(phone)),
+          ]),
+        ],
+        const SizedBox(height: 14),
+        DropStopTimeline(pickup: (pickup['address'] ?? '').toString(), dropoff: (drop['address'] ?? '').toString(), activeStop: toDrop ? 1 : 0),
+        const SizedBox(height: 14),
+        Row(children: [
+          Expanded(child: DropActionButton(label: 'Navigate', icon: Icons.navigation_outlined, onPressed: () => _openMaps(_num(target['lat']), _num(target['lng'])))),
+          const SizedBox(width: 12),
+          Expanded(child: DropActionButton(label: 'SOS', icon: Icons.sos, danger: true, onPressed: () => showDropSos(context, rideId: (a['id'] as num?)?.toInt()))),
+        ]),
+        const SizedBox(height: 10),
+        DropActionButton(
+          label: primaryLabel,
+          primary: true,
+          loading: rideBusy,
+          onPressed: rideBusy
+              ? null
+              : () {
+                  final id = (a['id'] as num).toInt();
+                  if (status == 'accepted') _rideAction(() => RideApi.arrived(id));
+                  if (status == 'arrived') _rideAction(() => RideApi.start(id));
+                  if (status == 'in_progress') _complete(a);
+                },
+        ),
+        if (status != 'in_progress')
+          Center(
+            child: TextButton(
+              style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+              onPressed: rideBusy ? null : () => _cancelTrip(a),
+              child: const Text('Cancel trip', style: TextStyle(color: Colors.red, fontWeight: FontWeight.w700)),
+            ),
           ),
-        _addrRow(Icons.my_location, Colors.green, (pickup['address'] ?? '').toString()),
-        _addrRow(Icons.location_on, primaryColor, (drop['address'] ?? '').toString()),
-        const SizedBox(height: 12),
-        OutlinedButton.icon(
-          onPressed: () => _openMaps(_num(target['lat']), _num(target['lng'])),
-          icon: const Icon(Icons.navigation_outlined),
-          label: Text(toDrop ? 'Navigate to drop-off' : 'Navigate to pickup'),
-        ),
-        const SizedBox(height: 8),
-        OutlinedButton.icon(
-          onPressed: () => showDropSos(context, rideId: (a['id'] as num?)?.toInt()),
-          icon: const Icon(Icons.sos, color: Colors.red),
-          label: const Text('SOS \u2013 I need help', style: TextStyle(color: Colors.red)),
-          style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.red)),
-        ),
-        const SizedBox(height: 8),
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: primaryColor, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14)),
-            onPressed: rideBusy
-                ? null
-                : () {
-                    final id = (a['id'] as num).toInt();
-                    if (status == 'accepted') _rideAction(() => RideApi.arrived(id));
-                    if (status == 'arrived') _rideAction(() => RideApi.start(id));
-                    if (status == 'in_progress') _complete(a);
-                  },
-            child: rideBusy
-                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : Text(status == 'accepted' ? 'I have arrived' : (status == 'arrived' ? 'Start trip' : 'Complete trip'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-          ),
-        ),
-        if (status != 'in_progress') Align(alignment: Alignment.centerRight, child: TextButton(onPressed: rideBusy ? null : () => _cancelTrip(a), child: const Text('Cancel trip', style: TextStyle(color: Colors.red)))),
       ]),
     );
   }
@@ -726,7 +828,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
               child: Row(mainAxisSize: MainAxisSize.min, children: [
                 Icon(Icons.account_balance_wallet_outlined, size: 18, color: primaryColor),
                 const SizedBox(width: 6),
-                Text(_naira(wallet['balance']), style: const TextStyle(fontWeight: FontWeight.w800)),
+                Text(_naira(wallet['balance']), style: TextStyle(fontWeight: FontWeight.w800, color: DropMoney.toNum(wallet['balance']) < 0 ? Colors.red : null)),
               ]),
             ),
           ),
@@ -736,53 +838,39 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     ]);
   }
 
-  /// What sits at the bottom of the map: the trip, the incoming requests, or the go-online prompt.
+  /// What sits at the bottom of the map: the trip, the incoming request, or the go-online prompt.
   Widget _bottomPanel() {
     final a = active;
-    Widget child;
-    if (a != null) {
-      child = _activeTrip(a);
-    } else if (!online) {
-      final b = block;
-      child = Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 10)]),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('You are offline', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 4),
-          Text(b == null ? 'Go online to start receiving ride requests.' : 'Fix the issue above to go online.', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey.shade700)),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: primaryColor, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14)),
-              onPressed: busy ? null : () => b == null ? _toggle(true) : _say(b['message']?.toString() ?? 'You cannot go online yet.'),
-              child: const Text('Go online', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-            ),
-          ),
+    if (a != null) return _activeTrip(a);
+    if (!online) return Padding(padding: const EdgeInsets.fromLTRB(12, 0, 12, 12), child: _offlineCard());
+    final open = requests.where((r) => _secondsLeft(r) > 0).toList();
+    if (open.isEmpty) return Padding(padding: const EdgeInsets.fromLTRB(12, 0, 12, 20), child: _lookingPill());
+    return _requestCard(open.first, index: 0, total: open.length);
+  }
+
+  Widget _offlineCard() {
+    final b = block;
+    return DropSheet(
+      margin: EdgeInsets.zero,
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Text('You are offline', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: DropColors.text(context))),
+        const SizedBox(height: 4),
+        Text(b == null ? 'Go online to start receiving ride requests.' : 'Fix the issue above to go online.', textAlign: TextAlign.center, style: TextStyle(fontSize: 15, color: DropColors.mutedText(context))),
+        const SizedBox(height: 14),
+        DropActionButton(label: 'Go online', primary: true, onPressed: busy ? null : () => b == null ? _toggle(true) : _say(b['message']?.toString() ?? 'You cannot go online yet.')),
+      ]),
+    );
+  }
+
+  Widget _lookingPill() => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+        decoration: BoxDecoration(color: dropIsDark(context) ? DropColors.nightSurface : Colors.white, borderRadius: BorderRadius.circular(28), boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 10)]),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+          const SizedBox(width: 12),
+          Text('Looking for requests\u2026', style: TextStyle(fontWeight: FontWeight.w700, color: DropColors.text(context))),
         ]),
       );
-    } else {
-      final open = requests.where((r) => _secondsLeft(r) > 0).toList();
-      if (open.isEmpty) {
-        child = Container(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(28), boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 10)]),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
-            const SizedBox(width: 12),
-            Text('Looking for ride requests\u2026', style: TextStyle(fontWeight: FontWeight.w700, color: Colors.grey.shade800)),
-          ]),
-        );
-      } else {
-        child = ConstrainedBox(
-          constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.55),
-          child: ListView(shrinkWrap: true, children: [for (final r in open) Padding(padding: const EdgeInsets.only(bottom: 10), child: _requestCard(r))]),
-        );
-      }
-    }
-    return Padding(padding: const EdgeInsets.fromLTRB(12, 0, 12, 12), child: child);
-  }
 
   Widget _blockCard(Map<String, dynamic> b) {
     final isDocs = b['code'] == 'documents_expired';
