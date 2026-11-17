@@ -55,6 +55,8 @@ dependencies:
   package_info_plus: ^8.0.2
   # CONNECTIVITY
   http: ^1.2.2
+  # On-device spoken turn-by-turn guidance for Driver Navigation.
+  flutter_tts: ^4.2.3
   connectivity_plus: ^6.0.5
   url_launcher: ^6.3.0
   internet_file: ^1.2.0
