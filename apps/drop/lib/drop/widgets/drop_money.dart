@@ -18,8 +18,8 @@ class DropMoney {
     final v = toNum(value);
     final abs = v.abs();
     final isZero = abs < 0.005;
-    final d = decimals ?? (abs == abs.roundToDouble() ? 0 : 2);
-    final fixed = abs.toStringAsFixed(d);
+    final d = decimals ?? ((isZero || abs == abs.roundToDouble()) ? 0 : 2);
+    final fixed = (isZero ? 0.0 : abs).toStringAsFixed(d);
     final parts = fixed.split('.');
     final whole = parts[0].replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (m) => ',');
     final body = '$symbol$whole${parts.length > 1 ? '.${parts[1]}' : ''}';
