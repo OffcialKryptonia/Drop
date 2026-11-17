@@ -4,6 +4,9 @@ name: Android test build
 # and publishes it as a pre-release you can download straight onto an Android phone.
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - fix/mapbox-style-camera-follow
 
 permissions:
   contents: write
@@ -69,22 +72,45 @@ jobs:
           storeFile=../test-keystore/drop-test.jks
           EOF
 
-      # Gradle cannot install the NDK until the Android SDK licences are accepted.
-      - name: Accept Android licences and install NDK
+      # Preinstall every NDK version required by the app and native plugins.
+      # sdkmanager occasionally leaves a corrupt partial NDK directory on hosted runners;
+      # remove that directory and retry the download before Gradle starts.
+      - name: Accept Android licences and install required NDK versions
+        shell: bash
         run: |
+          set -euo pipefail
           SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
           SDKMANAGER="$(command -v sdkmanager || true)"
           if [ -z "$SDKMANAGER" ]; then
             SDKMANAGER="$(find "$SDK_ROOT" -type f -name sdkmanager -path '*cmdline-tools*' 2>/dev/null | head -n 1)"
           fi
-          echo "SDK root: $SDK_ROOT"
-          echo "sdkmanager: $SDKMANAGER"
           if [ -z "$SDKMANAGER" ]; then
             echo "::error::sdkmanager not found under $SDK_ROOT"
             exit 1
           fi
           yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses > /dev/null || true
-          "$SDKMANAGER" --sdk_root="$SDK_ROOT" "ndk;29.0.13113456"
+
+          install_ndk() {
+            local version="$1"
+            local ndk_dir="$SDK_ROOT/ndk/$version"
+            for attempt in 1 2 3; do
+              rm -rf "$ndk_dir"
+              echo "Installing NDK $version (attempt $attempt/3)"
+              if "$SDKMANAGER" --sdk_root="$SDK_ROOT" --install "ndk;$version" && [ -s "$ndk_dir/source.properties" ]; then
+                echo "NDK $version installed and verified."
+                return 0
+              fi
+              echo "NDK $version installation was incomplete; retrying."
+              rm -rf "$ndk_dir"
+              sleep 15
+            done
+            echo "::error::Could not install a valid NDK $version after three attempts."
+            return 1
+          }
+
+          # 28.2 is requested by a native plugin subproject; 29.0 is pinned by the app module.
+          install_ndk "28.2.13676358"
+          install_ndk "29.0.13113456"
 
       - run: flutter pub get
 
