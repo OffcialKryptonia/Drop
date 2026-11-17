@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:drop/service/DriverApplicationApi.dart';
 import 'package:drop/drop/design/drop_design.dart';
+import 'package:drop/drop/widgets/drop_eta.dart';
 import 'package:drop/drop/widgets/drop_money.dart';
 import 'package:drop/drop/widgets/drop_ride_ui.dart';
 import 'package:drop/drop/widgets/drop_sos_sheet.dart';
@@ -645,6 +646,10 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
           const SizedBox(width: 12),
           DropMoneyText(a['fare'], style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: DropColors.text(context))),
         ]),
+        if (a['eta'] is Map) ...[
+          const SizedBox(height: 10),
+          DropEtaStrip(eta: _asMap(a['eta']), forDriver: true),
+        ],
         const SizedBox(height: 10),
         Wrap(spacing: 8, runSpacing: 8, children: [
           DropFactChip(icon: cash ? Icons.payments_outlined : Icons.account_balance_wallet_outlined, text: cash ? 'Passenger pays cash' : 'Paid from wallet'),
