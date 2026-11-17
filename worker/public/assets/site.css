@@ -155,6 +155,31 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .safety-list li { display: grid; gap: var(--s2); padding-block: var(--s5); border-bottom: 1px solid var(--line); }
 .safety-list h3 { font-size: var(--step-1); }
 
+/* Hero live-trip cards */
+.hero-cards { position: absolute; z-index: 3; right: var(--s5); bottom: var(--s5); display: grid; gap: var(--s3); width: min(19rem, calc(100% - 2 * var(--s5))); }
+.hero-card { background: rgba(255,255,255,.96); border-radius: var(--radius); padding: var(--s4) var(--s5); box-shadow: 0 12px 32px rgba(21,21,21,.28); display: grid; gap: 2px; color: var(--ink); font-size: .9375rem; line-height: 1.4; }
+.hero-card strong { font-family: var(--font-display); font-size: 1.375rem; letter-spacing: -0.01em; }
+.hero-card .hc-tag { display: inline-block; width: max-content; font: 600 .6875rem/1 var(--font-display); letter-spacing: .08em; text-transform: uppercase; color: #fff; background: var(--drop-red); border-radius: 3px; padding: .3rem .5rem; margin-bottom: var(--s2); }
+.hero-card .hc-label { font-size: .8125rem; color: var(--ink-mute); }
+.hero-card .hc-sub { font-size: .8125rem; color: var(--ink-mute); }
+.hero-card.driver { display: flex; align-items: center; gap: var(--s3); }
+.hero-card.driver strong { font-size: 1rem; }
+.hero-card .hc-dot { flex: none; width: .75rem; height: .75rem; border-radius: 50%; background: #1e9e50; box-shadow: 0 0 0 4px rgba(30,158,80,.2); }
+
+/* Technology */
+.tech { background: var(--paper); }
+.tech .copy { display: grid; gap: var(--s4); }
+.tech h2 { font-size: var(--step-3); line-height: 1.05; }
+
+/* Payments */
+.payments { background: var(--warm); }
+.pay-grid { display: grid; gap: var(--s5); margin-top: var(--s6); border-top: 4px solid var(--ink); }
+.pay-grid li { padding-top: var(--s5); border-bottom: 1px solid var(--line); padding-bottom: var(--s5); display: grid; gap: var(--s2); }
+.pay-grid h3 { font-size: var(--step-1); }
+
+/* Coverage */
+.coverage { background: var(--paper); }
+
 /* About */
 .about { background: var(--warm); }
 .about-grid { display: grid; gap: var(--s6); }
@@ -221,7 +246,9 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   .route::before { left: 1.1rem; right: 1.1rem; top: 1.05rem; bottom: auto; width: auto; height: 4px; background: repeating-linear-gradient(to right, var(--drop-orange) 0 14px, transparent 14px 22px); }
   .stop { padding-left: 0; padding-top: 3.5rem; }
   .stop h3 { padding-top: 0; }
-  .footer-cols { grid-template-columns: repeat(4, 1fr); }
+  .pay-grid { grid-template-columns: repeat(3, 1fr); gap: var(--s6); }
+.pay-grid li { border-bottom: 0; }
+.footer-cols { grid-template-columns: repeat(4, 1fr); }
 }
 @media (min-width: 64em) {
   .nav-toggle, .menu { display: none; }
