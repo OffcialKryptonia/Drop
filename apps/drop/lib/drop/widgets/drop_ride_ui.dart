@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui' show FontFeature;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../design/drop_design.dart';
 
@@ -334,6 +335,106 @@ class DropReceiptRow extends StatelessWidget {
           Expanded(child: Text(label, style: style)),
           DefaultTextStyle(style: style.copyWith(color: amountColor ?? DropColors.text(context)), child: amount),
         ],
+      ),
+    );
+  }
+}
+
+/// Swipe a ride request: down to accept (green), up to decline (red). The card follows the finger and
+/// tints; it only counts past [threshold] dp (or a quick flick), otherwise it springs back.
+class DropSwipeDecision extends StatefulWidget {
+  const DropSwipeDecision({super.key, required this.child, required this.onAccept, required this.onDecline, this.enabled = true, this.threshold = 110});
+
+  final Widget child;
+  final VoidCallback onAccept;
+  final VoidCallback onDecline;
+  final bool enabled;
+  final double threshold;
+
+  @override
+  State<DropSwipeDecision> createState() => _DropSwipeDecisionState();
+}
+
+class _DropSwipeDecisionState extends State<DropSwipeDecision> with SingleTickerProviderStateMixin {
+  double _dy = 0;
+  bool _armed = false;
+  late final AnimationController _back = AnimationController(vsync: this, duration: const Duration(milliseconds: 180));
+
+  @override
+  void dispose() {
+    _back.dispose();
+    super.dispose();
+  }
+
+  void _update(DragUpdateDetails d) {
+    if (!widget.enabled) return;
+    _back.stop();
+    setState(() {
+      _dy = (_dy + d.delta.dy).clamp(-220.0, 220.0);
+      final armed = _dy.abs() >= widget.threshold;
+      if (armed && !_armed) HapticFeedback.mediumImpact();
+      _armed = armed;
+    });
+  }
+
+  void _end(DragEndDetails d) {
+    if (!widget.enabled) return;
+    final v = d.primaryVelocity ?? 0;
+    final down = _dy >= widget.threshold || (_dy > 40 && v > 900);
+    final up = _dy <= -widget.threshold || (_dy < -40 && v < -900);
+    if (down) {
+      widget.onAccept();
+    } else if (up) {
+      widget.onDecline();
+    }
+    final from = _dy;
+    _back
+      ..reset()
+      ..addListener(() => setState(() => _dy = from * (1 - Curves.easeOut.transform(_back.value))))
+      ..forward().whenComplete(() {
+        _back.clearListeners();
+        if (mounted) setState(() {
+          _dy = 0;
+          _armed = false;
+        });
+      });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = (_dy.abs() / widget.threshold).clamp(0.0, 1.0);
+    final accept = _dy > 0;
+    final tint = accept ? DropColors.success : Colors.red;
+    return GestureDetector(
+      behavior: HitTestBehavior.deferToChild,
+      onVerticalDragUpdate: _update,
+      onVerticalDragEnd: _end,
+      child: Transform.translate(
+        offset: Offset(0, _dy),
+        child: Stack(
+          children: [
+            widget.child,
+            if (p > 0)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: Container(
+                    margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(color: tint.withValues(alpha: 0.25 + 0.55 * p), borderRadius: BorderRadius.circular(24)),
+                    child: Opacity(
+                      opacity: p,
+                      child: Column(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(accept ? Icons.check_circle : Icons.cancel, color: Colors.white, size: 56),
+                        const SizedBox(height: 6),
+                        Text(_armed ? (accept ? 'Release to accept' : 'Release to decline') : (accept ? 'Keep going to accept' : 'Keep going to decline'),
+                            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
+                      ]),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

@@ -579,7 +579,11 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     final unit = (r['distance_unit'] ?? 'km').toString();
     final eta = r['pickup_eta_minutes'];
     final tripMin = _num(r['duration_minutes']).round();
-    return DropSheet(
+    return DropSwipeDecision(
+      enabled: !rideBusy,
+      onAccept: () => _accept(r),
+      onDecline: () => _decline(r),
+      child: DropSheet(
       maxHeightFactor: 0.7,
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
@@ -608,14 +612,16 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
         ]),
         const SizedBox(height: 14),
         DropStopTimeline(pickup: (pickup['address'] ?? '').toString(), dropoff: (drop['address'] ?? '').toString()),
-        const SizedBox(height: 16),
+        const SizedBox(height: 10),
+        Center(child: Text('Swipe down to accept \u00B7 up to decline', style: TextStyle(fontSize: 12, color: DropColors.mutedText(context)))),
+        const SizedBox(height: 10),
         Row(children: [
           Expanded(flex: 2, child: DropActionButton(label: 'Decline', onPressed: rideBusy ? null : () => _decline(r))),
           const SizedBox(width: 12),
           Expanded(flex: 3, child: DropActionButton(label: 'Accept', primary: true, loading: rideBusy, onPressed: rideBusy ? null : () => _accept(r))),
         ]),
       ]),
-    );
+    ));
   }
 
   Widget _activeTrip(Map<String, dynamic> a) {
