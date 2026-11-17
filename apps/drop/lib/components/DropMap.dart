@@ -24,6 +24,7 @@ class DropMarker {
 class DropMapController {
   _DropMapState? _state;
   void animateTo(ll.LatLng point, {double zoom = 17}) => _state?._animateTo(point, zoom);
+  void followDriver(ll.LatLng point, {double zoom = 17.5, double bearing = 0, double pitch = 55}) => _state?._followDriver(point, zoom, bearing, pitch);
   void fitPoints(List<ll.LatLng> points) => _state?._fit(points);
 }
 
@@ -148,6 +149,22 @@ class _DropMapState extends State<DropMap> {
         _mapbox!.flyTo(mb.CameraOptions(center: mb.Point(coordinates: mb.Position(p.longitude, p.latitude)), zoom: zoom), mb.MapAnimationOptions(duration: 650, startDelay: 0));
       } else if (_osmReady) {
         _osm.move(p, zoom);
+      }
+    } catch (_) {}
+  }
+
+  void _followDriver(ll.LatLng point, double zoom, double bearing, double pitch) {
+    try {
+      if (_isGoogle) {
+        _google?.animateCamera(g.CameraUpdate.newCameraPosition(g.CameraPosition(target: g.LatLng(point.latitude, point.longitude), zoom: zoom, bearing: bearing, tilt: pitch)));
+      } else if (_isMapLibre && _mapLibreReady) {
+        _mapLibre?.animateCamera(ml.CameraUpdate.newCameraPosition(ml.CameraPosition(target: ml.LatLng(point.latitude, point.longitude), zoom: zoom, bearing: bearing, tilt: pitch)));
+      } else if (widget.provider == 'mapbox' && _mapboxFailed && _mapLibreReady) {
+        _mapLibre?.animateCamera(ml.CameraUpdate.newCameraPosition(ml.CameraPosition(target: ml.LatLng(point.latitude, point.longitude), zoom: zoom, bearing: bearing, tilt: pitch)));
+      } else if (widget.provider == 'mapbox' && !_mapboxFailed && _mapbox != null) {
+        _mapbox!.flyTo(mb.CameraOptions(center: mb.Point(coordinates: mb.Position(point.longitude, point.latitude)), zoom: zoom, bearing: bearing, pitch: pitch), mb.MapAnimationOptions(duration: 700, startDelay: 0));
+      } else if (_osmReady) {
+        _osm.move(point, zoom);
       }
     } catch (_) {}
   }

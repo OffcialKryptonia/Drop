@@ -6,6 +6,7 @@ import 'package:drop/drop/design/drop_design.dart';
 import 'package:drop/drop/widgets/drop_eta.dart';
 import 'package:drop/drop/widgets/drop_money.dart';
 import 'package:drop/drop/widgets/drop_ride_ui.dart';
+import 'package:drop/driver/screens/DriverNavigationScreen.dart';
 import 'package:drop/drop/widgets/drop_sos_sheet.dart';
 import 'package:drop/components/DropMap.dart';
 import 'package:drop/components/LiveLocation.dart';
@@ -443,6 +444,21 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     await _rideAction(() => RideApi.driverCancel(id), thenSay: 'Trip cancelled.');
   }
 
+  Future<void> _startNavigation(double lat, double lng, String label) async {
+    if (mapConfig.isMapbox && mapConfig.mapboxPublicToken.startsWith('pk.')) {
+      await Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => DriverNavigationScreen(
+          mapConfig: mapConfig,
+          destination: LatLng(lat, lng),
+          destinationLabel: label,
+          initialPosition: _live.point ?? myPos,
+        ),
+      ));
+      return;
+    }
+    await _openMaps(lat, lng);
+  }
+
   /// Turn-by-turn navigation in the driver's own navigation app. Follows the admin map switch:
   /// Google Maps in Google mode, otherwise any installed navigation app (or OpenStreetMap in the browser).
   Future<void> _openMaps(double lat, double lng) async {
@@ -673,7 +689,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
         DropStopTimeline(pickup: (pickup['address'] ?? '').toString(), dropoff: (drop['address'] ?? '').toString(), activeStop: toDrop ? 1 : 0),
         const SizedBox(height: 14),
         Row(children: [
-          Expanded(child: DropActionButton(label: 'Navigate', icon: Icons.navigation_outlined, onPressed: () => _openMaps(_num(target['lat']), _num(target['lng'])))),
+          Expanded(child: DropActionButton(label: 'Navigate', icon: Icons.navigation_outlined, onPressed: () => _startNavigation(_num(target['lat']), _num(target['lng']), toDrop ? 'Drop-off' : 'Pickup'))),
           const SizedBox(width: 12),
           Expanded(child: DropActionButton(label: 'SOS', icon: Icons.sos, danger: true, onPressed: () => showDropSos(context, rideId: (a['id'] as num?)?.toInt()))),
         ]),
