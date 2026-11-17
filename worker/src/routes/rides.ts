@@ -1,3 +1,4 @@
+import { rideEta } from "../lib/eta";
 import { iconKeyFor } from "./map-icons";
 import { Hono, type Context } from "hono";
 import { z } from "zod";
@@ -59,6 +60,7 @@ const ride = (r: Row) => ({
   completed_at: r.completed_at ?? null,
   expires_at: r.expires_at,
   created_at: r.created_at,
+  eta: rideEta(r),
   driver: r.driver_id
     ? {
         id: Number(r.driver_id),

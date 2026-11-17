@@ -1,3 +1,4 @@
+import { rideEta } from "../lib/eta";
 import { Hono, type Context } from "hono";
 import type { AppEnv } from "../env";
 import { withDb } from "../db";
@@ -39,6 +40,7 @@ const request = (r: Row, rule: CommissionRule) => {
     duration_minutes: Number(r.duration_minutes),
     pickup_distance_km: Math.round(km * 10) / 10,
     pickup_eta_minutes: Math.max(1, Math.round(km * 1.3 * 2)),
+    eta: rideEta(r),
     options: r.options,
     rider: { first_name: r.rider_first_name ?? null, contact_number: r.status === "searching" ? null : (r.rider_contact_number ?? null) },
     expires_at: r.expires_at,
@@ -50,8 +52,10 @@ const request = (r: Row, rule: CommissionRule) => {
 async function activeOf(c: C) {
   return (
     await c.get("db").query(
-      `select r.*, u.first_name as rider_first_name, u.contact_number as rider_contact_number
+      `select r.*, u.first_name as rider_first_name, u.contact_number as rider_contact_number,
+              du.latitude as driver_lat, du.longitude as driver_lng, du.last_location_update_at as driver_location_at
          from app.ride_requests r join app.users u on u.id = r.rider_id
+         left join app.users du on du.id = r.driver_id
         where r.driver_id = $1 and r.status in ('accepted', 'arrived', 'in_progress') order by r.id desc limit 1`,
       [c.get("user").id],
     )

@@ -1,3 +1,4 @@
+import 'package:drop/drop/widgets/drop_eta.dart';
 import 'package:drop/drop/widgets/drop_money.dart';
 import 'package:drop/drop/widgets/drop_ride_ui.dart';
 import 'package:flutter/material.dart';
@@ -11,6 +12,7 @@ Widget _host(Widget child, {double scale = 1.0}) => MaterialApp(
     );
 
 void main() {
+  etaTests();
   group('DropMoney.format', () {
     test('positive, whole and fractional', () {
       expect(DropMoney.format(2912.96), '₦2,912.96');
@@ -69,3 +71,22 @@ void main() {
 }
 
 Object? tester_exception(WidgetTester t) => t.takeException();
+
+void etaTests() {
+  testWidgets('ETA strip shows minutes, distance and arrival for the rider', (t) async {
+    await t.pumpWidget(_host(DropEtaStrip(eta: {'target': 'pickup', 'minutes': 4, 'distance': 1.8, 'distance_unit': 'km', 'arrive_at': '2026-11-17T14:42:00Z', 'stale': false})));
+    expect(find.text('4 min'), findsOneWidget);
+    expect(find.text('Your driver arrives'), findsOneWidget);
+    expect(find.textContaining('1.8 km'), findsOneWidget);
+  });
+  testWidgets('ETA strip: driver wording, arriving now and stale note', (t) async {
+    await t.pumpWidget(_host(DropEtaStrip(forDriver: true, eta: {'target': 'dropoff', 'minutes': 0, 'distance': 0.0, 'distance_unit': 'km', 'arrive_at': '2026-11-17T14:42:00Z', 'stale': true})));
+    expect(find.text('To drop-off'), findsOneWidget);
+    expect(find.text('Here'), findsOneWidget);
+    expect(find.textContaining('Waiting for a fresh location'), findsOneWidget);
+  });
+  test('dropClock handles bad input', () {
+    expect(dropClock(null), '');
+    expect(dropClock('nope'), '');
+  });
+}

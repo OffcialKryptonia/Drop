@@ -14,6 +14,7 @@ import '../components/RouteGeometry.dart';
 import '../components/drawer_component.dart';
 import '../drop/services/drop_money.dart';
 import '../drop/widgets/drop_email_prompt.dart';
+import '../drop/widgets/drop_eta.dart';
 import '../drop/screens/drop_route_screen.dart';
 import '../drop/widgets/drop_ride_type_strip.dart';
 import '../drop/widgets/drop_sos_sheet.dart';
@@ -937,7 +938,11 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
     return _sheet(ConstrainedBox(
       constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.62),
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('${_d(quote['distance']).toStringAsFixed(1)} $unit · about ${_d(quote['duration_minutes']).round()} min', style: TextStyle(color: Colors.grey.shade700)),
+        Text(
+          '${_d(quote['distance']).toStringAsFixed(1)} $unit · about ${_d(quote['duration_minutes']).round()} min'
+          '${t['pickup_eta_minutes'] != null ? ' · arrive about ${dropClock(DateTime.now().add(Duration(minutes: (t['pickup_eta_minutes'] as num).round() + _d(quote['duration_minutes']).round())))}' : ''}',
+          style: TextStyle(color: Colors.grey.shade700),
+        ),
         const SizedBox(height: 8),
         Flexible(
           child: ListView(shrinkWrap: true, children: [
@@ -996,7 +1001,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text('${x['name']}  ·  ${x['capacity'] ?? ''} seats', style: const TextStyle(fontWeight: FontWeight.w800)),
-              Text(nearby > 0 ? '${eta ?? '-'} min away · $nearby driver${nearby == 1 ? '' : 's'} nearby' : 'No drivers nearby right now', style: TextStyle(color: nearby > 0 ? Colors.grey.shade700 : Colors.orange.shade800, fontSize: 12)),
+              Text(nearby > 0 ? 'Driver ~${eta ?? '-'} min away · $nearby nearby' : 'No drivers nearby right now', style: TextStyle(color: nearby > 0 ? Colors.grey.shade700 : Colors.orange.shade800, fontSize: 12)),
             ]),
           ),
           Text(_money(x['fare'], quote['currency']), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
@@ -1036,6 +1041,10 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
         Text(_money(r['fare'], r['currency']), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
       ]),
       if (sub.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text(sub, style: TextStyle(color: Colors.grey.shade700))),
+      if (r['eta'] is Map) ...[
+        const SizedBox(height: 10),
+        DropEtaStrip(eta: _m(r['eta'])),
+      ],
       if (driver.isNotEmpty) ...[
         const SizedBox(height: 12),
         Row(children: [
