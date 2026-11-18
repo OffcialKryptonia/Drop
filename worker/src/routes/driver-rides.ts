@@ -1,4 +1,5 @@
-import { rideEta } from "../lib/eta";
+import { etaSettings, rideEta } from "../lib/eta";
+import { driverReceipt } from "../lib/receipt";
 import { Hono, type Context } from "hono";
 import type { AppEnv } from "../env";
 import { withDb } from "../db";
@@ -70,7 +71,9 @@ driverRideRoutes.get("/driver/requests", ...mw, async (c) => {
   const db = c.get("db");
   const me = c.get("user");
   const active = await activeOf(c);
-  if (active) return c.json({ status: true, active: request(active, await ruleOf(c, active.service_id)), requests: [] });
+  const etaOn = (await etaSettings(db)).driver;
+  const hideEta = <T extends object>(x: T) => (etaOn ? x : { ...x, eta: null, pickup_eta_minutes: null });
+  if (active) return c.json({ status: true, active: hideEta(request(active, await ruleOf(c, active.service_id))), requests: [] });
 
   const st = (await db.query("select is_online from app.users where id = $1", [me.id])).rows[0];
   if (!st?.is_online) return c.json({ status: false, code: "not_online", message: "Go online to see ride requests." }, 409);
@@ -92,7 +95,7 @@ driverRideRoutes.get("/driver/requests", ...mw, async (c) => {
   ).rows;
   const prof = (await db.query("select service_id from app.driver_profiles where user_id = $1", [me.id])).rows[0];
   const rule = await ruleOf(c, prof?.service_id);
-  return c.json({ status: true, active: null, requests: rows.map((r) => request(r, rule)) });
+  return c.json({ status: true, active: null, requests: rows.map((r) => hideEta(request(r, rule))) });
 });
 
 /** First driver to accept wins: one atomic update decides, everyone else gets 'no longer available'. */
@@ -197,4 +200,16 @@ driverRideRoutes.get("/driver/rides/history", ...mw, async (c) => {
     `select id, status, fare, commission, paid_with, pickup_address, dropoff_address, distance, distance_unit, completed_at, cancellation_fee
        from app.ride_requests where driver_id = $1 and status = 'completed' order by id desc limit 50`, [c.get("user").id])).rows;
   return c.json({ status: true, data: rows.map((r) => ({ ...r, id: Number(r.id), fare: Number(r.fare), commission: Number(r.commission), earning: Math.round((Number(r.fare) - Number(r.commission)) * 100) / 100 })) });
+});
+
+/** The driver's receipt for one finished trip: fare, DROP commission and what they earned. */
+driverRideRoutes.get("/driver/rides/:id/receipt", ...mw, async (c) => {
+  const id = Number(c.req.param("id"));
+  if (!Number.isInteger(id) || id <= 0) return c.json({ status: false, message: "Trip not found." }, 404);
+  const row = (await c.get("db").query(
+    `select r.*, s.name as service_name, u.first_name as rider_first_name
+       from app.ride_requests r join app.services s on s.id = r.service_id join app.users u on u.id = r.rider_id
+      where r.id = $1 and r.driver_id = $2 and r.status = 'completed'`, [id, c.get("user").id])).rows[0];
+  if (!row) return c.json({ status: false, message: "No receipt for this trip yet." }, 404);
+  return c.json({ status: true, data: driverReceipt(row) });
 });
