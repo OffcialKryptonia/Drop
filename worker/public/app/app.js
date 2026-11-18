@@ -1043,7 +1043,7 @@
 
   // ---- passenger and driver web workspaces -------------------------------
   var rideMap = null, pickupPoint = null, dropoffPoint = null;
-  var pickupMarker = null, dropoffMarker = null, selectedRideType = null, lastQuote = null;
+  var pickupMarker = null, dropoffMarker = null, driverMarker = null, selectedRideType = null, lastQuote = null;
   var driverOnline = false, driverPollTimer = null, passengerPollTimer = null;
   function api(path, options) {
     options = options || {};
@@ -1132,9 +1132,22 @@
       var trip = r.body && r.body.data;
       $("currentRide").hidden = !trip;
       if (!trip) return;
-      $("currentRideDetails").textContent = "Trip #" + trip.id + " · " + String(trip.status).replace(/_/g, " ") +
+      var summary = "Trip #" + trip.id + " · " + String(trip.status).replace(/_/g, " ") +
         " · " + (trip.pickup && trip.pickup.address || "Pickup") + " → " + (trip.dropoff && trip.dropoff.address || "Destination") +
-        " · " + money(trip.fare, trip.currency) + (trip.driver ? " · Driver: " + trip.driver.name : "");
+        " · " + money(trip.fare, trip.currency);
+      if (trip.driver) {
+        summary += " · Driver: " + (trip.driver.name || "Assigned");
+        if (trip.driver.vehicle) summary += " · Vehicle: " + [trip.driver.vehicle.colour, trip.driver.vehicle.make, trip.driver.vehicle.model, trip.driver.vehicle.plate].filter(Boolean).join(" ");
+        if (trip.driver.contact_number) summary += " · Contact: " + trip.driver.contact_number;
+        if (trip.driver.location && rideMap && window.L) {
+          var driverLL = [Number(trip.driver.location.lat), Number(trip.driver.location.lng)];
+          if (driverLL.every(Number.isFinite)) {
+            if (driverMarker) driverMarker.setLatLng(driverLL);
+            else driverMarker = L.marker(driverLL).addTo(rideMap).bindPopup("Your driver");
+          }
+        }
+      } else if (driverMarker && rideMap) { rideMap.removeLayer(driverMarker); driverMarker = null; }
+      $("currentRideDetails").textContent = summary;
       $("cancelRide").hidden = !["searching", "accepted", "arrived"].includes(trip.status);
     }).catch(function () {});
   }
@@ -1237,6 +1250,13 @@
           b.addEventListener("click", function () { driverAction("/driver/rides/" + active.id + "/" + step[0], "POST", {}); });
           actions.appendChild(b);
         });
+        if (["accepted", "arrived"].includes(active.status)) {
+          var cancel = document.createElement("button"); cancel.type = "button"; cancel.className = "ghost"; cancel.textContent = "Release this request";
+          cancel.addEventListener("click", function () {
+            if (window.confirm("Release this request? It will return to the nearby driver pool.")) driverAction("/driver/rides/" + active.id + "/cancel", "POST", {});
+          });
+          actions.appendChild(cancel);
+        }
         a.appendChild(actions); box.appendChild(a); return;
       }
       var rows = r.body.requests || [];
