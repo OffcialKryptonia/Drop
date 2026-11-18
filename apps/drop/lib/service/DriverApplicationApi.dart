@@ -60,6 +60,20 @@ class DriverApplicationApi {
     }
   }
 
+  /// Address suggestions from DROP's shared place-search provider (Google when configured, otherwise OpenStreetMap).
+  /// The returned coordinates are provider-independent and can be rendered by the active map.
+  static Future<List<Map<String, dynamic>>> searchPlaces(String query, {double? latitude, double? longitude}) async {
+    final q = <String, String>{'q': query.trim()};
+    if (latitude != null && longitude != null) {
+      q['lat'] = latitude.toString();
+      q['lng'] = longitude.toString();
+    }
+    final response = await _send(() async => http.get(_uri('places/search', q), headers: await _headers()));
+    final data = response['data'];
+    if (data is! List) return const [];
+    return data.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
+  }
+
   /// Ride types, required documents and rules (minimum age, licence years, upload size).
   static Future<Map<String, dynamic>> requirements() async => _send(() async => http.get(_uri('driver/requirements'), headers: await _headers()));
 
