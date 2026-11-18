@@ -2,7 +2,7 @@ import { rideEta } from "../lib/eta";
 import { Hono, type Context } from "hono";
 import type { AppEnv } from "../env";
 import { withDb } from "../db";
-import { requireAuth } from "../auth/middleware";
+import { requireWebOrBearer } from "../auth/web-or-bearer";
 import { computeCommission, type CommissionRule } from "../lib/commission";
 import { driverOnlineBlock, requireApprovedDriver } from "../lib/roles";
 import { getSetting } from "../lib/driver-application";
@@ -17,7 +17,7 @@ const driverMode = async (c: C, next: () => Promise<void>) => {
   if (c.get("user").active_mode !== "driver") return c.json({ status: false, code: "not_in_driver_mode", message: "Switch to Driver mode first." }, 409);
   await next();
 };
-const mw = [withDb, requireAuth, requireApprovedDriver, driverMode] as const;
+const mw = [withDb, requireWebOrBearer, requireApprovedDriver, driverMode] as const;
 
 const POINT = "extensions.st_setsrid(extensions.st_makepoint(r.pickup_lng, r.pickup_lat), 4326)::extensions.geography";
 
