@@ -1068,7 +1068,7 @@
           // Only sign the browser out if its actual web session is also invalid.
           fetch("/api/web/me", { credentials: "same-origin", cache: "no-store" })
             .then(function (sessionRes) { return readJson(sessionRes).then(function (sessionBody) {
-              if (!sessionRes.ok || !sessionBody || sessionBody.signed_in !== true) {
+              if (sessionRes.ok && sessionBody && sessionBody.signed_in === false) {
                 csrfToken = null;
                 if (viewAuth && viewHome) { show("auth"); setMsg($("loginMsg"), "Your session has expired. Please sign in again.", "err"); }
               }
