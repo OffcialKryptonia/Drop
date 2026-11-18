@@ -304,7 +304,7 @@
     showWorkspaces(user);
 
     // Driver-role accounts get the application section inside the same view.
-    if (isDriver(user)) showDriverApp(user);
+    // Driver application is opened explicitly from Profile, never on ride-booking home.
     else {
       $("driverApp").hidden = true;
       daReq = null; daApp = null; daLoadedFor = null;
@@ -1092,7 +1092,7 @@
   }
   var activeAppScreen = "home";
   function activateAppScreen(screen) {
-    var allowed = ["home", "trips", "wallet", "profile", "help"];
+    var allowed = ["home", "trips", "wallet", "profile", "help", "driver-application"];
     if (allowed.indexOf(screen) < 0) screen = "home";
     activeAppScreen = screen;
     var driverMode = currentUser && currentUser.active_mode === "driver";
@@ -1102,7 +1102,8 @@
       panel.hidden = panel.getAttribute("data-screen-panel") !== screen;
     });
     $("appNavigation").hidden = false;
-    $("appNavigation").querySelectorAll("[data-screen]").forEach(function (button) {
+    if ($("backToProfile")) $("backToProfile").addEventListener("click", function () { activateAppScreen("profile"); });
+  $("appNavigation").querySelectorAll("[data-screen]").forEach(function (button) {
       var selected = button.getAttribute("data-screen") === screen;
       button.classList.toggle("active", selected);
       button.setAttribute("aria-current", selected ? "page" : "false");
@@ -1138,6 +1139,12 @@
         }
       }
     }
+    if (screen === "driver-application") {
+      if (isDriver(currentUser)) showDriverApp(currentUser);
+      else activateAppScreen("home");
+    } else {
+      $("driverApp").hidden = true;
+    }
     if (screen === "profile") {
       var target = driverMode ? $("driverProfileContent") : $("passengerProfileContent");
       target.innerHTML = "";
@@ -1149,9 +1156,15 @@
         var value = document.createElement("strong"); value.textContent = field[1];
         row.append(label,value); target.appendChild(row);
       });
-      if (isDriver(currentUser) && $("driverApp").parentNode !== target) target.appendChild($("driverApp"));
-      $("driverApp").hidden = !isDriver(currentUser);
-    } else {
+      if (isDriver(currentUser)) {
+        var applicationLink = document.createElement("button");
+        applicationLink.type = "button";
+        applicationLink.className = "ghost driver-application-link";
+        applicationLink.textContent = "Manage driver application";
+        applicationLink.addEventListener("click", function () { activateAppScreen("driver-application"); });
+        target.appendChild(applicationLink);
+      }
+    } else if (screen !== "driver-application") {
       $("driverApp").hidden = true;
     }
     if (screen === "trips") {

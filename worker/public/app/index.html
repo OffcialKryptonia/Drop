@@ -123,22 +123,10 @@
 </div>
 <div id="passengerWalletScreen" class="app-screen" data-screen-panel="wallet" hidden><div class="screen-heading"><p class="eyebrow">Passenger</p><h2>Wallet</h2><p class="muted">Your DROP wallet and recent transactions.</p></div><div id="passengerWalletContent" class="screen-content"><p class="muted">Wallet details will load here.</p></div></div>
 <div id="passengerProfileScreen" class="app-screen" data-screen-panel="profile" hidden><div class="screen-heading"><p class="eyebrow">Account</p><h2>Profile</h2></div><div id="passengerProfileContent" class="screen-content"></div><div id="driverApplicationPanel"></div></div>
-<div id="passengerHelpScreen" class="app-screen" data-screen-panel="help" hidden><div class="screen-heading"><p class="eyebrow">Support</p><h2>How can we help?</h2></div><div class="screen-content"><article class="history-item"><strong>DROP support</strong><p>For account, trip or payment assistance, contact our support team.</p><a href="mailto:contact@drop.taxi">contact@drop.taxi</a></article><article class="history-item"><a href="/terms/">Terms and conditions</a></article><article class="history-item"><a href="/privacy/">Privacy policy</a></article></div></div>
-</section>
-<section id="driverDashboard" class="web-dashboard" hidden aria-label="Driver dashboard">
-<div id="driverHomeScreen" class="app-screen" data-screen-panel="home">
-  <div class="dashboard-head"><div><p class="eyebrow">Driver</p><h2>Driver workspace</h2><p class="muted small">Manage availability and trips from your browser.</p></div><button type="button" id="driverRefresh" class="ghost">Refresh</button></div>
-  <div id="driverEligibility" class="note">Checking driver eligibility…</div>
-  <div class="driver-online-row"><strong id="driverOnlineLabel">Offline</strong><button type="button" id="driverOnlineToggle" class="primary">Go online</button></div>
-  <p id="driverMsg" class="msg" aria-live="polite"></p>
-  <section><h3>Active trip / incoming requests</h3><div id="driverRequests"><p class="muted small">No active trip.</p></div></section>
-  </div>
-<div id="driverTripsScreen" class="app-screen" data-screen-panel="trips" hidden><section><h3>Trip history</h3><div id="driverHistory" class="history-list"></div></section></div>
-<div id="driverWalletScreen" class="app-screen" data-screen-panel="wallet" hidden><div class="screen-heading"><p class="eyebrow">Driver</p><h2>Earnings & wallet</h2></div><div id="driverWalletContent" class="screen-content"><p class="muted">Your driver earnings and wallet information will load here.</p></div></div>
-<div id="driverProfileScreen" class="app-screen" data-screen-panel="profile" hidden><div class="screen-heading"><p class="eyebrow">Account</p><h2>Driver profile</h2></div><div id="driverProfileContent" class="screen-content"></div></div>
-<div id="driverHelpScreen" class="app-screen" data-screen-panel="help" hidden><div class="screen-heading"><p class="eyebrow">Support</p><h2>Driver help</h2></div><div class="screen-content"><article class="history-item"><strong>DROP driver support</strong><p>For driver account, document or trip assistance, contact our support team.</p><a href="mailto:contact@drop.taxi">contact@drop.taxi</a></article><article class="history-item"><a href="/terms/">Terms and conditions</a></article><article class="history-item"><a href="/privacy/">Privacy policy</a></article></div></div>
-</section>
-<!-- Driver application (only for accounts with the driver role) -->
+<div id="driverApplicationScreen" class="app-screen" data-screen-panel="driver-application" hidden>
+  <div class="screen-heading"><p class="eyebrow">Driver account</p><h2>Driver application</h2><p class="muted">Manage your driver application separately from passenger ride booking.</p></div>
+  <p><button type="button" id="backToProfile" class="ghost">Back to profile</button></p>
+  <!-- Driver application (only for accounts with the driver role) -->
 <section id="driverApp" hidden aria-label="Driver application">
 <h2>Driver application</h2>
 <p class="muted small">The same application as the DROP app. Complete each section, then submit for review.</p>
@@ -203,6 +191,23 @@
 <p id="daSubmitMsg" class="msg" aria-live="polite"></p>
 <p><button type="button" id="daSubmitBtn" class="primary">Submit application</button></p>
 </section>
+</div>
+<div id="passengerHelpScreen" class="app-screen" data-screen-panel="help" hidden><div class="screen-heading"><p class="eyebrow">Support</p><h2>How can we help?</h2></div><div class="screen-content"><article class="history-item"><strong>DROP support</strong><p>For account, trip or payment assistance, contact our support team.</p><a href="mailto:contact@drop.taxi">contact@drop.taxi</a></article><article class="history-item"><a href="/terms/">Terms and conditions</a></article><article class="history-item"><a href="/privacy/">Privacy policy</a></article></div></div>
+</section>
+<section id="driverDashboard" class="web-dashboard" hidden aria-label="Driver dashboard">
+<div id="driverHomeScreen" class="app-screen" data-screen-panel="home">
+  <div class="dashboard-head"><div><p class="eyebrow">Driver</p><h2>Driver workspace</h2><p class="muted small">Manage availability and trips from your browser.</p></div><button type="button" id="driverRefresh" class="ghost">Refresh</button></div>
+  <div id="driverEligibility" class="note">Checking driver eligibility…</div>
+  <div class="driver-online-row"><strong id="driverOnlineLabel">Offline</strong><button type="button" id="driverOnlineToggle" class="primary">Go online</button></div>
+  <p id="driverMsg" class="msg" aria-live="polite"></p>
+  <section><h3>Active trip / incoming requests</h3><div id="driverRequests"><p class="muted small">No active trip.</p></div></section>
+  </div>
+<div id="driverTripsScreen" class="app-screen" data-screen-panel="trips" hidden><section><h3>Trip history</h3><div id="driverHistory" class="history-list"></div></section></div>
+<div id="driverWalletScreen" class="app-screen" data-screen-panel="wallet" hidden><div class="screen-heading"><p class="eyebrow">Driver</p><h2>Earnings & wallet</h2></div><div id="driverWalletContent" class="screen-content"><p class="muted">Your driver earnings and wallet information will load here.</p></div></div>
+<div id="driverProfileScreen" class="app-screen" data-screen-panel="profile" hidden><div class="screen-heading"><p class="eyebrow">Account</p><h2>Driver profile</h2></div><div id="driverProfileContent" class="screen-content"></div></div>
+<div id="driverHelpScreen" class="app-screen" data-screen-panel="help" hidden><div class="screen-heading"><p class="eyebrow">Support</p><h2>Driver help</h2></div><div class="screen-content"><article class="history-item"><strong>DROP driver support</strong><p>For driver account, document or trip assistance, contact our support team.</p><a href="mailto:contact@drop.taxi">contact@drop.taxi</a></article><article class="history-item"><a href="/terms/">Terms and conditions</a></article><article class="history-item"><a href="/privacy/">Privacy policy</a></article></div></div>
+</section>
+
 <p class="row-between app-signout">
 <span class="muted small">Same account as the DROP app.</span>
 <button type="button" id="logoutBtn" class="ghost">Sign out</button>
