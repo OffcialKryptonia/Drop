@@ -74,13 +74,21 @@
 
   function checkSession() {
     show("loading");
-    fetch("/api/web/me", { credentials: "same-origin" })
+    var controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+    var timeout = controller ? setTimeout(function () { controller.abort(); }, 12000) : null;
+    var options = { credentials: "same-origin", cache: "no-store" };
+    if (controller) options.signal = controller.signal;
+    fetch("/api/web/me", options)
       .then(function (res) { return readJson(res).then(function (b) { return { status: res.status, body: b }; }); })
       .then(function (r) {
         if (r.status === 503) {
-          // SESSION_SECRET not configured server-side.
           show("auth");
           setMsg($("loginMsg"), "Web sign-in is not configured yet. Please try again later.", "err");
+          return;
+        }
+        if (r.status >= 500) {
+          show("auth");
+          setMsg($("loginMsg"), "DROP could not verify your session right now. Please try again.", "err");
           return;
         }
         if (r.body && r.body.signed_in && r.body.data) {
@@ -90,10 +98,13 @@
           show("auth");
         }
       })
-      .catch(function () {
+      .catch(function (err) {
         show("auth");
-        setMsg($("loginMsg"), "Could not reach the server. Check your connection and try again.", "err");
-      });
+        setMsg($("loginMsg"), err && err.name === "AbortError"
+          ? "The session check took too long. Check your connection and try again."
+          : "Could not reach the server. Check your connection and try again.", "err");
+      })
+      .finally(function () { if (timeout !== null) clearTimeout(timeout); });
   }
 
   // ---- tabs + role picker -------------------------------------------------
