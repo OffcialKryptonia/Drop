@@ -1071,6 +1071,72 @@
   }
   function setPassengerMessage(message, kind) { setMsg($("passengerMsg"), message, kind); }
   function pointLabel(p) { return p ? p.lat.toFixed(5) + ", " + p.lng.toFixed(5) : "Not selected"; }
+  function clearAddressPoint(which) {
+    if (which === "pickup") { pickupPoint = null; if (pickupMarker) removeMapMarker(pickupMarker); pickupMarker = null; }
+    else if (which === "dropoff") { dropoffPoint = null; if (dropoffMarker) removeMapMarker(dropoffMarker); dropoffMarker = null; }
+    else if (String(which).indexOf("stop:") === 0) {
+      var stop = routeStops[Number(String(which).split(":")[1])];
+      if (stop) { stop.point = null; if (stop.marker) removeMapMarker(stop.marker); stop.marker = null; }
+    }
+    updateSelectedCoords(); invalidateRideQuote();
+  }
+  function attachAddressAutocomplete(input, target, onChoose) {
+    if (!input || input.dataset.autocompleteReady === "1") return;
+    input.dataset.autocompleteReady = "1";
+    var wrapper = document.createElement("div"); wrapper.className = "address-autocomplete";
+    input.parentNode.insertBefore(wrapper, input); wrapper.appendChild(input);
+    var list = document.createElement("div"); list.className = "address-suggestions"; list.hidden = true;
+    list.setAttribute("role", "listbox"); wrapper.appendChild(list);
+    var timer = null, requestNo = 0, lastSelected = "";
+    function close() { list.hidden = true; list.innerHTML = ""; }
+    function choose(hit) {
+      var label = [hit.title, hit.subtitle].filter(Boolean).join(", ");
+      input.value = label; lastSelected = label; input.dataset.selectedAddress = label;
+      close();
+      if (onChoose) onChoose(label);
+      var key = typeof target === "function" ? target() : target;
+      setPoint(key, { lat: Number(hit.lat), lng: Number(hit.lng) });
+      if (rideMap) setMapView({ lat: Number(hit.lat), lng: Number(hit.lng) }, 16);
+    }
+    input.addEventListener("input", function () {
+      var q = input.value.trim(), key = typeof target === "function" ? target() : target;
+      if (q !== lastSelected) { lastSelected = ""; input.dataset.selectedAddress = ""; clearAddressPoint(key); if (onChoose) onChoose(""); }
+      if (timer) clearTimeout(timer);
+      close();
+      var serial = ++requestNo;
+      if (q.length < 3) return;
+      timer = setTimeout(function () {
+        var near = pickupPoint;
+        var params = new URLSearchParams({ q: q });
+        if (near) { params.set("lat", String(near.lat)); params.set("lng", String(near.lng)); }
+        api("/places/search?" + params.toString()).then(function (r) {
+          if (serial !== requestNo || input.value.trim() !== q) return;
+          var hits = r.body && r.body.data || [];
+          list.innerHTML = "";
+          if (!Array.isArray(hits) || !hits.length) {
+            var empty = document.createElement("div"); empty.className = "address-suggestion-empty"; empty.textContent = "No matching places. Try a nearby landmark or a more specific address."; list.appendChild(empty); list.hidden = false; return;
+          }
+          hits.slice(0, 8).forEach(function (hit) {
+            var option = document.createElement("button"); option.type = "button"; option.className = "address-suggestion"; option.setAttribute("role", "option");
+            var title = document.createElement("strong"); title.textContent = hit.title || hit.subtitle || "Place";
+            var subtitle = document.createElement("small"); subtitle.textContent = hit.subtitle || "";
+            option.append(title, subtitle);
+            option.addEventListener("mousedown", function (event) { event.preventDefault(); choose(hit); });
+            list.appendChild(option);
+          });
+          list.hidden = false;
+        }).catch(function () {
+          if (serial !== requestNo) return;
+          list.innerHTML = ""; var err = document.createElement("div"); err.className = "address-suggestion-empty"; err.textContent = "Address search is temporarily unavailable. You can still choose the location on the map."; list.appendChild(err); list.hidden = false;
+        });
+      }, 280);
+    });
+    input.addEventListener("keydown", function (event) {
+      if (event.key === "Escape") close();
+      if (event.key === "ArrowDown" && !list.hidden) { var first = list.querySelector("button"); if (first) { event.preventDefault(); first.focus(); } }
+    });
+    input.addEventListener("blur", function () { setTimeout(close, 160); });
+  }
   function invalidateRideQuote() {
     lastQuote = null; selectedRideType = null;
     $("fareOptions").innerHTML = "";
@@ -1088,6 +1154,7 @@
       input.placeholder = "Enter a landmark or address"; input.value = stop.address || "";
       input.setAttribute("aria-label", "Stop " + (index + 1) + " address");
       input.addEventListener("input", function () { stop.address = input.value; invalidateRideQuote(); });
+      attachAddressAutocomplete(input, function () { return "stop:" + index; }, function (label) { stop.address = label; });
       fieldWrap.append(label, input);
       var mapLabel = document.createElement("label"); mapLabel.className = "route-stop-map";
       var radio = document.createElement("input"); radio.type = "radio"; radio.name = "mapTarget"; radio.value = "stop:" + index;
@@ -1223,6 +1290,8 @@
       setTimeout(function () { if (rideMap && rideMap.resize) rideMap.resize(); else if (rideMap && rideMap.invalidateSize) rideMap.invalidateSize(); }, 150);
     }).catch(function (err) { setPassengerMessage(err.message || "Could not load the map configuration.", "err"); });
   }
+  attachAddressAutocomplete($("pickupAddress"), "pickup");
+  attachAddressAutocomplete($("dropoffAddress"), "dropoff");
   var activeAppScreen = "home";
   function activateAppScreen(screen) {
     var allowed = ["home", "trips", "wallet", "profile", "help", "driver-application"];
