@@ -25,7 +25,7 @@ export function serializeUser(u: Row) {
     country_code: u.country_code,
     contact_number: u.contact_number,
     gender: u.gender,
-    profile_image: null as string | null, // file storage (R2) arrives with the uploads migration
+    profile_image: u.profile_image_key && u.id ? `/api/users/${u.id}/profile-photo` : null,
     login_type: u.login_type,
     latitude: coordText(u.latitude),
     longitude: coordText(u.longitude),
@@ -68,7 +68,7 @@ export function serializePublicUser(u: Row) {
     country_code: u.country_code,
     contact_number: u.contact_number,
     gender: u.gender,
-    profile_image: null as string | null,
+    profile_image: u.profile_image_key && u.id ? `/api/users/${u.id}/profile-photo` : null,
     login_type: u.login_type,
     latitude: coordText(u.latitude),
     longitude: coordText(u.longitude),
