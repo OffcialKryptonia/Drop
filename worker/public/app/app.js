@@ -1361,7 +1361,8 @@
       avatar.width = 88; avatar.height = 88;
       avatar.style.borderRadius = "50%"; avatar.style.objectFit = "cover";
       avatar.style.background = "#eee";
-      avatar.src = currentUser.profile_image ? currentUser.profile_image + "?v=" + Date.now() : "/assets/avatar-placeholder.png";
+      if (currentUser.profile_image) avatar.src = currentUser.profile_image + "?v=" + Date.now();
+      else avatar.style.display = "none";
       var photoActions = document.createElement("div");
       var photoLabel = el("strong", null, "Profile photo");
       var photoHint = el("p", "muted small", "JPG, PNG or WebP · maximum 5 MB");
@@ -1385,7 +1386,7 @@
         }).then(readJson).then(function (body) {
           if (!body || body.status !== true || !body.profile_image) throw new Error(body && body.message || "Upload failed.");
           currentUser.profile_image = body.profile_image;
-          avatar.src = body.profile_image + "?v=" + Date.now();
+          avatar.style.display = "block"; avatar.src = body.profile_image + "?v=" + Date.now();
           removePhoto.hidden = false; photoMsg.textContent = "Photo saved.";
         }).catch(function (err) { photoMsg.textContent = err.message || "Could not upload photo."; });
       });
