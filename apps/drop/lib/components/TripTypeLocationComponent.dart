@@ -224,9 +224,11 @@ class TripTypeLocationComponentState extends State<TripTypeLocationComponent> {
                                               onPressed: () async {
                                                 sourceId = null;
                                                 SourceZoneId = null;
+                                                _sourceHasPoint = false;
                                                 sourceLocation.clear();
 
                                                 destinationId = null;
+                                                _destinationHasPoint = false;
                                                 destinationLocation.clear();
                                               },
                                               icon: Icon(Icons.cancel_outlined),
