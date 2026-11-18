@@ -42,7 +42,7 @@ profilePhotoRoutes.put("/profile/photo", ...mw, async (c) => {
 });
 
 /** Authenticated profile image delivery; photos are private, never exposed as public R2 objects. */
-profilePhotoRoutes.get("/users/:userId/profile-photo", ...mw, async (c) => {
+profilePhotoRoutes.get("/users/:userId/profile-photo", withDb, async (c) => {
   if (!c.env.DOCS) return c.json({ message: "Not found", status: 404 }, 404);
   const id = /^\\d{1,15}$/.test(c.req.param("userId")) ? Number(c.req.param("userId")) : NaN;
   if (!Number.isSafeInteger(id)) return c.json({ message: "Not found", status: 404 }, 404);
