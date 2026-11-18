@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:drop/service/DriverApplicationApi.dart';
 import 'package:drop/drop/design/drop_design.dart';
 import 'package:drop/drop/widgets/drop_eta.dart';
+import 'package:drop/drop/widgets/drop_extras.dart';
 import 'package:drop/drop/widgets/drop_money.dart';
 import 'package:drop/drop/widgets/drop_ride_ui.dart';
 import 'package:drop/driver/screens/DriverNavigationScreen.dart';
@@ -429,7 +430,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
       final res = _asMap((await RideApi.complete(id))['data']);
       ToneService.play(ToneEvent.driverPayment);
       _load(); // the wallet chip behind the receipt updates at once
-      if (mounted) await _showReceipt(res);
+      if (mounted) await _showReceipt(res, id);
     } on ApiFailure catch (e) {
       _say(e.message);
     }
@@ -496,7 +497,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
   }
 
   /// What the driver sees when a trip ends: the earning first, then the breakdown and what to do about the money.
-  Future<void> _showReceipt(Map<String, dynamic> res) {
+  Future<void> _showReceipt(Map<String, dynamic> res, int rideId) {
     final cash = res['collect_cash'] == true;
     final commission = DropMoney.toNum(res['commission']);
     return showModalBottomSheet<void>(
@@ -573,6 +574,12 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
               ),
             const SizedBox(height: 16),
             DropActionButton(label: 'Done', primary: true, onPressed: () => Navigator.pop(c)),
+            TextButton(
+              onPressed: () => showDropAddExtraSheet(c, rideId: rideId).then((sent) {
+                if (sent) _say('Extra charge sent to the passenger.');
+              }),
+              child: const Text('Add extra charge (toll, parking, waiting)'),
+            ),
             if (cash && commission > 0)
               TextButton(
                 onPressed: () {

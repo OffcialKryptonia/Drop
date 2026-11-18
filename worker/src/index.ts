@@ -32,6 +32,7 @@ import { mapIconRoutes, adminMapIconRoutes, serviceIconRoutes, adminServiceIconR
 import { safetyRoutes, adminSafetyRoutes } from "./routes/safety";
 import { rideRoutes } from "./routes/rides";
 import { driverRideRoutes } from "./routes/driver-rides";
+import { rideExtraRoutes } from "./routes/ride-extras";
 import { sweepRides } from "./lib/ride-sweep";
 import { driverApplicationRoutes } from "./routes/driver-application";
 import { adminDriverApplicationRoutes } from "./routes/admin-driver-applications";
@@ -89,6 +90,7 @@ app.route("/api", safetyRoutes);
 app.route("/api", adminSafetyRoutes);
 app.route("/api", rideRoutes);
 app.route("/api", driverRideRoutes);
+app.route("/api", rideExtraRoutes);
 app.route("/api", driverApplicationRoutes);
 app.route("/api", adminDriverApplicationRoutes);
 app.route("/api", legacyRoutes);

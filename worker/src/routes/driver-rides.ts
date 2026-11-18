@@ -211,5 +211,6 @@ driverRideRoutes.get("/driver/rides/:id/receipt", ...mw, async (c) => {
        from app.ride_requests r join app.services s on s.id = r.service_id join app.users u on u.id = r.rider_id
       where r.id = $1 and r.driver_id = $2 and r.status = 'completed'`, [id, c.get("user").id])).rows[0];
   if (!row) return c.json({ status: false, message: "No receipt for this trip yet." }, 404);
-  return c.json({ status: true, data: driverReceipt(row) });
+  const extras = (await c.get("db").query("select * from app.ride_extras where ride_request_id = $1 order by id", [id])).rows;
+  return c.json({ status: true, data: driverReceipt(row, extras) });
 });

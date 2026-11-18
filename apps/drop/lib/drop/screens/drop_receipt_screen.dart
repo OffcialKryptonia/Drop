@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../service/RideApi.dart';
 import '../design/drop_design.dart';
+import '../widgets/drop_extras.dart';
 import '../widgets/drop_money.dart';
 import '../widgets/drop_ride_ui.dart';
 
@@ -154,6 +155,17 @@ class _DropReceiptScreenState extends State<DropReceiptScreen> {
             ),
           ),
         ])),
+        if (widget.driver) ...[
+          DropActionButton(
+            label: 'Add extra charge',
+            icon: Icons.add_card,
+            onPressed: () async {
+              final sent = await showDropAddExtraSheet(context, rideId: widget.rideId);
+              if (sent) _load();
+            },
+          ),
+          const SizedBox(height: 10),
+        ],
         DropActionButton(
           label: 'Copy receipt',
           icon: Icons.copy,

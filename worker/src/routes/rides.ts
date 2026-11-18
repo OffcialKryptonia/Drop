@@ -220,5 +220,6 @@ rideRoutes.get("/ride/:id/receipt", ...mw, async (c) => {
   if (!Number.isInteger(id) || id <= 0) return c.json({ status: false, message: "Trip not found." }, 404);
   const row = (await c.get("db").query(`${RIDE_SELECT} where r.id = $1 and r.rider_id = $2 and r.status = 'completed'`, [id, c.get("user").id])).rows[0];
   if (!row) return c.json({ status: false, message: "No receipt for this trip yet." }, 404);
-  return c.json({ status: true, data: riderReceipt(row) });
+  const extras = (await c.get("db").query("select * from app.ride_extras where ride_request_id = $1 order by id", [id])).rows;
+  return c.json({ status: true, data: riderReceipt(row, extras) });
 });

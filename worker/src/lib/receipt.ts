@@ -1,4 +1,5 @@
 import { currencyInfo } from "./currency";
+import { kindLabel } from "./extras";
 
 type Row = Record<string, unknown>;
 const money = (v: unknown) => Math.round(Number(v ?? 0) * 100) / 100;
@@ -38,14 +39,18 @@ function fareLines(r: Row) {
   return lines;
 }
 
-export function riderReceipt(r: Row) {
+/** Paid extra charges (toll, parking, waiting) as receipt lines. */
+const extraLines = (extras: Row[]) => extras.filter((e) => e.status === "paid").map((e) => ({ label: kindLabel(e.kind), amount: money(e.amount) }));
+
+export function riderReceipt(r: Row, extras: Row[] = []) {
   const cancellationFee = money(r.cancellation_fee);
+  const extraTotal = money(extraLines(extras).reduce((a, l) => a + l.amount, 0));
   return {
     number: riderReceiptNo(r.id),
     kind: "rider" as const,
     ...trip(r),
-    lines: fareLines(r),
-    total: money(r.fare),
+    lines: [...fareLines(r), ...extraLines(extras)],
+    total: money(Number(r.fare) + extraTotal),
     cancellation_fee: cancellationFee,
     driver: r.driver_id
       ? {
@@ -57,19 +62,24 @@ export function riderReceipt(r: Row) {
   };
 }
 
-export function driverReceipt(r: Row) {
-  const fare = money(r.fare);
-  const commission = money(r.commission);
+export function driverReceipt(r: Row, extras: Row[] = []) {
+  const paid = extras.filter((e) => e.status === "paid");
+  const extraTotal = money(paid.reduce((a, e) => a + Number(e.amount), 0));
+  const extraCommission = money(paid.reduce((a, e) => a + Number(e.commission ?? 0), 0));
+  const fare = money(Number(r.fare) + extraTotal);
+  const commission = money(Number(r.commission ?? 0) + extraCommission);
+  const cashExtras = paid.filter((e) => e.paid_with === "cash").reduce((a, e) => a + Number(e.amount), 0);
   const paidWith = String(r.paid_with ?? r.payment_method ?? "cash");
   return {
     number: driverReceiptNo(r.id),
     kind: "driver" as const,
     ...trip(r),
-    lines: fareLines(r),
+    lines: [...fareLines(r), ...extraLines(extras)],
     fare,
     commission,
     earning: money(fare - commission),
-    collect_cash: paidWith !== "wallet",
+    collect_cash: paidWith !== "wallet" || cashExtras > 0,
+    cash_extras: money(cashExtras),
     rider_first_name: r.rider_first_name ?? null,
   };
 }

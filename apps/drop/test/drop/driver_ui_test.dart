@@ -1,4 +1,5 @@
 import 'package:drop/drop/widgets/drop_eta.dart';
+import 'package:drop/drop/widgets/drop_extras.dart';
 import 'package:drop/drop/widgets/drop_money.dart';
 import 'package:drop/drop/widgets/drop_ride_ui.dart';
 import 'package:flutter/material.dart';
@@ -14,6 +15,7 @@ Widget _host(Widget child, {double scale = 1.0}) => MaterialApp(
 void main() {
   etaTests();
   receiptTests();
+  extraTests();
   group('DropMoney.format', () {
     test('positive, whole and fractional', () {
       expect(DropMoney.format(2912.96), '₦2,912.96');
@@ -97,4 +99,24 @@ void receiptTests() {
     await t.pumpWidget(_host(const DropMoneyText(1500, symbol: 'GH₵')));
     expect(find.text('GH₵1,500'), findsOneWidget);
   });
+}
+
+void extraTests() {
+  for (final scale in [1.0, 1.3]) {
+    testWidgets('extra-charge request sheet fits at 360dp, scale $scale, wallet too low', (t) async {
+      await t.pumpWidget(MaterialApp(
+        home: MediaQuery(
+          data: MediaQueryData(size: const Size(360, 740), textScaler: TextScaler.linear(scale)),
+          child: Scaffold(body: Builder(builder: (c) => TextButton(onPressed: () => showDropExtraRequestSheet(c, {'id': 5, 'amount': 500, 'kind': 'toll', 'note': 'Lekki toll', 'driver_first_name': 'Musa', 'currency': {'symbol': '₦'}}, walletBalance: 100), child: const Text('open')))),
+        ),
+      ));
+      await t.tap(find.text('open'));
+      await t.pumpAndSettle();
+      expect(t.takeException(), isNull);
+      expect(find.text('₦500'), findsOneWidget);
+      expect(find.textContaining('Wallet too low'), findsOneWidget);
+      expect(find.text('Decline'), findsOneWidget);
+      expect(dropExtraLabel('parking'), 'Parking');
+    });
+  }
 }
