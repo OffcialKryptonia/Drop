@@ -208,3 +208,13 @@ body { min-height:100dvh; background:#f4f5f6; }
 
 .route-stop-map input { width:auto; }
 .driver-stop-list { margin:.75rem 0; padding-left:1.25rem; font-size:.9rem; color:var(--ink-soft); }
+
+/* Address autocomplete for pickup, destination and each intermediate stop. */
+.address-autocomplete { position:relative; min-width:0; }
+.address-suggestions { position:absolute; z-index:1500; top:calc(100% + 4px); left:0; right:0; max-height:min(19rem,48vh); overflow:auto; background:#fff; border:1px solid var(--line); border-radius:10px; box-shadow:0 12px 30px rgba(0,0,0,.14); }
+.address-suggestion { display:flex; flex-direction:column; align-items:flex-start; width:100%; gap:.12rem; padding:.7rem .8rem; border:0; border-bottom:1px solid #f0ebe6; background:#fff; color:var(--ink); text-align:left; cursor:pointer; font:inherit; }
+.address-suggestion:last-child { border-bottom:0; }
+.address-suggestion:hover,.address-suggestion:focus { background:var(--warm); outline:0; }
+.address-suggestion strong { font-size:.93rem; font-weight:650; }
+.address-suggestion small { color:var(--ink-mute); font-size:.8rem; line-height:1.35; }
+.address-suggestion-empty { padding:.8rem; color:var(--ink-mute); font-size:.875rem; }
