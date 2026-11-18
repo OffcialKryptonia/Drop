@@ -4,7 +4,7 @@ import { Hono, type Context } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
 import { withDb } from "../db";
-import { requireAuth } from "../auth/middleware";
+import { requireWebOrBearer } from "../auth/web-or-bearer";
 import { currencyInfo, userCurrency } from "../lib/currency";
 import { readBody, validationFailed } from "../lib/legacy";
 import { quoteRide, listRideTypes } from "../lib/ride-pricing";
@@ -23,7 +23,7 @@ const passengerOnly = async (c: C, next: () => Promise<void>) => {
   if (me.active_mode !== "rider") return c.json({ status: false, code: "not_in_passenger_mode", message: "Switch to Passenger mode to request a ride." }, 409);
   await next();
 };
-const mw = [withDb, requireAuth, passengerOnly] as const;
+const mw = [withDb, requireWebOrBearer, passengerOnly] as const;
 
 const point = z.object({
   lat: z.coerce.number({ error: "The latitude is required." }).min(-90).max(90),
