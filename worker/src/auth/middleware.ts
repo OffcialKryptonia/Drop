@@ -11,7 +11,7 @@ export const USER_COLUMNS = `
   u.service_id, u.fleet_id, u.is_online, u.is_available, u.is_verified_driver, u.latitude, u.longitude,
   u.current_heading, u.last_location_update_at, u.last_actived_at, u.last_notification_seen,
   u.roles, u.active_mode, (select p.status from app.driver_profiles p where p.user_id = u.id) as driver_status,
-  u.total_coins, u.referral_code, u.partner_referral_code, u.created_at, u.updated_at`;
+  u.total_coins, u.referral_code, u.partner_referral_code, u.profile_image_key, u.created_at, u.updated_at`;
 
 /**
  * Requires "Authorization: Bearer <id>|<secret>". Rejects missing, malformed, unknown,
