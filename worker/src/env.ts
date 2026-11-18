@@ -7,6 +7,8 @@ export type Bindings = {
   DOCS?: R2Bucket;
   /** Any long random phrase (32+ chars). Encrypts gateway credentials stored in the database. */
   SETTINGS_ENCRYPTION_KEY?: string;
+/** Dedicated secret (32+ chars) for web-session CSRF signing. Never reuse SETTINGS_ENCRYPTION_KEY. */
+SESSION_SECRET?: string;
   /** Lets the very first admin be created; unset it (or leave it) once an admin exists. */
   ADMIN_BOOTSTRAP_TOKEN?: string;
   /** Server-side Google Maps key (Routes API) for road distance and time. Unset = straight-line estimate. */

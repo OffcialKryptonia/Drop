@@ -2,7 +2,7 @@ import { Hono, type Context } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
 import { withDb } from "../db";
-import { requireAuth } from "../auth/middleware";
+import { requireWebOrBearer } from "../auth/web-or-bearer";
 import { readBody, validationFailed } from "../lib/legacy";
 import { MAX_UPLOAD_BYTES, newKey, sniff } from "../lib/files";
 import { EDITABLE, ageOn, documentsFor, ensureProfile, getSetting, missingForSubmit, validDate } from "../lib/driver-application";
@@ -15,7 +15,7 @@ const riderOrDriver = async (c: C, next: () => Promise<void>) => {
   if (t !== "rider" && t !== "driver") return c.json({ message: "Forbidden" }, 403);
   await next();
 };
-const mw = [withDb, requireAuth, riderOrDriver] as const;
+const mw = [withDb, requireWebOrBearer, riderOrDriver] as const;
 const idOf = (s: string) => (/^\d{1,15}$/.test(s) ? Number(s) : null);
 const errs = (e: z.ZodError) => {
   const out: Record<string, string[]> = {};

@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en-NG">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>DROP — Sign in</title>
+<meta name="description" content="Sign in to DROP in your browser with the same account you use in the DROP app. Passengers and drivers.">
+<meta name="theme-color" content="#DD3315">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+<link rel="preload" href="/assets/fonts/outfit-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/app/app.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="nav"><div class="wrap nav-inner">
+<a class="nav-logo" href="/" aria-label="DROP home"><img src="/assets/logo-light.png" width="1200" height="307" alt="DROP"></a>
+<a class="btn btn-ghost" href="/">Back to home</a>
+</div></header>
+
+<main id="main" class="wrap">
+<section id="view-loading" class="card" aria-live="polite">
+<h1>Checking your session…</h1>
+<p class="muted">One moment.</p>
+</section>
+
+<!-- Signed-out screens -->
+<section id="view-auth" class="card" hidden>
+<h1>Sign in to DROP</h1>
+<p class="muted">Use the same phone number, username or email and password as the DROP app — one account, passenger and driver modes.</p>
+
+<div class="tabs" role="tablist" aria-label="Sign in or create an account">
+<button type="button" id="tab-login" role="tab" aria-selected="true" aria-controls="panel-login">Sign in</button>
+<button type="button" id="tab-register" role="tab" aria-selected="false" aria-controls="panel-register">Create account</button>
+</div>
+
+<div id="panel-login" role="tabpanel" aria-labelledby="tab-login">
+<form id="loginForm" autocomplete="on" novalidate>
+<label class="f" for="login-identifier">Phone number, username or email</label>
+<input id="login-identifier" name="identifier" type="text" autocomplete="username" required placeholder="e.g. 0803 123 4567">
+<label class="f" for="login-password">Password</label>
+<input id="login-password" name="password" type="password" autocomplete="current-password" required>
+<p id="loginMsg" class="msg" aria-live="polite"></p>
+<p><button type="submit" id="loginBtn" class="primary">Sign in</button></p>
+</form>
+</div>
+
+<div id="panel-register" role="tabpanel" aria-labelledby="tab-register" hidden>
+<form id="registerForm" autocomplete="on" novalidate>
+<fieldset class="role">
+<legend>I am joining as a</legend>
+<div class="segmented" role="radiogroup" aria-label="Account type">
+<button type="button" id="role-rider" role="radio" aria-checked="true">Passenger</button>
+<button type="button" id="role-driver" role="radio" aria-checked="false">Driver</button>
+</div>
+<p class="muted small" id="roleHint">Riders are active immediately. Driver accounts wait for admin approval before driver mode unlocks.</p>
+</fieldset>
+<div class="grid">
+<div><label class="f" for="reg-first">First name</label><input id="reg-first" type="text" autocomplete="given-name" required></div>
+<div><label class="f" for="reg-last">Last name</label><input id="reg-last" type="text" autocomplete="family-name" required></div>
+</div>
+<label class="f" for="reg-email">Email <span class="opt">(optional if you add a phone number)</span></label>
+<input id="reg-email" type="email" autocomplete="email" placeholder="you@example.com">
+<label class="f" for="reg-username">Username <span class="opt">(optional — we suggest one)</span></label>
+<input id="reg-username" type="text" autocomplete="username" minlength="3" placeholder="e.g. ada_lagos">
+<label class="f" for="reg-password">Password <span class="opt">(8+ characters)</span></label>
+<input id="reg-password" type="password" autocomplete="new-password" required minlength="8" maxlength="72">
+<div class="grid">
+<div><label class="f" for="reg-cc">Country code</label><input id="reg-cc" type="text" inputmode="tel" value="+234" maxlength="10"></div>
+<div><label class="f" for="reg-phone">Phone number</label><input id="reg-phone" type="tel" autocomplete="tel-national" placeholder="0803 123 4567"></div>
+</div>
+<label class="f" for="reg-gender">Gender <span class="opt">(optional)</span></label>
+<select id="reg-gender"><option value="">Prefer not to say</option><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option></select>
+<p id="registerMsg" class="msg" aria-live="polite"></p>
+<p><button type="submit" id="registerBtn" class="primary">Create account</button></p>
+</form>
+</div>
+</section>
+
+<!-- Signed-in screen -->
+<section id="view-home" class="card" hidden>
+<p class="eyebrow">Signed in</p>
+<h1 id="hello">Welcome</h1>
+<p class="muted" id="whoLine"></p>
+<div class="badges" id="badges"></div>
+<p id="driverNote" class="note" hidden></p>
+<div class="mode-row" id="modeRow">
+<button type="button" id="modeRider" class="mode">Passenger mode</button>
+<button type="button" id="modeDriver" class="mode">Driver mode</button>
+</div>
+<p id="homeMsg" class="msg" aria-live="polite"></p>
+<!-- Driver application (only for accounts with the driver role) -->
+<section id="driverApp" hidden aria-label="Driver application">
+<h2>Driver application</h2>
+<p class="muted small">The same application as the DROP app. Complete each section, then submit for review.</p>
+<div id="daStatus" class="da-status" aria-live="polite"></div>
+<p id="daReviewNote" class="note" hidden></p>
+<div id="daProgressWrap">
+<div class="progress" role="progressbar" aria-label="Application progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="daProgressBar"><div id="daBar"></div></div>
+<p class="muted small" id="daProgressText"></p>
+</div>
+<ul id="daMissing" class="da-missing"></ul>
+
+<h3>Personal information</h3>
+<form id="daPersonalForm" novalidate>
+<div class="grid">
+<div><label class="f" for="da-first">First name</label><input id="da-first" type="text" autocomplete="given-name" required maxlength="100"></div>
+<div><label class="f" for="da-last">Last name</label><input id="da-last" type="text" autocomplete="family-name" required maxlength="100"></div>
+</div>
+<label class="f" for="da-dob">Date of birth</label>
+<input id="da-dob" type="date" required>
+<p id="daPersonalMsg" class="msg" aria-live="polite"></p>
+<p><button type="submit" id="daPersonalBtn" class="primary">Save personal information</button></p>
+</form>
+
+<h3>Profile photo</h3>
+<p class="muted small">A clear photo of your face. JPG, PNG or WebP, up to <span class="da-maxmb">5</span> MB.</p>
+<p id="daPhotoState" class="muted" aria-live="polite"></p>
+<p class="muted small">The website cannot show your current photo — it only records whether one is on file. Uploading a new photo replaces it.</p>
+<label class="f" for="daPhoto">Choose photo</label>
+<input id="daPhoto" type="file" accept="image/jpeg,image/png,image/webp">
+<p id="daPhotoMsg" class="msg" aria-live="polite"></p>
+<p><button type="button" id="daPhotoBtn" class="ghost">Upload photo</button></p>
+
+<h3>Vehicle</h3>
+<form id="daVehicleForm" novalidate>
+<label class="f" for="da-service">Vehicle type</label>
+<select id="da-service" required></select>
+<label class="f" for="da-licence">Driving licence experience <span class="opt">(years)</span></label>
+<input id="da-licence" type="number" min="0" max="80" step="1" required>
+<div class="grid">
+<div><label class="f" for="da-make">Make</label><input id="da-make" type="text" required maxlength="60" placeholder="e.g. Toyota"></div>
+<div><label class="f" for="da-model">Model</label><input id="da-model" type="text" required maxlength="60" placeholder="e.g. Corolla"></div>
+</div>
+<div class="grid">
+<div><label class="f" for="da-year">Year</label><input id="da-year" type="text" inputmode="numeric" required maxlength="4" placeholder="e.g. 2019"></div>
+<div><label class="f" for="da-colour">Colour</label><input id="da-colour" type="text" required maxlength="40" placeholder="e.g. Silver"></div>
+</div>
+<div class="grid">
+<div><label class="f" for="da-plate">Registration / plate number</label><input id="da-plate" type="text" required maxlength="20"></div>
+<div><label class="f" for="da-seats">Number of seats</label><input id="da-seats" type="number" min="1" max="60" step="1" required></div>
+</div>
+<p id="daVehicleMsg" class="msg" aria-live="polite"></p>
+<p><button type="submit" id="daVehicleBtn" class="primary">Save vehicle</button></p>
+</form>
+
+<h3>Documents</h3>
+<p class="muted small">Tap a file to choose it, then upload. PDF, JPG, PNG or WebP, up to <span class="da-maxmb">5</span> MB each.</p>
+<div id="daDocs" aria-live="polite"></div>
+<p id="daDocsMsg" class="msg" aria-live="polite"></p>
+
+<h3>Submit for review</h3>
+<p class="muted small" id="daSubmitHint">When every section above is complete, submit your application.</p>
+<p id="daSubmitMsg" class="msg" aria-live="polite"></p>
+<p><button type="button" id="daSubmitBtn" class="primary">Submit application</button></p>
+</section>
+<p class="row-between">
+<span class="muted small">Same account as the DROP app.</span>
+<button type="button" id="logoutBtn" class="ghost">Sign out</button>
+</p>
+</section>
+</main>
+
+<footer class="footer"><div class="wrap footer-base">
+<p><a href="/">DROP</a> · <a href="/privacy/">Privacy policy</a> · <a href="/terms/">Terms and conditions</a> · <a href="mailto:contact@drop.taxi">contact@drop.taxi</a></p>
+<p>© 2026 Kryptonia Tech Limited. All rights reserved.</p>
+</div></footer>
+
+<script src="/app/app.js" defer></script>
+</body>
+</html>

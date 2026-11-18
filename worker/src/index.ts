@@ -35,6 +35,7 @@ import { driverRideRoutes } from "./routes/driver-rides";
 import { sweepRides } from "./lib/ride-sweep";
 import { driverApplicationRoutes } from "./routes/driver-application";
 import { adminDriverApplicationRoutes } from "./routes/admin-driver-applications";
+import { sessionRoutes } from "./routes/session";
 
 const app = new Hono<AppEnv>();
 
@@ -105,6 +106,7 @@ app.route("/api", adminDocumentRoutes);
 app.route("/api", payoutRoutes);
 app.route("/api", adminPayoutRoutes);
 app.route("/api", adminBankRoutes);
+app.route("/api", sessionRoutes);
 
 // Any other /api route that does not exist yet returns JSON, never HTML.
 app.all("/api/*", (c) =>
