@@ -143,15 +143,6 @@ Future<LoginResponse> logInApi(Map request, {bool isSocialLogin = false}) async 
 // }
 
 /// Profile Update
-Future<void> uploadProfilePhoto(File file) async {
-  final Map<String, File> files = {'profile_image': file};
-  await executeRequest('profile/photo', method: HttpMethods.POST, files: files);
-  final detail = await getUserDetail(userId: sharedPref.getInt(USER_ID));
-  final url = detail.data?.profileImage ?? '';
-  await sharedPref.setString(USER_PROFILE_PHOTO, url);
-  await appStore.setUserProfile(url);
-}
-
 Future updateProfile({String? firstName, String? lastName, String? userEmail, String? contactNumber, File? file, String? uid, String? carModel, String? carColor, String? carPlateNumber, String? carProduction, String? country_code, int? serviceId}) async {
 //   MultipartRequest multiPartRequest = await getMultiPartRequest('update-profile');
 //   if (country_code != null) {
