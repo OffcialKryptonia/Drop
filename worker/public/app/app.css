@@ -177,3 +177,16 @@ body { min-height:100dvh; background:#f4f5f6; }
   #passengerHomeScreen .ride-map { height:38vh; min-height:220px; }
   #modeRow { max-width:none; }
 }
+
+
+/* Map markers shared by Mapbox GL and Leaflet web-map renderers. */
+.drop-leaflet-marker { background: transparent !important; border: 0 !important; }
+.drop-map-marker { width: 42px; height: 42px; display: grid; place-items: center; pointer-events: none; }
+.drop-map-marker img { width: 40px; height: 40px; object-fit: contain; filter: drop-shadow(0 2px 3px rgba(0,0,0,.35)); transform: rotate(var(--marker-heading, 0deg)); transform-origin: 50% 50%; }
+.drop-map-marker-pickup { width: 30px; height: 30px; border: 3px solid #fff; border-radius: 50% 50% 50% 0; background: #16a36a; box-shadow: 0 2px 10px rgba(0,0,0,.3); transform: rotate(-45deg); }
+.drop-map-marker-pickup::after { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #fff; }
+.drop-map-marker-dropoff { width: 26px; height: 26px; border: 3px solid #fff; border-radius: 50%; background: #dd3315; box-shadow: 0 2px 8px rgba(0,0,0,.3); }
+.drop-map-marker-passenger { width: 30px; height: 30px; border: 3px solid #fff; border-radius: 50%; background: #2478e5; box-shadow: 0 0 0 7px rgba(36,120,229,.18), 0 2px 8px rgba(0,0,0,.3); }
+.drop-map-marker-passenger::before { content: ""; position: absolute; top: -9px; width: 0; height: 0; border-left: 7px solid transparent; border-right: 7px solid transparent; border-bottom: 12px solid #2478e5; transform: rotate(var(--marker-heading, 0deg)); transform-origin: 50% 24px; }
+.drop-map-marker-driver { width: 46px; height: 46px; }
+.drop-map-marker-driver img { width: 46px; height: 46px; }
