@@ -143,7 +143,7 @@ Future<LoginResponse> logInApi(Map request, {bool isSocialLogin = false}) async 
 // }
 
 /// Profile Update
-// Future<void> uploadProfilePhoto(File file) async {
+Future<void> uploadProfilePhoto(File file) async {
   final Map<String, File> files = {'profile_image': file};
   await executeRequest('profile/photo', method: HttpMethods.POST, files: files);
   final detail = await getUserDetail(userId: sharedPref.getInt(USER_ID));
