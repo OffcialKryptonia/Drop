@@ -120,7 +120,7 @@ class EditProfileScreenState extends State<EditProfileScreen> {
       }
       await updateProfile(
         uid: sharedPref.getString(UID).toString(),
-        file: imageProfile != null ? File(imageProfile!.path.validate()) : null,
+        file: null,
         contactNumber: widget.isGoogle == true
             ? '$countryCode${contactNumberController.text.trim()}'
             : contactNumberController.text.trim(),
