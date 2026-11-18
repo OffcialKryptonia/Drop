@@ -1168,7 +1168,7 @@
           Array.prototype.forEach.call(box.children, function (el) { el.classList.remove("selected"); });
           card.classList.add("selected");
           var payment = $("ridePayment"); payment.innerHTML = "";
-          (type.payment_methods || []).filter(function (m) { return ["cash", "wallet", "card", "virtual_account"].includes(m); }).forEach(function (m) {
+          (type.payment_methods || []).filter(function (m) { return ["cash", "wallet"].includes(m); }).forEach(function (m) {
             var op = document.createElement("option"); op.value = m; op.textContent = m.replace(/_/g, " "); payment.appendChild(op);
           });
           $("requestRideWrap").hidden = !payment.options.length;
