@@ -1131,7 +1131,11 @@
       if (r.status !== 200) return;
       var trip = r.body && r.body.data;
       $("currentRide").hidden = !trip;
-      if (!trip) return;
+      if (!trip) {
+        if (driverMarker && rideMap) rideMap.removeLayer(driverMarker);
+        driverMarker = null;
+        return;
+      }
       var summary = "Trip #" + trip.id + " · " + String(trip.status).replace(/_/g, " ") +
         " · " + (trip.pickup && trip.pickup.address || "Pickup") + " → " + (trip.dropoff && trip.dropoff.address || "Destination") +
         " · " + money(trip.fare, trip.currency);
