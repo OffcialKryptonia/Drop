@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:drop/service/DriverApplicationApi.dart';
 import 'package:drop/drop/design/drop_design.dart';
 import 'package:drop/drop/widgets/drop_eta.dart';
+import 'package:drop/drop/widgets/drop_extras.dart';
 import 'package:drop/drop/widgets/drop_money.dart';
 import 'package:drop/drop/widgets/drop_ride_ui.dart';
 import 'package:drop/driver/screens/DriverNavigationScreen.dart';
@@ -429,7 +430,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
       final res = _asMap((await RideApi.complete(id))['data']);
       ToneService.play(ToneEvent.driverPayment);
       _load(); // the wallet chip behind the receipt updates at once
-      if (mounted) await _showReceipt(res);
+      if (mounted) await _showReceipt(res, id);
     } on ApiFailure catch (e) {
       _say(e.message);
     }
@@ -496,7 +497,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
   }
 
   /// What the driver sees when a trip ends: the earning first, then the breakdown and what to do about the money.
-  Future<void> _showReceipt(Map<String, dynamic> res) {
+  Future<void> _showReceipt(Map<String, dynamic> res, int rideId) {
     final cash = res['collect_cash'] == true;
     final commission = DropMoney.toNum(res['commission']);
     return showModalBottomSheet<void>(
@@ -693,6 +694,16 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
           const SizedBox(width: 12),
           Expanded(child: DropActionButton(label: 'SOS', icon: Icons.sos, danger: true, onPressed: () => showDropSos(context, rideId: (a['id'] as num?)?.toInt()))),
         ]),
+        if (status == 'accepted') ...[
+          const SizedBox(height: 10),
+          DropActionButton(
+            label: 'Add extra charge',
+            icon: Icons.add_card,
+            onPressed: () => showDropAddExtraSheet(context, rideId: (a['id'] as num).toInt()).then((sent) {
+              if (sent) _say('Extra charge sent to the passenger.');
+            }),
+          ),
+        ],
         const SizedBox(height: 10),
         DropActionButton(
           label: primaryLabel,

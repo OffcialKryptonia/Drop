@@ -1,3 +1,4 @@
+import { voidExtrasForRide } from "../lib/extras";
 import { etaSettings, rideEta } from "../lib/eta";
 import { riderReceipt } from "../lib/receipt";
 import { iconKeyFor } from "./map-icons";
@@ -223,6 +224,8 @@ rideRoutes.post("/ride/cancel", ...mw, async (c) => {
   );
   if (!r.rowCount) return c.json({ status: false, code: "nothing_to_cancel", message: "That ride just changed. Please check again." }, 409);
   let fee = 0;
+  await db.query("begin");
+  try { await voidExtrasForRide(db, Number(r.rows[0].id)); await db.query("commit"); } catch (e) { await db.query("rollback").catch(() => {}); throw e; }
   if (r.rows[0].driver_id) {
     fee = await chargeCancellationFee(db, { ...before, status_before: before.status }, await getSetting(db, "ride_cancel_grace_seconds", 120));
     // The driver who had accepted is free to take other requests again.
@@ -245,5 +248,6 @@ rideRoutes.get("/ride/:id/receipt", ...mw, async (c) => {
   if (!Number.isInteger(id) || id <= 0) return c.json({ status: false, message: "Trip not found." }, 404);
   const row = (await c.get("db").query(`${RIDE_SELECT} where r.id = $1 and r.rider_id = $2 and r.status = 'completed'`, [id, c.get("user").id])).rows[0];
   if (!row) return c.json({ status: false, message: "No receipt for this trip yet." }, 404);
-  return c.json({ status: true, data: riderReceipt(row) });
+  const extras = (await c.get("db").query("select * from app.ride_extras where ride_request_id = $1 order by id", [id])).rows;
+  return c.json({ status: true, data: riderReceipt(row, extras) });
 });

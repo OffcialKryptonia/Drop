@@ -7,6 +7,7 @@ import { requireWebOrBearer } from "../auth/web-or-bearer";
 import { computeCommission, type CommissionRule } from "../lib/commission";
 import { driverOnlineBlock, requireApprovedDriver } from "../lib/roles";
 import { getSetting } from "../lib/driver-application";
+import { voidExtrasForRide } from "../lib/extras";
 import { completeRide } from "../lib/ride-settlement";
 import { pushLater, pushRideEvent } from "../lib/push";
 
@@ -231,6 +232,7 @@ driverRideRoutes.post("/driver/rides/:id/cancel", ...mw, async (c) => {
     if (!r.rowCount) { await db.query("rollback"); return notYours(c); }
     await db.query("insert into app.ride_request_declines (request_id, driver_id) values ($1, $2) on conflict do nothing", [idOf(c), me]);
     await db.query("update app.users set is_available = true where id = $1", [me]);
+    await voidExtrasForRide(db, idOf(c));
     await db.query("commit");
     pushLater(c, pushRideEvent(db, c.env, Number(r.rows[0].rider_id), "driver_cancelled", idOf(c)));
   } catch (e) { await db.query("rollback").catch(() => {}); throw e; }
@@ -254,5 +256,6 @@ driverRideRoutes.get("/driver/rides/:id/receipt", ...mw, async (c) => {
        from app.ride_requests r join app.services s on s.id = r.service_id join app.users u on u.id = r.rider_id
       where r.id = $1 and r.driver_id = $2 and r.status = 'completed'`, [id, c.get("user").id])).rows[0];
   if (!row) return c.json({ status: false, message: "No receipt for this trip yet." }, 404);
-  return c.json({ status: true, data: driverReceipt(row) });
+  const extras = (await c.get("db").query("select * from app.ride_extras where ride_request_id = $1 order by id", [id])).rows;
+  return c.json({ status: true, data: driverReceipt(row, extras) });
 });

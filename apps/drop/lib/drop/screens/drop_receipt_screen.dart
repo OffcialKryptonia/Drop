@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../service/RideApi.dart';
 import '../design/drop_design.dart';
+import '../widgets/drop_extras.dart';
 import '../widgets/drop_money.dart';
 import '../widgets/drop_ride_ui.dart';
 

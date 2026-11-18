@@ -20,6 +20,7 @@ import '../drop/widgets/drop_ride_type_strip.dart';
 import '../drop/widgets/drop_sos_sheet.dart';
 import '../service/DriverApplicationApi.dart' show ApiFailure, DriverApplicationApi;
 import '../service/RouteLineApi.dart';
+import '../drop/widgets/drop_extras.dart';
 import '../service/MapConfig.dart';
 import '../service/RegionApi.dart';
 import '../service/RideApi.dart';
@@ -98,11 +99,37 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
     _start();
     PushService.askPermission(); // the person is signed in here, so this is a good moment to ask
     _checkTransfers();
-    _transferTimer = Timer.periodic(const Duration(seconds: 25), (_) => _checkTransfers());
+    _checkExtras();
+    _transferTimer = Timer.periodic(const Duration(seconds: 25), (_) {
+      _checkTransfers();
+      _checkExtras();
+    });
   }
 
   Timer? _transferTimer;
   int _lastTransferId = -1; // -1: not read yet, so the first look never rings for old transfers
+
+  bool _extraOpen = false;
+  final Set<int> _extraAsked = {};
+
+  /// A driver added a toll, parking or waiting charge after accepting (before pickup): ask the passenger to approve and pay, or decline.
+  Future<void> _checkExtras() async {
+    if (!mounted || _extraOpen) return;
+    try {
+      final r = await RideApi.pendingExtras();
+      final list = _l(r['data']).map(_m).where((e) => !_extraAsked.contains((e['id'] as num).toInt())).toList();
+      if (list.isEmpty || !mounted) return;
+      final e = list.first;
+      _extraAsked.add((e['id'] as num).toInt()); // do not nag again for one the passenger closed without answering
+      _extraOpen = true;
+      final id = (e['id'] as num).toInt();
+      final answered = await showDropExtraRequestSheet(context, e, walletBalance: (r['wallet_balance'] as num?) ?? 0);
+      if (!answered) Future.delayed(const Duration(minutes: 5), () => _extraAsked.remove(id)); // closed without answering: ask again later
+    } catch (_) {
+    } finally {
+      _extraOpen = false;
+    }
+  }
 
   /// Rings when another passenger has sent money: a new "transfer_in" appears in the wallet ledger.
   Future<void> _checkTransfers() async {
@@ -474,6 +501,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
         if (changed && ride?['status'] == 'searching' && r['status'] == 'accepted') ToneService.play(ToneEvent.passengerAccepted);
         if (mounted) setState(() { ride = r; _trackHeading(); });
         if (changed) _fitTrip();
+        if (r['status'] == 'accepted') _checkExtras();
       } else {
         await _rideEnded();
       }
