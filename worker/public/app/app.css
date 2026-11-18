@@ -190,3 +190,18 @@ body { min-height:100dvh; background:#f4f5f6; }
 .drop-map-marker-passenger::before { content: ""; position: absolute; top: -9px; width: 0; height: 0; border-left: 7px solid transparent; border-right: 7px solid transparent; border-bottom: 12px solid #2478e5; transform: rotate(var(--marker-heading, 0deg)); transform-origin: 50% 24px; }
 .drop-map-marker-driver { width: 46px; height: 46px; }
 .drop-map-marker-driver img { width: 46px; height: 46px; }
+
+
+/* Multi-stop passenger booking */
+.route-stop-panel { margin-top:1rem; padding:1rem; border:1px solid var(--line); border-radius:12px; background:#fff; }
+.route-stop-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; margin-bottom:.75rem; }
+.route-stop-heading strong { color:var(--ink); }
+.route-stop-heading p { margin:.15rem 0 0; }
+.route-stop-row { display:grid; grid-template-columns:minmax(0,1fr) auto auto; gap:.5rem; align-items:end; padding:.75rem 0; border-top:1px solid var(--line); }
+.route-stop-row .f { margin:0; }
+.route-stop-row input[type="radio"] { width:auto; }
+.route-stop-map { display:flex; align-items:center; gap:.35rem; white-space:nowrap; font-size:.875rem; color:var(--ink-soft); padding:.65rem .25rem; }
+.route-stop-remove { border:1px solid var(--line); background:#fff; border-radius:8px; padding:.55rem .7rem; color:var(--err); cursor:pointer; }
+.drop-map-marker-stop { width:30px; height:30px; border:3px solid #fff; border-radius:50% 50% 50% 0; background:#e28a16; box-shadow:0 2px 8px rgba(0,0,0,.3); transform:rotate(-45deg); }
+.drop-map-marker-stop::after { content:""; width:7px; height:7px; border-radius:50%; background:#fff; }
+@media (max-width:560px) { .route-stop-row { grid-template-columns:minmax(0,1fr) auto; } .route-stop-map { grid-column:1; grid-row:2; padding:.15rem 0; } .route-stop-remove { grid-column:2; grid-row:1 / span 2; } .route-stop-heading { display:block; } }
