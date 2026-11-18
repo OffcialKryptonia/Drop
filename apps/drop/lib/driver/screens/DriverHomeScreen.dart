@@ -820,18 +820,21 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
             borderRadius: BorderRadius.circular(28),
             elevation: 3,
             child: Padding(
-              padding: const EdgeInsets.only(left: 14, right: 6),
+              padding: const EdgeInsets.only(left: 12, right: 0),
               child: Row(children: [
                 Container(width: 10, height: 10, decoration: BoxDecoration(shape: BoxShape.circle, color: online ? Colors.green : Colors.grey)),
-                const SizedBox(width: 8),
-                Expanded(child: Text(online ? 'Online' : 'Offline', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16))),
+                const SizedBox(width: 6),
+                // One line always: scale the word down instead of letting it wrap letter by letter on narrow phones.
+                Expanded(child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: Text(online ? 'Online' : 'Offline', maxLines: 1, softWrap: false, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)))),
                 busy
                     ? const Padding(padding: EdgeInsets.all(14), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
-                    : Switch(
+                    : Transform.scale(
+                        scale: 0.85,
+                        child: Switch(
                         value: online,
                         activeColor: primaryColor,
                         onChanged: active != null ? null : ((online || b == null) ? _toggle : (_) => _say(b['message']?.toString() ?? 'You cannot go online yet.')),
-                      ),
+                      )),
               ]),
             ),
           ),
@@ -845,10 +848,10 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
             borderRadius: BorderRadius.circular(20),
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => WalletScreen())).then((_) => _load()),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
               child: Row(mainAxisSize: MainAxisSize.min, children: [
-                Icon(Icons.account_balance_wallet_outlined, size: 18, color: primaryColor),
-                const SizedBox(width: 6),
+                Icon(Icons.account_balance_wallet_outlined, size: 16, color: primaryColor),
+                const SizedBox(width: 4),
                 Text(_naira(wallet['balance']), style: TextStyle(fontWeight: FontWeight.w800, color: DropMoney.toNum(wallet['balance']) < 0 ? Colors.red : null)),
               ]),
             ),
