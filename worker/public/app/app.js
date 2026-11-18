@@ -1149,8 +1149,8 @@
         var value = document.createElement("strong"); value.textContent = field[1];
         row.append(label,value); target.appendChild(row);
       });
-      if (driverMode && $("driverApp").parentNode !== target) target.appendChild($("driverApp"));
-      $("driverApp").hidden = !(driverMode && isDriver(currentUser));
+      if (isDriver(currentUser) && $("driverApp").parentNode !== target) target.appendChild($("driverApp"));
+      $("driverApp").hidden = !isDriver(currentUser);
     } else {
       $("driverApp").hidden = true;
     }
