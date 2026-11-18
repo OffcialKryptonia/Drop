@@ -11,6 +11,7 @@ import { requireAuth } from "../auth/middleware";
 import { STARTER_RIDE_TYPES } from "../lib/starter-ride-types";
 import { borderProblem } from "../lib/region";
 import { ALL_PERMISSIONS } from "../lib/permissions";
+import { getSetting } from "../lib/driver-application";
 
 export const adminCatalogRoutes = new Hono<AppEnv>();
 type C = Context<AppEnv>;
@@ -497,4 +498,23 @@ adminCatalogRoutes.delete("/admin/sub-admins/:id", ...guard("subadmin delete"), 
   await db.query("delete from app.api_tokens where user_id=$1", [id]);
   await audit(c, "subadmin_delete", String(id));
   return c.json({ message: "Deleted" });
+});
+
+
+/** Admin-controlled maximum number of additional passenger route stops. */
+adminCatalogRoutes.get("/admin/ride-stop-settings", ...guard("ride_order list"), async (c) => {
+  const max = Math.max(0, Math.min(20, await getSetting(c.get("db"), "ride_max_additional_stops", 3)));
+  return c.json({ data: { max_additional_stops: max } });
+});
+
+adminCatalogRoutes.put("/admin/ride-stop-settings", ...guard("ride_order edit"), async (c) => {
+  const p = z.object({ max_additional_stops: z.coerce.number().int().min(0).max(20) }).safeParse(await readBody(c));
+  if (!p.success) return validationFailed(c, zodErrors(p.error));
+  const max = p.data.max_additional_stops;
+  await c.get("db").query(
+    "insert into app.settings (key, value) values ('ride_max_additional_stops', $1::jsonb) on conflict (key) do update set value=excluded.value",
+    [JSON.stringify(max)],
+  );
+  await audit(c, "ride_stop_limit_update", "ride_max_additional_stops", { max_additional_stops: max });
+  return c.json({ message: "Route stop limit saved.", max_additional_stops: max });
 });
