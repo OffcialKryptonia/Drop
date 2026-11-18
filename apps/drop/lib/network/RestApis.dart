@@ -91,6 +91,16 @@ Future<LoginResponse> logInApi(Map request, {bool isSocialLogin = false}) async 
 //   });
 // }
 
+/// Upload the signed-in user's profile photo to private DROP storage.
+Future<void> uploadProfilePhoto(File file) async {
+  final Map<String, File> files = {'profile_image': file};
+  await executeRequest('profile/photo', method: HttpMethods.PUT, files: files);
+  final detail = await getUserDetail(userId: sharedPref.getInt(USER_ID));
+  final url = detail.data?.profileImage ?? '';
+  await sharedPref.setString(USER_PROFILE_PHOTO, url);
+  await appStore.setUserProfile(url);
+}
+
 /// Profile Update
 Future updateProfile({String? uid, String? firstName, String? lastName, String? userEmail, String? contactNumber, File? file}) async {
   Map<String, File> files = {};
