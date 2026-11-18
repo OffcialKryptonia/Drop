@@ -148,9 +148,12 @@ class EditProfileScreenState extends State<EditProfileScreen> {
     if (formKey.currentState!.validate()) {
       formKey.currentState!.save();
       appStore.setLoading(true);
+      if (imageProfile != null) {
+        await uploadProfilePhoto(File(imageProfile!.path));
+      }
       await updateProfile(
         uid: sharedPref.getString(UID).toString(),
-        file: imageProfile != null ? File(imageProfile!.path.validate()) : null,
+        file: null,
         contactNumber: widget.isGoogle == true ? '${countryCode.validate()}${contactNumberController.text.trim()}' : contactNumberController.text.trim(),
         // address: addressController.text.trim(),
         firstName: firstNameController.text.trim(),
