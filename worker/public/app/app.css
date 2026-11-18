@@ -131,3 +131,49 @@ input:disabled, select:disabled { background: var(--warm); color: var(--ink-mute
 .driver-actions { display:flex; gap:.5rem; flex-wrap:wrap; margin-top:.75rem; }
 .driver-actions button { width:auto; margin:0; }
 @media (max-width:560px) { .ride-map { height:260px; } .dashboard-head { display:block; } .dashboard-head > button { margin-top:.75rem; } }
+
+
+/* Native-style DROP app shell: one task/screen at a time, never a long dashboard feed. */
+body { min-height:100dvh; background:#f4f5f6; }
+.app-topbar { position:sticky; top:0; z-index:1000; background:#fff; box-shadow:0 1px 8px rgba(0,0,0,.05); }
+.app-topbar .wrap { width:min(100% - 2rem, 76rem); }
+.app-mode-label { margin-left:auto; margin-right:1rem; color:var(--ink); font-weight:700; font-size:.9rem; }
+.app-main { width:min(100% - 2rem, 76rem); max-width:76rem; padding:1.25rem 0 6rem !important; }
+#view-home { padding:1.25rem; border:0; border-radius:14px; box-shadow:0 2px 14px rgba(20,20,20,.04); min-height:calc(100dvh - 9rem); }
+#view-home > .eyebrow, #view-home > #hello, #view-home > #whoLine, #view-home > #badges { display:none; }
+#view-home > #driverNote { margin:0 0 1rem; }
+#modeRow { margin:0 0 1rem; max-width:34rem; }
+#homeMsg { margin:0 0 .5rem; }
+.app-navigation { display:flex; align-items:center; justify-content:center; gap:.5rem; padding:.5rem; margin:.5rem 0 1.25rem; background:#f5f5f5; border:1px solid var(--line); border-radius:12px; }
+.app-nav-item { display:flex; align-items:center; justify-content:center; gap:.5rem; min-width:7rem; border:0; border-radius:9px; padding:.7rem 1rem; background:transparent; color:var(--ink-mute); font:600 .95rem var(--font-body); cursor:pointer; }
+.app-nav-item > span:first-child { font-size:1.15rem; line-height:1; }
+.app-nav-item.active { color:#fff; background:var(--drop-red); box-shadow:0 2px 5px rgba(221,51,21,.2); }
+.web-dashboard { margin:0; padding:0; border:0; }
+.app-screen[hidden] { display:none !important; }
+.app-screen { min-height:24rem; animation:drop-screen-in .16s ease-out; }
+@keyframes drop-screen-in { from { opacity:.55; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
+.dashboard-head { padding:0 0 1rem; border-bottom:1px solid var(--line); }
+.dashboard-head h2, .screen-heading h2 { font-family:var(--font-display); color:var(--ink); font-size:1.55rem; margin:0; }
+.screen-heading { margin:0 0 1.25rem; padding-bottom:1rem; border-bottom:1px solid var(--line); }
+.screen-content { max-width:52rem; }
+.profile-field { display:flex; flex-direction:column; gap:.15rem; padding:.85rem 0; border-bottom:1px solid var(--line); }
+.profile-field strong { color:var(--ink); font-weight:600; }
+.wallet-balance { color:var(--drop-red-deep); font:700 2rem var(--font-display); margin:.5rem 0; }
+#passengerHomeScreen .ride-map { height:min(48vh,430px); min-height:260px; }
+#passengerTripsScreen > section { max-width:58rem; }
+#driverTripsScreen > section { max-width:58rem; }
+#driverApp { border:0; padding:1rem 0 0; margin:1rem 0 0; }
+#driverApp h3 { padding-top:.75rem; border-top:1px solid var(--line); }
+.app-signout { padding-top:1rem; border-top:1px solid var(--line); }
+.footer { display:none; }
+@media (max-width:640px) {
+  .app-main { width:100%; padding:0 0 5.5rem !important; }
+  #view-home { border-radius:0; padding:1rem; min-height:calc(100dvh - 4.25rem); }
+  .app-navigation { position:fixed; z-index:1200; left:0; right:0; bottom:0; margin:0; padding:.45rem .25rem calc(.45rem + env(safe-area-inset-bottom)); border-radius:14px 14px 0 0; border:0; border-top:1px solid var(--line); background:rgba(255,255,255,.97); box-shadow:0 -3px 18px rgba(0,0,0,.08); gap:.1rem; }
+  .app-nav-item { flex:1; min-width:0; flex-direction:column; gap:.15rem; padding:.45rem .2rem; font-size:.75rem; }
+  .app-nav-item > span:first-child { font-size:1.25rem; }
+  .app-mode-label { font-size:.8rem; }
+  .dashboard-head { display:flex; align-items:center; }
+  #passengerHomeScreen .ride-map { height:38vh; min-height:220px; }
+  #modeRow { max-width:none; }
+}
