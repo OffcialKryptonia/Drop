@@ -1164,7 +1164,7 @@
         applicationLink.addEventListener("click", function () { activateAppScreen("driver-application"); });
         target.appendChild(applicationLink);
       }
-    } else {
+    } else if (screen !== "driver-application") {
       $("driverApp").hidden = true;
     }
     if (screen === "trips") {
