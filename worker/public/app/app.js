@@ -312,14 +312,10 @@
     if (notice) setMsg(homeMsg, notice, "ok");
     else setMsg(homeMsg, "");
 
+    // showWorkspaces() selects the passenger/driver workspace and
+    // activateAppScreen() hides the driver application unless it is opened
+    // explicitly from Profile.
     showWorkspaces(user);
-
-    // Driver-role accounts get the application section inside the same view.
-    // Driver application is opened explicitly from Profile, never on ride-booking home.
-    else {
-      $("driverApp").hidden = true;
-      daReq = null; daApp = null; daLoadedFor = null;
-    }
 
     show("home");
   }
