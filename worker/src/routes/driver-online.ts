@@ -2,13 +2,13 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
 import { withDb } from "../db";
-import { requireAuth } from "../auth/middleware";
+import { requireWebOrBearer } from "../auth/web-or-bearer";
 import { readBody, validationFailed } from "../lib/legacy";
 import { driverEligibility } from "../lib/commission";
 import { driverOnlineBlock, requireApprovedDriver } from "../lib/roles";
 
 export const driverOnlineRoutes = new Hono<AppEnv>();
-const mw = [withDb, requireAuth, requireApprovedDriver] as const;
+const mw = [withDb, requireWebOrBearer, requireApprovedDriver] as const;
 
 const coord = z.object({
   latitude: z.coerce.number({ error: "The latitude is required." }).min(-90).max(90),

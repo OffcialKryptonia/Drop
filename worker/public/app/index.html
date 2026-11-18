@@ -9,6 +9,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png">
 <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
 <link rel="preload" href="/assets/fonts/outfit-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
 <link rel="stylesheet" href="/app/app.css">
 </head>
 <body>
@@ -89,6 +90,35 @@
 <button type="button" id="modeDriver" class="mode">Driver mode</button>
 </div>
 <p id="homeMsg" class="msg" aria-live="polite"></p>
+
+<section id="passengerDashboard" class="web-dashboard" hidden aria-label="Passenger dashboard">
+  <div class="dashboard-head"><div><p class="eyebrow">Passenger</p><h2>Where are you going?</h2><p class="muted small">Choose your pickup and destination on the map, then get a fare estimate.</p></div><button type="button" id="passengerRefresh" class="ghost">Refresh trip</button></div>
+  <div class="location-actions"><button type="button" id="useMyLocation" class="ghost">Use my current location</button><span id="locationMsg" class="muted small" aria-live="polite"></span></div>
+  <div class="map-pick-controls"><label><input type="radio" name="mapTarget" value="pickup" checked> Set pickup</label><label><input type="radio" name="mapTarget" value="dropoff"> Set destination</label></div>
+  <div id="rideMap" class="ride-map" role="application" aria-label="Map to select pickup and destination"></div>
+  <div class="grid location-fields">
+    <div><label class="f" for="pickupAddress">Pickup address / landmark</label><input id="pickupAddress" maxlength="300" placeholder="e.g. Wuse 2, Abuja"></div>
+    <div><label class="f" for="dropoffAddress">Destination address / landmark</label><input id="dropoffAddress" maxlength="300" placeholder="e.g. Jabi Lake Mall, Abuja"></div>
+  </div>
+  <p class="muted small" id="selectedCoords">Tap the map to set both locations.</p>
+  <p><button type="button" id="getEstimate" class="primary">Get fare estimate</button></p>
+  <div id="fareOptions" class="ride-options" aria-live="polite"></div>
+  <div id="requestRideWrap" hidden>
+    <label class="f" for="ridePayment">Payment method</label><select id="ridePayment"></select>
+    <p><button type="button" id="requestRide" class="primary">Request this ride</button></p>
+  </div>
+  <p id="passengerMsg" class="msg" aria-live="polite"></p>
+  <section id="currentRide" class="current-ride" hidden><h3>Your current trip</h3><div id="currentRideDetails"></div><p><button type="button" id="cancelRide" class="ghost">Cancel ride</button></p></section>
+  <section><h3>Recent trips</h3><div id="rideHistory" class="history-list"><p class="muted small">Your recent trips will appear here.</p></div></section>
+</section>
+<section id="driverDashboard" class="web-dashboard" hidden aria-label="Driver dashboard">
+  <div class="dashboard-head"><div><p class="eyebrow">Driver</p><h2>Driver workspace</h2><p class="muted small">Manage availability and trips from your browser.</p></div><button type="button" id="driverRefresh" class="ghost">Refresh</button></div>
+  <div id="driverEligibility" class="note">Checking driver eligibility…</div>
+  <div class="driver-online-row"><strong id="driverOnlineLabel">Offline</strong><button type="button" id="driverOnlineToggle" class="primary">Go online</button></div>
+  <p id="driverMsg" class="msg" aria-live="polite"></p>
+  <section><h3>Active trip / incoming requests</h3><div id="driverRequests"><p class="muted small">No active trip.</p></div></section>
+  <section><h3>Trip history</h3><div id="driverHistory" class="history-list"></div></section>
+</section>
 <!-- Driver application (only for accounts with the driver role) -->
 <section id="driverApp" hidden aria-label="Driver application">
 <h2>Driver application</h2>
@@ -166,6 +196,7 @@
 <p>© 2026 Kryptonia Tech Limited. All rights reserved.</p>
 </div></footer>
 
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="" defer></script>
 <script src="/app/app.js" defer></script>
 </body>
 </html>
