@@ -365,6 +365,9 @@
       .then(function () {
         csrfToken = null;
         currentUser = null;
+        if (driverPollTimer) clearInterval(driverPollTimer);
+        if (passengerPollTimer) clearInterval(passengerPollTimer);
+        driverPollTimer = null; passengerPollTimer = null;
         daReq = null; daApp = null; daLoadedFor = null;
         $("driverApp").hidden = true;
         $("login-password").value = "";
@@ -1047,7 +1050,7 @@
     options.credentials = "same-origin";
     options.headers = Object.assign({}, options.headers || {}, authedHeaders());
     return fetch("/api" + path, options).then(function (res) {
-      return readJson(res).then(function (body) { return { status: res.status, body: body }; });
+      return readJson(res).then(function (body) { if (res.status === 401) { csrfToken = null; if (viewAuth && viewHome) { show("auth"); setMsg($("loginMsg"), "Your session has expired. Please sign in again.", "err"); } } return { status: res.status, body: body }; });
     });
   }
   function money(value, currency) {
