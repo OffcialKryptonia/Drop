@@ -1060,35 +1060,73 @@
   }
   function setPassengerMessage(message, kind) { setMsg($("passengerMsg"), message, kind); }
   function pointLabel(p) { return p ? p.lat.toFixed(5) + ", " + p.lng.toFixed(5) : "Not selected"; }
+  var mapProvider = null, mapConfig = null, passengerMarker = null, passengerWatchId = null;
+  function markerElement(kind, iconUrl) {
+    var el = document.createElement("div");
+    el.className = "drop-map-marker drop-map-marker-" + kind;
+    if (iconUrl) { var img = document.createElement("img"); img.src = iconUrl; img.alt = ""; el.appendChild(img); }
+    else { var dot = document.createElement("span"); dot.className = "drop-map-dot"; el.appendChild(dot); }
+    return el;
+  }
+  function createMapMarker(point, kind, iconUrl, rotation) {
+    if (!rideMap || !point) return null;
+    var el = markerElement(kind, iconUrl);
+    if (rotation != null) el.style.setProperty("--marker-heading", rotation + "deg");
+    if (mapProvider === "mapbox" && window.mapboxgl) return new mapboxgl.Marker({ element: el, anchor: "center", rotationAlignment: "map" }).setLngLat([point.lng, point.lat]).addTo(rideMap);
+    if (window.L) return L.marker([point.lat, point.lng], { icon: L.divIcon({ className: "drop-leaflet-marker", html: el.outerHTML, iconSize: [42, 42], iconAnchor: [21, 21] }) }).addTo(rideMap);
+    return null;
+  }
+  function moveMapMarker(marker, point, rotation) {
+    if (!marker || !point) return;
+    if (typeof marker.setLngLat === "function") marker.setLngLat([point.lng, point.lat]);
+    else if (typeof marker.setLatLng === "function") marker.setLatLng([point.lat, point.lng]);
+    if (rotation != null && marker.getElement) marker.getElement().style.setProperty("--marker-heading", rotation + "deg");
+  }
+  function removeMapMarker(marker) {
+    if (!marker) return;
+    if (typeof marker.remove === "function") marker.remove();
+    else if (rideMap && typeof rideMap.removeLayer === "function") rideMap.removeLayer(marker);
+  }
   function setPoint(which, latlng) {
     var p = { lat: Number(latlng.lat), lng: Number(latlng.lng) };
     if (!Number.isFinite(p.lat) || !Number.isFinite(p.lng)) return;
-    if (which === "pickup") {
-      pickupPoint = p;
-      if (pickupMarker) pickupMarker.setLatLng(latlng);
-      else if (rideMap && window.L) pickupMarker = L.marker(latlng).addTo(rideMap).bindPopup("Pickup");
-    } else {
-      dropoffPoint = p;
-      if (dropoffMarker) dropoffMarker.setLatLng(latlng);
-      else if (rideMap && window.L) dropoffMarker = L.marker(latlng).addTo(rideMap).bindPopup("Destination");
-    }
+    if (which === "pickup") { pickupPoint = p; if (pickupMarker) moveMapMarker(pickupMarker, p); else pickupMarker = createMapMarker(p, "pickup"); }
+    else { dropoffPoint = p; if (dropoffMarker) moveMapMarker(dropoffMarker, p); else dropoffMarker = createMapMarker(p, "dropoff"); }
     $("selectedCoords").textContent = "Pickup: " + pointLabel(pickupPoint) + " · Destination: " + pointLabel(dropoffPoint);
     lastQuote = null; selectedRideType = null; $("fareOptions").innerHTML = ""; $("requestRideWrap").hidden = true;
   }
+  function setMapView(point, zoom) {
+    if (!rideMap) return;
+    if (mapProvider === "mapbox" && rideMap.flyTo) rideMap.flyTo({ center: [point.lng, point.lat], zoom: zoom || 15, essential: true });
+    else if (rideMap.setView) rideMap.setView([point.lat, point.lng], zoom || 15);
+  }
+  function watchPassengerLocation() {
+    if (!navigator.geolocation || passengerWatchId !== null) return;
+    passengerWatchId = navigator.geolocation.watchPosition(function (pos) {
+      var p = { lat: pos.coords.latitude, lng: pos.coords.longitude }, heading = Number.isFinite(pos.coords.heading) ? pos.coords.heading : null;
+      if (!passengerMarker) passengerMarker = createMapMarker(p, "passenger", null, heading);
+      else moveMapMarker(passengerMarker, p, heading);
+    }, function () {}, { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 });
+  }
   function initRideMap() {
-    if (rideMap || !window.L || !$("rideMap")) return;
-    rideMap = L.map("rideMap").setView([9.0579, 7.4951], 12);
+    if (rideMap || !$("rideMap")) return;
     fetch("/api/map-config", { credentials: "same-origin" }).then(readJson).then(function (cfg) {
-      var url = cfg && cfg.osm_tile_url || "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
-      L.tileLayer(url, { maxZoom: 19, attribution: cfg && cfg.attribution || "© OpenStreetMap contributors" }).addTo(rideMap);
-    }).catch(function () {
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap contributors" }).addTo(rideMap);
-    });
-    rideMap.on("click", function (e) {
-      var target = document.querySelector('input[name="mapTarget"]:checked');
-      setPoint(target ? target.value : "pickup", e.latlng);
-    });
-    setTimeout(function () { if (rideMap) rideMap.invalidateSize(); }, 150);
+      mapConfig = cfg || {}; mapProvider = mapConfig.provider || "osm";
+      if (mapProvider === "mapbox") {
+        if (!window.mapboxgl || !mapConfig.mapbox_public_token || !mapConfig.mapbox_style_uri) throw new Error("Mapbox is active in DROP Admin, but its web map assets or public configuration are unavailable.");
+        mapboxgl.accessToken = mapConfig.mapbox_public_token;
+        rideMap = new mapboxgl.Map({ container: "rideMap", style: mapConfig.mapbox_style_uri, center: [-7.4951, 9.0579], zoom: 12, attributionControl: true });
+        rideMap.addControl(new mapboxgl.NavigationControl(), "top-right");
+        rideMap.on("click", function (e) { var target = document.querySelector('input[name="mapTarget"]:checked'); setPoint(target ? target.value : "pickup", { lat: e.lngLat.lat, lng: e.lngLat.lng }); });
+      } else if (mapProvider === "osm" || mapProvider === "auto") {
+        if (!window.L) throw new Error("The OpenStreetMap web map library could not be loaded.");
+        rideMap = L.map("rideMap").setView([9.0579, 7.4951], 12);
+        L.tileLayer(mapConfig.osm_tile_url || "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: mapConfig.attribution || "© OpenStreetMap contributors" }).addTo(rideMap);
+        rideMap.on("click", function (e) { var target = document.querySelector('input[name="mapTarget"]:checked'); setPoint(target ? target.value : "pickup", e.latlng); });
+      } else throw new Error("The backend-selected map provider (" + mapProvider + ") is not configured for browser rendering. Configure its public web key before using it on web.");
+      watchPassengerLocation();
+      setTimeout(function () { if (rideMap && rideMap.resize) rideMap.resize(); else if (rideMap && rideMap.invalidateSize) rideMap.invalidateSize(); }, 150);
+    }).catch(function (err) { setPassengerMessage(err.message || "Could not load the map configuration.", "err"); });
   }
   var activeAppScreen = "home";
   function activateAppScreen(screen) {
@@ -1225,7 +1263,7 @@
       var trip = r.body && r.body.data;
       $("currentRide").hidden = !trip;
       if (!trip) {
-        if (driverMarker && rideMap) rideMap.removeLayer(driverMarker);
+        if (driverMarker) removeMapMarker(driverMarker);
         driverMarker = null;
         return;
       }
@@ -1239,11 +1277,12 @@
         if (trip.driver.location && rideMap && window.L) {
           var driverLL = [Number(trip.driver.location.lat), Number(trip.driver.location.lng)];
           if (driverLL.every(Number.isFinite)) {
-            if (driverMarker) driverMarker.setLatLng(driverLL);
-            else driverMarker = L.marker(driverLL).addTo(rideMap).bindPopup("Your driver");
+            var driverIcon = mapConfig && mapConfig.vehicle_icons && trip.service && mapConfig.vehicle_icons[trip.service.map_icon];
+            if (driverMarker) moveMapMarker(driverMarker, { lat: driverLL[0], lng: driverLL[1] });
+            else driverMarker = createMapMarker({ lat: driverLL[0], lng: driverLL[1] }, "driver", driverIcon);
           }
         }
-      } else if (driverMarker && rideMap) { rideMap.removeLayer(driverMarker); driverMarker = null; }
+      } else if (driverMarker) { removeMapMarker(driverMarker); driverMarker = null; }
       $("currentRideDetails").textContent = summary;
       $("cancelRide").hidden = !["searching", "accepted", "arrived"].includes(trip.status);
     }).catch(function () {});
@@ -1255,7 +1294,7 @@
     navigator.geolocation.getCurrentPosition(function (pos) {
       var ll = { lat: pos.coords.latitude, lng: pos.coords.longitude };
       setPoint("pickup", ll);
-      if (rideMap) rideMap.setView(ll, 15);
+      if (rideMap) setMapView(ll, 15);
       msg.textContent = "Pickup set to your current location.";
     }, function () { msg.textContent = "Location permission was denied or unavailable. Tap the map to choose pickup."; }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 });
   });
