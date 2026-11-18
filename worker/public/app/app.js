@@ -115,6 +115,16 @@
   $("role-rider").addEventListener("click", function () { selectRole("rider"); });
   $("role-driver").addEventListener("click", function () { selectRole("driver"); });
 
+  // Homepage deep links: /app/?register=1 and /app/?register=1&role=driver.
+  // The same authentication form is used; the role is only a registration choice.
+  try {
+    var entry = new URLSearchParams(window.location.search);
+    if (entry.get("register") === "1") {
+      selectTab("register");
+      if (entry.get("role") === "driver") selectRole("driver");
+    }
+  } catch (_) { /* Keep the normal sign-in default if URL parsing is unavailable. */ }
+
   // ---- login --------------------------------------------------------------
   $("loginForm").addEventListener("submit", function (ev) {
     ev.preventDefault();
