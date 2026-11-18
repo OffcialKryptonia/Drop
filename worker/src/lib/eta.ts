@@ -1,3 +1,4 @@
+import type { Client } from "pg";
 import { haversineKm, MILE_PER_KM } from "./routing";
 
 type Row = Record<string, unknown>;
@@ -34,4 +35,10 @@ export function rideEta(r: Row, now = Date.now()) {
     stale: !Number.isFinite(at) || now - at > 90_000, // the driver's phone has not reported for 90 s
     source: "estimate" as const,
   };
+}
+
+/** Admin switches: show the ETA to passengers and/or drivers. Both on unless the admin turns one off. */
+export async function etaSettings(db: Client): Promise<{ rider: boolean; driver: boolean }> {
+  const v = (await db.query("select value from app.settings where key = 'eta'")).rows[0]?.value ?? {};
+  return { rider: v.rider !== false, driver: v.driver !== false };
 }
