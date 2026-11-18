@@ -1001,7 +1001,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text('${x['name']}  ·  ${x['capacity'] ?? ''} seats', style: const TextStyle(fontWeight: FontWeight.w800)),
-              Text(nearby > 0 ? 'Driver ~${eta ?? '-'} min away · $nearby nearby' : 'No drivers nearby right now', style: TextStyle(color: nearby > 0 ? Colors.grey.shade700 : Colors.orange.shade800, fontSize: 12)),
+              Text(nearby > 0 ? (eta == null ? '$nearby nearby' : 'Driver ~$eta min away · $nearby nearby') : 'No drivers nearby right now', style: TextStyle(color: nearby > 0 ? Colors.grey.shade700 : Colors.orange.shade800, fontSize: 12)),
             ]),
           ),
           Text(_money(x['fare'], quote['currency']), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),

@@ -98,6 +98,9 @@ class RideApi {
 
   static Future<Map<String, dynamic>> history() => _get('ride/history');
 
+  /// The passenger's numbered receipt for a finished trip.
+  static Future<Map<String, dynamic>> receipt(int id) => _get('ride/$id/receipt');
+
   /// A link someone can open to follow this trip live.
   static Future<Map<String, dynamic>> shareTrip() => _post('ride/share');
 
@@ -144,4 +147,7 @@ class RideApi {
   static Future<Map<String, dynamic>> driverCancel(int id) => _post('driver/rides/$id/cancel');
 
   static Future<Map<String, dynamic>> driverHistory() => _get('driver/rides/history');
+
+  /// The driver's numbered receipt for a finished trip (fare, commission, earning).
+  static Future<Map<String, dynamic>> driverReceipt(int id) => _get('driver/rides/$id/receipt');
 }

@@ -1,3 +1,4 @@
+import 'package:drop/drop/screens/drop_trips_screen.dart';
 import 'package:drop/screens/ReviewsScreen.dart';
 import '../drop/screens/drop_help_screen.dart';
 import '../drop/screens/drop_sounds_screen.dart';
@@ -76,7 +77,7 @@ class _DrawerComponentState extends State<DrawerComponent> {
                     iconData: ic_my_rides,
                     onTap: () {
                       Navigator.pop(context);
-                      launchScreen(context, RideListScreen(), pageRouteAnimation: PageRouteAnimation.Slide);
+                      launchScreen(context, const DropTripsScreen(driver: false), pageRouteAnimation: PageRouteAnimation.Slide);
                     }),
                 DrawerWidget(
                     title: 'Reviews',

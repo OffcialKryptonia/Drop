@@ -6,6 +6,7 @@ import { audit, guard } from "../lib/permissions";
 import { readBody, validationFailed } from "../lib/legacy";
 import { decryptValue, encryptValue } from "../lib/crypto";
 import { DEFAULT_MAPBOX_STYLE, mapSettings } from "../lib/maps";
+import { etaSettings } from "../lib/eta";
 
 export const mapRoutes = new Hono<AppEnv>();
 async function saveSetting(db: import("pg").Client, key: string, value: string) {
@@ -115,4 +116,14 @@ mapRoutes.post("/admin/map-settings/test", ...guard("map_settings edit"), async 
     await audit(c, "map_settings", "mapbox_connection_test", { success: false });
     return c.json({ message: "Could not reach Mapbox. Check the Worker network and try again." }, 503);
   }
+});
+
+/** Trip ETA switches: show the live ETA to passengers and/or drivers. */
+mapRoutes.get("/admin/eta-settings", ...guard("map_settings list"), async (c) => c.json({ data: await etaSettings(c.get("db")) }));
+mapRoutes.put("/admin/eta-settings", ...guard("map_settings edit"), async (c) => {
+  const p = z.object({ rider: z.boolean(), driver: z.boolean() }).safeParse(await readBody(c));
+  if (!p.success) return validationFailed(c, { eta: ["Choose On or Off for passengers and drivers."] });
+  await c.get("db").query("insert into app.settings (key, value) values ('eta', $1::jsonb) on conflict (key) do update set value = excluded.value", [JSON.stringify(p.data)]);
+  await audit(c, "eta_settings.update", "eta", p.data);
+  return c.json({ status: true, data: p.data });
 });

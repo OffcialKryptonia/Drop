@@ -37,6 +37,7 @@ class DropMoneyText extends StatelessWidget {
     this.style,
     this.signed = false,
     this.decimals,
+    this.symbol = DropMoney.naira,
     this.maxLines = 1,
     this.textAlign,
   });
@@ -45,6 +46,7 @@ class DropMoneyText extends StatelessWidget {
   final TextStyle? style;
   final bool signed;
   final int? decimals;
+  final String symbol;
   final int maxLines;
   final TextAlign? textAlign;
 
@@ -52,7 +54,7 @@ class DropMoneyText extends StatelessWidget {
   Widget build(BuildContext context) {
     final base = style ?? DefaultTextStyle.of(context).style;
     return Text(
-      DropMoney.format(value, signed: signed, decimals: decimals),
+      DropMoney.format(value, symbol: symbol, signed: signed, decimals: decimals),
       maxLines: maxLines,
       overflow: TextOverflow.ellipsis,
       textAlign: textAlign,

@@ -643,6 +643,29 @@
     if (!pm.data.length) list.appendChild(h("div", { class: "empty", text: "No payment methods yet." }));
   }
 
+  // ---------- Trip ETA switches (shown on the Maps page) ----------
+  function etaCard(root) {
+    var card = h("div", { class: "card" }, h("div", { class: "t", text: "Trip ETA" }), h("p", { class: "muted", text: "Show how many minutes a trip has left, and the arrival time. It is an estimate from the driver's last location." }));
+    root.appendChild(card);
+    api("GET", "/admin/eta-settings").then(function (r) {
+      var s = (r.body || {}).data || { rider: true, driver: true };
+      var rider = select([["1", "On"], ["0", "Off"]], s.rider === false ? "0" : "1");
+      var driver = select([["1", "On"], ["0", "Off"]], s.driver === false ? "0" : "1");
+      var out = h("p", { class: "msg" });
+      card.appendChild(field("Passenger ETA (trip screen and fare list)", rider));
+      card.appendChild(field("Driver ETA (trip screen and request card)", driver));
+      if (can("map_settings edit")) {
+        var save = h("button", { text: "Save", class: "small", style: "margin-top:10px" });
+        save.addEventListener("click", function () {
+          save.disabled = true;
+          api("PUT", "/admin/eta-settings", { rider: rider.value === "1", driver: driver.value === "1" }).then(function (x) { save.disabled = false; if (x.ok) toast("Saved"); else msg(out, errText(x)); });
+        });
+        card.appendChild(save);
+      } else { rider.disabled = true; driver.disabled = true; }
+      card.appendChild(out);
+    });
+  }
+
   // ---------- Maps (Google / OpenStreetMap / Mapbox) ----------
   function pageMaps(root) {
     loading(root);
@@ -656,6 +679,7 @@
       status.appendChild(h("p", { class: "muted", text: "Google server key: " + (d.google_server_key_set ? "set" : "not set") + (d.google_failed_recently ? " · Google recently failed (" + d.google_failed_at + ")" : "") }));
       if (d.fallback_reason) status.appendChild(h("p", { class: "msg", text: d.fallback_reason }));
       root.appendChild(status);
+      etaCard(root);
       var provider = select([["auto", "Automatic (Google when configured, otherwise OpenStreetMap)"], ["google", "Google Maps"], ["osm", "OpenStreetMap / MapLibre"], ["mapbox", "Mapbox"]], d.provider);
       var tiles = text(d.osm_tile_url, "https://tile.openstreetmap.org/{z}/{x}/{y}.png");
       var routing = text(d.osm_routing_url, "https://router.project-osrm.org");

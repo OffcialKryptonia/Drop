@@ -1,3 +1,4 @@
+import 'package:drop/drop/screens/drop_trips_screen.dart';
 import 'package:drop/service/DriverApplicationApi.dart';
 import 'package:drop/drop/screens/drop_sounds_screen.dart';
 import 'package:flutter/material.dart';
@@ -106,7 +107,7 @@ class _DrawerComponentState extends State<DrawerComponent> {
                 icon: Ionicons.car_outline,
                 onTap: () {
                   Navigator.pop(context);
-                  launchScreen(context, RidesListScreen(), pageRouteAnimation: PageRouteAnimation.Slide);
+                  launchScreen(context, const DropTripsScreen(driver: true), pageRouteAnimation: PageRouteAnimation.Slide);
                 }),
             DrawerWidget(
                 title: 'Reviews',
