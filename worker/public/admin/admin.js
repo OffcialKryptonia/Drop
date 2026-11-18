@@ -98,6 +98,7 @@
     { id: "ride-types", label: "Ride types", group: "Operations", perm: "service list", render: pageRideTypes },
     { id: "maps", label: "Maps", group: "Operations", perm: "map_settings list", render: pageMaps },
     { id: "order-ride", label: "Order Ride", group: "Operations", perm: "ride_order list", render: pageOrderRide },
+    { id: "route-stops", label: "Route stops", group: "Operations", perm: "ride_order list", render: pageRouteStops },
     { id: "push", label: "Push notifications", group: "System", perm: "push_settings list", render: pagePush },
     { id: "regions", label: "Regions", group: "Operations", perm: "region list", render: pageRegions },
     { id: "ride-options", label: "Ride options", group: "Operations", perm: "service_option list", render: pageOptions },
@@ -348,6 +349,45 @@
     });
   }
 
+
+  // ---------- Multi-stop route settings ----------
+  function pageRouteStops(root) {
+    loading(root);
+    api("GET", "/admin/ride-stop-settings").then(function (r) {
+      var d = r.body && r.body.data;
+      root.textContent = "";
+      root.appendChild(head("Route stops", "Control how many additional destinations passengers can add to one trip."));
+      if (!r.ok || !d) {
+        root.appendChild(h("p", { class: "msg err", text: errText(r) }));
+        return;
+      }
+      var limit = h("input", { type: "number", min: "0", max: "20", step: "1", value: String(d.max_additional_stops) });
+      var out = h("p", { class: "msg", "aria-live": "polite" });
+      var card = h("div", { class: "card" },
+        h("h3", { text: "Maximum additional stops per trip" }),
+        h("p", { class: "muted", text: "Pickup and final destination are not counted. Set 0 to disable additional stops. The server enforces this limit for every booking." }),
+        field("Additional stops allowed (0–20)", limit),
+        h("p", { class: "muted", text: "Current limit: " + d.max_additional_stops }),
+        out);
+      if (can("ride_order edit")) {
+        var save = h("button", { text: "Save route stop limit", class: "small" });
+        save.addEventListener("click", function () {
+          var value = Number(limit.value);
+          if (!Number.isInteger(value) || value < 0 || value > 20) { msg(out, "Enter a whole number from 0 to 20."); return; }
+          save.disabled = true;
+          api("PUT", "/admin/ride-stop-settings", { max_additional_stops: value }).then(function (x) {
+            save.disabled = false;
+            if (x.ok) { toast("Route stop limit saved"); pageRouteStops(root); }
+            else msg(out, errText(x));
+          });
+        });
+        card.appendChild(save);
+      } else {
+        card.appendChild(h("p", { class: "muted", text: "You have view-only access to this setting." }));
+      }
+      root.appendChild(card);
+    });
+  }
 
   // ---------- Push notifications (OneSignal) ----------
   function pagePush(root) {

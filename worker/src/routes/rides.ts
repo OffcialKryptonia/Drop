@@ -31,7 +31,7 @@ const point = z.object({
   lng: z.coerce.number({ error: "The longitude is required." }).min(-180).max(180),
   address: z.string().trim().max(300).optional(),
 });
-const tripSchema = z.object({ pickup: point, dropoff: point });
+const tripSchema = z.object({ pickup: point, dropoff: point, stops: z.array(point).max(20).default([]) });
 const requestSchema = tripSchema.extend({
   service_id: z.coerce.number().int().positive({ error: "Choose a ride type." }),
   payment_method: z.enum(["cash", "wallet", "card", "virtual_account"], { error: "Choose how you will pay." }),
@@ -48,6 +48,7 @@ const ride = (r: Row) => ({
   service: { id: Number(r.service_id), name: r.service_name ?? null, category: r.service_category ?? null, map_icon: iconKeyFor(r.service_category as string, r.service_map_icon as string) },
   pickup: { lat: r.pickup_lat, lng: r.pickup_lng, address: r.pickup_address },
   dropoff: { lat: r.dropoff_lat, lng: r.dropoff_lng, address: r.dropoff_address },
+  stops: Array.isArray(r.stops) ? r.stops : [],
   distance: Number(r.distance),
   distance_unit: r.distance_unit,
   duration_minutes: Number(r.duration_minutes),
@@ -77,7 +78,10 @@ const ride = (r: Row) => ({
 const RIDE_SELECT = `select r.*, s.name as service_name, s.category as service_category, s.map_icon_key as service_map_icon,
        du.first_name as driver_first_name, du.last_name as driver_last_name, du.contact_number as driver_contact_number,
        du.latitude as driver_lat, du.longitude as driver_lng, du.last_location_update_at as driver_location_at,
-       p.vehicle_make, p.vehicle_model, p.vehicle_colour, p.vehicle_plate
+       p.vehicle_make, p.vehicle_model, p.vehicle_colour, p.vehicle_plate,
+       coalesce((select jsonb_agg(jsonb_build_object('id', st.id, 'sequence', st.sequence, 'lat', st.lat, 'lng', st.lng,
+         'address', st.address, 'status', st.status, 'arrived_at', st.arrived_at, 'completed_at', st.completed_at) order by st.sequence)
+         from app.ride_request_stops st where st.ride_request_id = r.id), '[]'::jsonb) as stops
   from app.ride_requests r
   join app.services s on s.id = r.service_id
   left join app.users du on du.id = r.driver_id
@@ -104,11 +108,19 @@ rideRoutes.get("/ride/types", ...mw, async (c) => {
   return c.json(r.ok ? { status: true, ride_types: r.ride_types.map((t) => (eta ? t : { ...t, pickup_eta_minutes: null })) } : { status: true, ride_types: [], message: r.message });
 });
 
-/** Prices for every ride type available for this trip, with nearby drivers and pickup time. Nothing is saved. */
+/** Passenger-visible route-stop limit. Zero disables additional stops. */
+rideRoutes.get("/ride/stop-settings", ...mw, async (c) => {
+  const max = Math.max(0, Math.min(20, await getSetting(c.get("db"), "ride_max_additional_stops", 3)));
+  return c.json({ status: true, data: { max_additional_stops: max } });
+});
+
+/** Prices every leg of the route; the server remains authoritative for distance, time and fare. */
 rideRoutes.post("/ride/estimate", ...mw, async (c) => {
   const p = tripSchema.safeParse(await readBody(c));
   if (!p.success) return validationFailed(c, { trip: [p.error.issues[0].message] });
-  const q = await quoteRide(c.get("db"), c.env, p.data.pickup, p.data.dropoff);
+  const maxStops = Math.max(0, Math.min(20, await getSetting(c.get("db"), "ride_max_additional_stops", 3)));
+  if (p.data.stops.length > maxStops) return validationFailed(c, { stops: [`You can add up to ${maxStops} additional stop(s) to this trip.`] });
+  const q = await quoteRide(c.get("db"), c.env, p.data.pickup, p.data.dropoff, p.data.stops);
   if (!q.ok) return c.json({ status: false, code: q.code, message: q.message }, 422);
   return c.json({
     status: true,
@@ -118,6 +130,8 @@ rideRoutes.post("/ride/estimate", ...mw, async (c) => {
     distance_unit: q.region.distance_unit,
     duration_minutes: q.route.duration_minutes,
     route_source: q.route.source,
+    stops: p.data.stops,
+    max_additional_stops: maxStops,
     options: q.options,
     ride_types: (await etaSettings(c.get("db"))).rider ? q.ride_types : q.ride_types.map((t) => ({ ...t, pickup_eta_minutes: null })),
   });
@@ -132,7 +146,9 @@ rideRoutes.post("/ride/request", ...mw, async (c) => {
   await expireStale(c);
   if (await currentOf(c)) return c.json({ status: false, code: "already_has_ride", message: "You already have a ride in progress." }, 409);
 
-  const q = await quoteRide(db, c.env, p.data.pickup, p.data.dropoff);
+  const maxStops = Math.max(0, Math.min(20, await getSetting(db, "ride_max_additional_stops", 3)));
+  if (p.data.stops.length > maxStops) return validationFailed(c, { stops: [`You can add up to ${maxStops} additional stop(s) to this trip.`] });
+  const q = await quoteRide(db, c.env, p.data.pickup, p.data.dropoff, p.data.stops);
   if (!q.ok) return c.json({ status: false, code: q.code, message: q.message }, 422);
   const type = q.ride_types.find((t) => t.id === p.data.service_id);
   if (!type) return c.json({ status: false, code: "ride_type_unavailable", message: "That ride type is not available for this trip right now." }, 422);
@@ -154,6 +170,7 @@ rideRoutes.post("/ride/request", ...mw, async (c) => {
 
   const expiry = await getSetting(db, "ride_request_expiry_seconds", 120);
   try {
+    await db.query("begin");
     const ins = await db.query(
       `insert into app.ride_requests (rider_id, service_id, region_id, pickup_lat, pickup_lng, pickup_address, dropoff_lat, dropoff_lng, dropoff_address,
               distance, distance_unit, duration_minutes, route_source, fare, fare_breakdown, options, payment_method, expires_at, currency)
@@ -162,10 +179,18 @@ rideRoutes.post("/ride/request", ...mw, async (c) => {
       [me.id, type.id, q.region.id, p.data.pickup.lat, p.data.pickup.lng, p.data.pickup.address ?? null, p.data.dropoff.lat, p.data.dropoff.lng, p.data.dropoff.address ?? null,
         q.distance, q.region.distance_unit, q.route.duration_minutes, q.route.source, fare.total, JSON.stringify(fare), JSON.stringify(options), p.data.payment_method, expiry, q.region.currency],
     );
-    const row = (await db.query(`${RIDE_SELECT} where r.id = $1`, [ins.rows[0].id])).rows[0];
-    pushLater(c, pushNearbyDrivers(db, c.env, Number(ins.rows[0].id)));
+    const rideId = Number(ins.rows[0].id);
+    for (let i = 0; i < p.data.stops.length; i++) {
+      const stop = p.data.stops[i];
+      await db.query("insert into app.ride_request_stops (ride_request_id, sequence, lat, lng, address) values ($1,$2,$3,$4,$5)",
+        [rideId, i + 1, stop.lat, stop.lng, stop.address ?? null]);
+    }
+    await db.query("commit");
+    const row = (await db.query(`${RIDE_SELECT} where r.id = $1`, [rideId])).rows[0];
+    pushLater(c, pushNearbyDrivers(db, c.env, rideId));
     return c.json({ status: true, data: ride(row) }, 201);
   } catch (e) {
+    await db.query("rollback").catch(() => undefined);
     if ((e as { code?: string }).code === "23505") return c.json({ status: false, code: "already_has_ride", message: "You already have a ride in progress." }, 409);
     throw e;
   }

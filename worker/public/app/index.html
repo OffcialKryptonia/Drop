@@ -107,9 +107,14 @@
   <div id="rideMap" class="ride-map" role="application" aria-label="Map to select pickup and destination"></div>
   <div class="grid location-fields">
     <div><label class="f" for="pickupAddress">Pickup address / landmark</label><input id="pickupAddress" maxlength="300" placeholder="e.g. Wuse 2, Abuja"></div>
-    <div><label class="f" for="dropoffAddress">Destination address / landmark</label><input id="dropoffAddress" maxlength="300" placeholder="e.g. Jabi Lake Mall, Abuja"></div>
+    <div><label class="f" for="dropoffAddress">Final destination / landmark</label><input id="dropoffAddress" maxlength="300" placeholder="e.g. Jabi Lake Mall, Abuja"></div>
   </div>
-  <p class="muted small" id="selectedCoords">Tap the map to set both locations.</p>
+  <section class="route-stop-panel" aria-label="Additional route stops">
+    <div class="route-stop-heading"><div><strong>Additional stops</strong><p class="muted small">Add places you need to visit before your final destination.</p></div><span id="routeStopLimit" class="muted small">Loading stop limit…</span></div>
+    <div id="routeStops" class="route-stops"></div>
+    <button type="button" id="addRouteStop" class="ghost" disabled>+ Add a stop</button>
+  </section>
+  <p class="muted small" id="selectedCoords">Tap the map to set pickup, stops and destination.</p>
   <p><button type="button" id="getEstimate" class="primary">Get fare estimate</button></p>
   <div id="fareOptions" class="ride-options" aria-live="polite"></div>
   <div id="requestRideWrap" hidden>
