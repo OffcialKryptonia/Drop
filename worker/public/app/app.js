@@ -1090,11 +1090,90 @@
     });
     setTimeout(function () { if (rideMap) rideMap.invalidateSize(); }, 150);
   }
+  var activeAppScreen = "home";
+  function activateAppScreen(screen) {
+    var allowed = ["home", "trips", "wallet", "profile", "help"];
+    if (allowed.indexOf(screen) < 0) screen = "home";
+    activeAppScreen = screen;
+    var driverMode = currentUser && currentUser.active_mode === "driver";
+    var dashboard = driverMode ? $("driverDashboard") : $("passengerDashboard");
+    if (!dashboard) return;
+    dashboard.querySelectorAll("[data-screen-panel]").forEach(function (panel) {
+      panel.hidden = panel.getAttribute("data-screen-panel") !== screen;
+    });
+    $("appNavigation").hidden = false;
+    $("appNavigation").querySelectorAll("[data-screen]").forEach(function (button) {
+      var selected = button.getAttribute("data-screen") === screen;
+      button.classList.toggle("active", selected);
+      button.setAttribute("aria-current", selected ? "page" : "false");
+    });
+    $("appModeLabel").textContent = driverMode ? "Driver app" : "Passenger app";
+    if (screen === "wallet") {
+      if (driverMode) {
+        var wallet = $("driverWalletContent");
+        if (wallet.dataset.loaded !== "1") {
+          api("/driver/status").then(function (r) {
+            var w = r.body && r.body.wallet || {};
+            wallet.innerHTML = "";
+            var p = document.createElement("p"); p.className = "wallet-balance"; p.textContent = money(w.balance, {code:"NGN"});
+            var label = document.createElement("p"); label.className = "muted"; label.textContent = "Available driver wallet balance";
+            wallet.append(p, label); wallet.dataset.loaded = "1";
+          }).catch(function () { wallet.textContent = "Could not load your driver wallet. Try again."; });
+        }
+      } else {
+        var pw = $("passengerWalletContent");
+        if (pw.dataset.loaded !== "1") {
+          api("/wallet-list?per_page=10").then(function (r) {
+            var rows = r.body && r.body.data || [];
+            pw.innerHTML = "";
+            if (!Array.isArray(rows) || !rows.length) { pw.textContent = "No wallet transactions yet."; pw.dataset.loaded = "1"; return; }
+            rows.slice(0,10).forEach(function (entry) {
+              var item = document.createElement("article"); item.className = "history-item";
+              var title = document.createElement("strong"); title.textContent = entry.description || String(entry.transaction_type || "Wallet transaction").replace(/_/g," ");
+              var amount = document.createElement("p"); amount.textContent = money(entry.amount, {code:"NGN"});
+              item.append(title, amount); pw.appendChild(item);
+            });
+            pw.dataset.loaded = "1";
+          }).catch(function () { pw.textContent = "Could not load wallet activity. Try again."; });
+        }
+      }
+    }
+    if (screen === "profile") {
+      var target = driverMode ? $("driverProfileContent") : $("passengerProfileContent");
+      target.innerHTML = "";
+      var fields = [["Name", currentUser.display_name || [currentUser.first_name,currentUser.last_name].filter(Boolean).join(" ")],["Email",currentUser.email],["Phone", [currentUser.country_code,currentUser.contact_number].filter(Boolean).join(" ")],["Username",currentUser.username]];
+      fields.forEach(function (field) {
+        if (!field[1]) return;
+        var row = document.createElement("div"); row.className = "profile-field";
+        var label = document.createElement("span"); label.className = "muted small"; label.textContent = field[0];
+        var value = document.createElement("strong"); value.textContent = field[1];
+        row.append(label,value); target.appendChild(row);
+      });
+      if (isDriver(currentUser) && $("driverApp").parentNode !== target) target.appendChild($("driverApp"));
+      $("driverApp").hidden = !isDriver(currentUser);
+    } else {
+      $("driverApp").hidden = true;
+    }
+    if (screen === "trips") {
+      if (driverMode) loadDriverHistory();
+      else loadPassengerData();
+    }
+    try { history.replaceState(null, "", "#"+screen); } catch (_) {}
+  }
+  $("appNavigation").querySelectorAll("[data-screen]").forEach(function (button) {
+    button.addEventListener("click", function () { activateAppScreen(button.getAttribute("data-screen")); });
+  });
+  window.addEventListener("popstate", function () {
+    var screen = (window.location.hash || "#home").slice(1);
+    activateAppScreen(screen);
+  });
+
   function showWorkspaces(user) {
     var driverRole = isDriver(user);
     var approved = driverRole && user.driver_status === "approved" && user.status === "active";
     $("passengerDashboard").hidden = user.active_mode === "driver";
     $("driverDashboard").hidden = !(user.active_mode === "driver" && approved);
+    $("appNavigation").hidden = false;
     if (user.active_mode !== "driver") {
       if (driverPollTimer) clearInterval(driverPollTimer);
       driverPollTimer = null;
@@ -1109,6 +1188,7 @@
         if (!driverPollTimer) driverPollTimer = setInterval(loadDriverRequests, 6000);
       }
     }
+    activateAppScreen((window.location.hash || "#home").slice(1));
   }
   function loadPassengerData() {
     loadCurrentRide();
