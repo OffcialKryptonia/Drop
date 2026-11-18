@@ -1,5 +1,6 @@
-import '../manage_imports.dart';
 import 'dart:async';
+
+import '../manage_imports.dart';
 
 import '../service/DriverApplicationApi.dart';
 
