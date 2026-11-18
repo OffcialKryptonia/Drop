@@ -44,7 +44,7 @@ profilePhotoRoutes.on(["PUT", "POST"], "/profile/photo", ...mw, async (c) => {
 /** Authenticated profile image delivery; photos are private, never exposed as public R2 objects. */
 profilePhotoRoutes.get("/users/:userId/profile-photo", withDb, async (c) => {
   if (!c.env.DOCS) return c.json({ message: "Not found", status: 404 }, 404);
-  const id = /^\\d{1,15}$/.test(c.req.param("userId")) ? Number(c.req.param("userId")) : NaN;
+  const id = /^\d{1,15}$/.test(c.req.param("userId")) ? Number(c.req.param("userId")) : NaN;
   if (!Number.isSafeInteger(id)) return c.json({ message: "Not found", status: 404 }, 404);
   const key = (await c.get("db").query("select profile_image_key from app.users where id = $1 and deleted_at is null", [id])).rows[0]?.profile_image_key as string | null;
   if (!key) return c.json({ message: "Not found", status: 404 }, 404);
