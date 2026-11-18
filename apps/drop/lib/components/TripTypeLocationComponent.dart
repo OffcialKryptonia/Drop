@@ -38,6 +38,11 @@ class TripTypeLocationComponentState extends State<TripTypeLocationComponent> {
 
   void _onPlaceQueryChanged(String value, {required String field, int index = 0}) {
     _activePlaceField = field;
+    if (field == 'source') {
+      // Editing a selected address invalidates its old map coordinates until a new result is chosen.
+    } else if (field == 'destination') {
+      // The previous destination coordinates must not be reused for edited text.
+    }
     if (field == 'multi') { _activeMultiDropIndex = index; multiDropLatLng.remove(index); }
     final request = ++_placeSearchSequence;
     _placeSearchTimer?.cancel();
@@ -69,8 +74,8 @@ class TripTypeLocationComponentState extends State<TripTypeLocationComponent> {
     final subtitle = (place['subtitle'] ?? '').toString().trim();
     final address = subtitle.isEmpty || title.isEmpty ? (title.isEmpty ? subtitle : title) : '$title, $subtitle';
     final point = LatLng(lat, lng);
-    if (_activePlaceField == 'source') { sourceLocation.text = address; polylineSource = point; }
-    else if (_activePlaceField == 'destination') { destinationLocation.text = address; polylineDestination = point; }
+    if (_activePlaceField == 'source') { sourceLocation.text = address; polylineSource = point; _sourceHasPoint = true; }
+    else if (_activePlaceField == 'destination') { destinationLocation.text = address; polylineDestination = point; _destinationHasPoint = true; }
     else if (_activePlaceField == 'multi' && _activeMultiDropIndex < multipleDropPoints.length) {
       multipleDropPoints[_activeMultiDropIndex].text = address;
       multiDropLatLng[_activeMultiDropIndex] = point;
@@ -104,6 +109,7 @@ class TripTypeLocationComponentState extends State<TripTypeLocationComponent> {
     if (widget.trip_type == tripTypeRegular || widget.trip_type == tripTypeAirportDropoff) {
       polylineSource = LatLng(sharedPref.getDouble(LATITUDE) ?? 0.0, sharedPref.getDouble(LONGITUDE) ?? 0.0);
       sourceLocation.text = widget.addressTitle ?? "";
+      _sourceHasPoint = polylineSource.latitude != 0 || polylineSource.longitude != 0;
       setState(() {});
     }
   }
@@ -233,6 +239,7 @@ class TripTypeLocationComponentState extends State<TripTypeLocationComponent> {
                                                   var selectedPlace = await launchScreen(context, GoogleMapScreen(isDestination: true), pageRouteAnimation: PageRouteAnimation.SlideBottomTop);
                                                   sourceLocation.text = selectedPlace['formatted_address'];
                                                   polylineSource = selectedPlace['position'];
+                                                  _sourceHasPoint = true;
                                                 },
                                                 icon: Icon(Icons.map_outlined),
                                               )
@@ -344,6 +351,7 @@ class TripTypeLocationComponentState extends State<TripTypeLocationComponent> {
                                                     var selectedPlace = await launchScreen(context, GoogleMapScreen(isDestination: true), pageRouteAnimation: PageRouteAnimation.SlideBottomTop);
                                                     destinationLocation.text = selectedPlace['formatted_address'];
                                                     polylineDestination = selectedPlace['position'];
+                                                    _destinationHasPoint = true;
                                                   },
                                                   icon: Icon(Icons.map_outlined),
                                                 )
@@ -409,6 +417,14 @@ class TripTypeLocationComponentState extends State<TripTypeLocationComponent> {
                   AppButtonWidget(
                     width: MediaQuery.of(context).size.width,
                     onTap: () async {
+                      if (multipleDropPoints.isNotEmpty && List.generate(multipleDropPoints.length, (i) => multiDropLatLng.containsKey(i)).contains(false)) {
+                        toast("Please choose a suggested address for every stop.");
+                        return;
+                      }
+                      if (multipleDropPoints.isEmpty && widget.trip_type == tripTypeRegular && (!_sourceHasPoint || !_destinationHasPoint)) {
+                        toast("Please choose a suggested pickup and destination, or select them on the map.");
+                        return;
+                      }
                       if (multipleDropPoints.isNotEmpty) {
                         var abc = {};
                         polylineDestination = multiDropLatLng[multipleDropPoints.length - 1];
