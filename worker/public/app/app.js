@@ -301,6 +301,8 @@
     if (notice) setMsg(homeMsg, notice, "ok");
     else setMsg(homeMsg, "");
 
+    showWorkspaces(user);
+
     // Driver-role accounts get the application section inside the same view.
     if (isDriver(user)) showDriverApp(user);
     else {
@@ -1034,6 +1036,262 @@
       box.appendChild(s);
     });
   }
+
+
+  // ---- passenger and driver web workspaces -------------------------------
+  var rideMap = null, pickupPoint = null, dropoffPoint = null;
+  var pickupMarker = null, dropoffMarker = null, selectedRideType = null, lastQuote = null;
+  var driverOnline = false, driverPollTimer = null, passengerPollTimer = null;
+  function api(path, options) {
+    options = options || {};
+    options.credentials = "same-origin";
+    options.headers = Object.assign({}, options.headers || {}, authedHeaders());
+    return fetch("/api" + path, options).then(function (res) {
+      return readJson(res).then(function (body) { return { status: res.status, body: body }; });
+    });
+  }
+  function money(value, currency) {
+    var code = currency && (currency.code || currency.currency) || "NGN";
+    try { return new Intl.NumberFormat("en-NG", { style: "currency", currency: code, maximumFractionDigits: 0 }).format(Number(value || 0)); }
+    catch (_) { return code + " " + Number(value || 0).toLocaleString(); }
+  }
+  function setPassengerMessage(message, kind) { setMsg($("passengerMsg"), message, kind); }
+  function pointLabel(p) { return p ? p.lat.toFixed(5) + ", " + p.lng.toFixed(5) : "Not selected"; }
+  function setPoint(which, latlng) {
+    var p = { lat: Number(latlng.lat), lng: Number(latlng.lng) };
+    if (!Number.isFinite(p.lat) || !Number.isFinite(p.lng)) return;
+    if (which === "pickup") {
+      pickupPoint = p;
+      if (pickupMarker) pickupMarker.setLatLng(latlng);
+      else if (rideMap && window.L) pickupMarker = L.marker(latlng).addTo(rideMap).bindPopup("Pickup");
+    } else {
+      dropoffPoint = p;
+      if (dropoffMarker) dropoffMarker.setLatLng(latlng);
+      else if (rideMap && window.L) dropoffMarker = L.marker(latlng).addTo(rideMap).bindPopup("Destination");
+    }
+    $("selectedCoords").textContent = "Pickup: " + pointLabel(pickupPoint) + " · Destination: " + pointLabel(dropoffPoint);
+    lastQuote = null; selectedRideType = null; $("fareOptions").innerHTML = ""; $("requestRideWrap").hidden = true;
+  }
+  function initRideMap() {
+    if (rideMap || !window.L || !$("rideMap")) return;
+    rideMap = L.map("rideMap").setView([9.0579, 7.4951], 12);
+    fetch("/api/map-config", { credentials: "same-origin" }).then(readJson).then(function (cfg) {
+      var url = cfg && cfg.osm_tile_url || "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+      L.tileLayer(url, { maxZoom: 19, attribution: cfg && cfg.attribution || "© OpenStreetMap contributors" }).addTo(rideMap);
+    }).catch(function () {
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap contributors" }).addTo(rideMap);
+    });
+    rideMap.on("click", function (e) {
+      var target = document.querySelector('input[name="mapTarget"]:checked');
+      setPoint(target ? target.value : "pickup", e.latlng);
+    });
+    setTimeout(function () { if (rideMap) rideMap.invalidateSize(); }, 150);
+  }
+  function showWorkspaces(user) {
+    var driverRole = isDriver(user);
+    var approved = driverRole && user.driver_status === "approved" && user.status === "active";
+    $("passengerDashboard").hidden = user.active_mode === "driver";
+    $("driverDashboard").hidden = !(user.active_mode === "driver" && approved);
+    if (user.active_mode !== "driver") {
+      if (driverPollTimer) clearInterval(driverPollTimer);
+      driverPollTimer = null;
+      initRideMap();
+      loadPassengerData();
+      if (!passengerPollTimer) passengerPollTimer = setInterval(loadCurrentRide, 12000);
+    } else {
+      if (passengerPollTimer) clearInterval(passengerPollTimer);
+      passengerPollTimer = null;
+      if (approved) {
+        loadDriverData();
+        if (!driverPollTimer) driverPollTimer = setInterval(loadDriverRequests, 6000);
+      }
+    }
+  }
+  function loadPassengerData() {
+    loadCurrentRide();
+    api("/ride/history").then(function (r) {
+      if (r.status !== 200 || !r.body || r.body.status === false) return;
+      var rows = r.body.data || [];
+      $("rideHistory").innerHTML = "";
+      if (!rows.length) { $("rideHistory").textContent = "No completed trips yet."; return; }
+      rows.slice(0, 10).forEach(function (trip) {
+        var item = document.createElement("article"); item.className = "history-item";
+        var title = document.createElement("strong"); title.textContent = "Trip #" + trip.id + " · " + String(trip.status || "").replace(/_/g, " ");
+        var detail = document.createElement("p"); detail.textContent = (trip.pickup && trip.pickup.address || "Pickup") + " → " + (trip.dropoff && trip.dropoff.address || "Destination");
+        var fare = document.createElement("span"); fare.textContent = money(trip.fare, trip.currency);
+        item.append(title, detail, fare); $("rideHistory").appendChild(item);
+      });
+    }).catch(function () {});
+  }
+  function loadCurrentRide() {
+    api("/ride/current").then(function (r) {
+      if (r.status !== 200) return;
+      var trip = r.body && r.body.data;
+      $("currentRide").hidden = !trip;
+      if (!trip) return;
+      $("currentRideDetails").textContent = "Trip #" + trip.id + " · " + String(trip.status).replace(/_/g, " ") +
+        " · " + (trip.pickup && trip.pickup.address || "Pickup") + " → " + (trip.dropoff && trip.dropoff.address || "Destination") +
+        " · " + money(trip.fare, trip.currency) + (trip.driver ? " · Driver: " + trip.driver.name : "");
+      $("cancelRide").hidden = !["searching", "accepted", "arrived"].includes(trip.status);
+    }).catch(function () {});
+  }
+  $("useMyLocation").addEventListener("click", function () {
+    var msg = $("locationMsg");
+    if (!navigator.geolocation) { msg.textContent = "Location is not supported by this browser."; return; }
+    msg.textContent = "Getting your location…";
+    navigator.geolocation.getCurrentPosition(function (pos) {
+      var ll = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      setPoint("pickup", ll);
+      if (rideMap) rideMap.setView(ll, 15);
+      msg.textContent = "Pickup set to your current location.";
+    }, function () { msg.textContent = "Location permission was denied or unavailable. Tap the map to choose pickup."; }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 });
+  });
+  $("getEstimate").addEventListener("click", function () {
+    if (!pickupPoint || !dropoffPoint) { setPassengerMessage("Choose both pickup and destination on the map first.", "err"); return; }
+    var btn = $("getEstimate"); btn.disabled = true; setPassengerMessage("Calculating fares…");
+    api("/ride/estimate", { method: "POST", body: JSON.stringify({
+      pickup: Object.assign({}, pickupPoint, { address: $("pickupAddress").value.trim() }),
+      dropoff: Object.assign({}, dropoffPoint, { address: $("dropoffAddress").value.trim() })
+    }) }).then(function (r) {
+      if (r.status !== 200 || !r.body || r.body.status !== true) throw new Error(r.body && r.body.message || "Could not estimate this trip.");
+      lastQuote = r.body; selectedRideType = null;
+      var box = $("fareOptions"); box.innerHTML = "";
+      (r.body.ride_types || []).forEach(function (type) {
+        var card = document.createElement("button"); card.type = "button"; card.className = "ride-option";
+        card.innerHTML = "";
+        var name = document.createElement("strong"); name.textContent = type.name + (type.badge ? " · " + type.badge : "");
+        var info = document.createElement("span"); info.textContent = money(type.fare, r.body.currency) + " · " + type.capacity + " seats";
+        var nearby = document.createElement("small"); nearby.textContent = type.drivers_nearby + " nearby drivers";
+        card.append(name, info, nearby);
+        card.addEventListener("click", function () {
+          selectedRideType = type;
+          Array.prototype.forEach.call(box.children, function (el) { el.classList.remove("selected"); });
+          card.classList.add("selected");
+          var payment = $("ridePayment"); payment.innerHTML = "";
+          (type.payment_methods || []).filter(function (m) { return ["cash", "wallet", "card", "virtual_account"].includes(m); }).forEach(function (m) {
+            var op = document.createElement("option"); op.value = m; op.textContent = m.replace(/_/g, " "); payment.appendChild(op);
+          });
+          $("requestRideWrap").hidden = !payment.options.length;
+        });
+        box.appendChild(card);
+      });
+      if (!box.children.length) throw new Error("No ride types are available for this trip right now.");
+      setPassengerMessage("Fare estimate ready. Select a ride type to continue.", "ok");
+    }).catch(function (e) { setPassengerMessage(e.message, "err"); })
+      .finally(function () { btn.disabled = false; });
+  });
+  $("requestRide").addEventListener("click", function () {
+    if (!selectedRideType || !lastQuote) return;
+    var btn = $("requestRide"); btn.disabled = true; setPassengerMessage("Requesting your ride…");
+    api("/ride/request", { method: "POST", body: JSON.stringify({
+      pickup: Object.assign({}, pickupPoint, { address: $("pickupAddress").value.trim() }),
+      dropoff: Object.assign({}, dropoffPoint, { address: $("dropoffAddress").value.trim() }),
+      service_id: selectedRideType.id, payment_method: $("ridePayment").value, option_ids: []
+    }) }).then(function (r) {
+      if (r.status !== 201 && !(r.status === 200 && r.body && r.body.status)) throw new Error(r.body && r.body.message || "Ride request failed.");
+      setPassengerMessage("Ride requested. We are finding a driver.", "ok");
+      $("requestRideWrap").hidden = true; loadCurrentRide();
+    }).catch(function (e) { setPassengerMessage(e.message, "err"); })
+      .finally(function () { btn.disabled = false; });
+  });
+  $("cancelRide").addEventListener("click", function () {
+    if (!window.confirm("Cancel this ride request?")) return;
+    api("/ride/cancel", { method: "POST", body: JSON.stringify({ reason: "Cancelled by passenger" }) })
+      .then(function (r) { if (!r.body || r.body.status !== true) throw new Error(r.body && r.body.message || "Could not cancel this ride."); setPassengerMessage("Ride cancelled.", "ok"); loadCurrentRide(); loadPassengerData(); })
+      .catch(function (e) { setPassengerMessage(e.message, "err"); });
+  });
+  $("passengerRefresh").addEventListener("click", loadPassengerData);
+
+  function loadDriverData() {
+    api("/driver/status").then(function (r) {
+      if (r.status !== 200) throw new Error(r.body && r.body.message || "Driver status unavailable.");
+      driverOnline = r.body.is_online === true;
+      $("driverOnlineLabel").textContent = driverOnline ? "Online" : "Offline";
+      $("driverOnlineToggle").textContent = driverOnline ? "Go offline" : "Go online";
+      var w = r.body.wallet || {};
+      $("driverEligibility").textContent = "Wallet: " + money(w.balance, { code: "NGN" }) + " · Minimum: " + money(w.minimum, { code: "NGN" }) +
+        (r.body.online_block && r.body.online_block.message ? " · " + r.body.online_block.message : "");
+      loadDriverRequests(); loadDriverHistory();
+    }).catch(function (e) { setMsg($("driverMsg"), e.message, "err"); });
+  }
+  function loadDriverRequests() {
+    api("/driver/requests").then(function (r) {
+      var box = $("driverRequests"); box.innerHTML = "";
+      if (r.status !== 200 || !r.body || r.body.status === false) {
+        box.textContent = r.body && r.body.message || "No requests available. Go online when you're ready.";
+        return;
+      }
+      var active = r.body.active;
+      if (active) {
+        var a = document.createElement("article"); a.className = "history-item";
+        var h = document.createElement("strong"); h.textContent = "Trip #" + active.id + " · " + active.status.replace(/_/g, " ");
+        var d = document.createElement("p"); d.textContent = (active.pickup.address || "Pickup") + " → " + (active.dropoff.address || "Destination") + " · " + money(active.fare, {code:"NGN"});
+        a.append(h, d);
+        var actions = document.createElement("div"); actions.className = "driver-actions";
+        var steps = active.status === "accepted" ? [["arrived","I've arrived"]] : active.status === "arrived" ? [["start","Start trip"]] : active.status === "in_progress" ? [["complete","Complete trip"]] : [];
+        steps.forEach(function (step) {
+          var b = document.createElement("button"); b.type = "button"; b.className = "primary"; b.textContent = step[1];
+          b.addEventListener("click", function () { driverAction("/driver/rides/" + active.id + "/" + step[0], "POST", {}); });
+          actions.appendChild(b);
+        });
+        a.appendChild(actions); box.appendChild(a); return;
+      }
+      var rows = r.body.requests || [];
+      if (!rows.length) { box.textContent = "No nearby ride requests at the moment."; return; }
+      rows.forEach(function (req) {
+        var a = document.createElement("article"); a.className = "history-item";
+        var h = document.createElement("strong"); h.textContent = "Request #" + req.id + " · " + money(req.fare, {code:"NGN"});
+        var d = document.createElement("p"); d.textContent = (req.pickup.address || "Pickup") + " → " + (req.dropoff.address || "Destination") + " · " + req.pickup_distance_km + " km away";
+        var actions = document.createElement("div"); actions.className = "driver-actions";
+        [["accept","Accept"],["decline","Decline"]].forEach(function (act) {
+          var b = document.createElement("button"); b.type = "button"; b.className = act[0] === "accept" ? "primary" : "ghost"; b.textContent = act[1];
+          b.addEventListener("click", function () { driverAction("/driver/requests/" + req.id + "/" + act[0], "POST", {}); });
+          actions.appendChild(b);
+        });
+        a.append(h, d, actions); box.appendChild(a);
+      });
+    }).catch(function (e) { setMsg($("driverMsg"), e.message, "err"); });
+  }
+  function driverAction(path, method, body) {
+    api(path, { method: method, body: JSON.stringify(body || {}) }).then(function (r) {
+      if (r.status < 200 || r.status >= 300 || (r.body && r.body.status === false)) throw new Error(r.body && r.body.message || "That action could not be completed.");
+      setMsg($("driverMsg"), "Updated.", "ok"); loadDriverData();
+    }).catch(function (e) { setMsg($("driverMsg"), e.message, "err"); });
+  }
+  function loadDriverHistory() {
+    api("/driver/rides/history").then(function (r) {
+      var box = $("driverHistory"); box.innerHTML = "";
+      (r.body && r.body.data || []).slice(0, 10).forEach(function (trip) {
+        var item = document.createElement("article"); item.className = "history-item";
+        var h = document.createElement("strong"); h.textContent = "Trip #" + trip.id + " · " + money(trip.earning, {code:"NGN"}) + " earned";
+        var d = document.createElement("p"); d.textContent = (trip.pickup_address || "Pickup") + " → " + (trip.dropoff_address || "Destination");
+        item.append(h, d); box.appendChild(item);
+      });
+      if (!box.children.length) box.textContent = "No completed trips yet.";
+    }).catch(function () {});
+  }
+  $("driverOnlineToggle").addEventListener("click", function () {
+    var online = !driverOnline, btn = $("driverOnlineToggle"); btn.disabled = true;
+    function send(pos) {
+      var body = { online: online };
+      if (online) { body.latitude = pos.coords.latitude; body.longitude = pos.coords.longitude; }
+      driverAction("/driver/online", "POST", body);
+      btn.disabled = false;
+    }
+    if (!online) { send(null); driverOnline = false; $("driverOnlineLabel").textContent = "Offline"; $("driverOnlineToggle").textContent = "Go online"; return; }
+    if (!navigator.geolocation) { setMsg($("driverMsg"), "Location is required to go online.", "err"); btn.disabled = false; return; }
+    navigator.geolocation.getCurrentPosition(send, function () {
+      setMsg($("driverMsg"), "Allow location access to go online.", "err"); btn.disabled = false;
+    }, { enableHighAccuracy: true, timeout: 12000 });
+  });
+  $("driverRefresh").addEventListener("click", loadDriverData);
+  function refreshDriverLocation() {
+    if (!driverOnline || !navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(function (p) {
+      api("/driver/location", { method: "POST", body: JSON.stringify({ latitude: p.coords.latitude, longitude: p.coords.longitude }) }).catch(function () {});
+    }, function () {}, { maximumAge: 20000, timeout: 8000 });
+  }
+  setInterval(refreshDriverLocation, 30000);
 
   checkSession();
 })();
