@@ -49,13 +49,27 @@ export async function regionAt(db: Client, p: LatLng) {
 }
 
 /** Everything the app needs to show prices for a trip, all from admin data. The server is the only place fares are computed. */
-export async function quoteRide(db: Client, env: Bindings, pickup: LatLng, dropoff: LatLng): Promise<Quote> {
+export async function quoteRide(db: Client, env: Bindings, pickup: LatLng, dropoff: LatLng, stops: LatLng[] = []): Promise<Quote> {
   const region = await regionAt(db, pickup);
   if (!region) return { ok: false, code: "outside_service_area", message: "DROP is not available at your pickup location yet." };
+  const routePoints = [pickup, ...stops, dropoff];
+  for (const stop of stops) {
+    const stopRegion = await regionAt(db, stop);
+    if (!stopRegion || stopRegion.id !== region.id) return { ok: false, code: "dropoff_outside_area", message: "Every route stop must be inside the same service area as your pickup." };
+  }
   const dropRegion = await regionAt(db, dropoff);
   if (!dropRegion || dropRegion.id !== region.id) return { ok: false, code: "dropoff_outside_area", message: "That drop-off is outside our service area." };
 
-  const route = await routeBetween(env, pickup, dropoff, db);
+  const legs: Route[] = [];
+  for (let i = 0; i < routePoints.length - 1; i++) legs.push(await routeBetween(env, routePoints[i], routePoints[i + 1], db));
+  const route: Route = {
+    distance_km: Math.round(legs.reduce((sum, leg) => sum + leg.distance_km, 0) * 1000) / 1000,
+    duration_minutes: legs.reduce((sum, leg) => sum + leg.duration_minutes, 0),
+    source: legs.every((leg) => leg.source === legs[0].source)
+      ? legs[0].source
+      : legs.some((leg) => leg.source === "estimate") ? "estimate"
+      : legs.some((leg) => leg.source === "osrm") ? "osrm" : "google",
+  };
   if (route.distance_km < 0.05) return { ok: false, code: "same_place", message: "Pickup and drop-off are the same place." };
   const distance = Math.round(route.distance_km * (region.distance_unit === "mile" ? MILE_PER_KM : 1) * 1000) / 1000;
 
