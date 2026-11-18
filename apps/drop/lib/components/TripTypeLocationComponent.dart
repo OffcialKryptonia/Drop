@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import '../manage_imports.dart';
-import '../model/search_location_model.dart' hide Text;
+
+import '../service/DriverApplicationApi.dart';
 
 // ignore:must_be_immutable
 class TripTypeLocationComponent extends StatefulWidget {
@@ -28,7 +31,73 @@ class TripTypeLocationComponentState extends State<TripTypeLocationComponent> {
   int multiDropFieldPosition = 0;
   bool isDone = true;
 
-  List<Suggestion> listAddress = [];
+  List<Map<String, dynamic>> listAddress = [];
+  Timer? _placeSearchTimer;
+  int _placeSearchSequence = 0;
+  String _activePlaceField = 'source';
+  int _activeMultiDropIndex = 0;
+  bool _sourceHasPoint = false;
+  bool _destinationHasPoint = false;
+
+  void _onPlaceQueryChanged(String value, {required String field, int index = 0}) {
+    _activePlaceField = field;
+    if (field == 'source') _sourceHasPoint = false;
+    if (field == 'destination') _destinationHasPoint = false;
+    if (field == 'multi') { _activeMultiDropIndex = index; multiDropLatLng.remove(index); }
+    final request = ++_placeSearchSequence;
+    _placeSearchTimer?.cancel();
+    if (value.trim().length < 2) { listAddress = []; setState(() {}); return; }
+    listAddress = [];
+    setState(() {});
+    _placeSearchTimer = Timer(const Duration(milliseconds: 350), () async {
+      try {
+        final bias = polylineSource;
+        final useBias = bias.latitude != 0 || bias.longitude != 0;
+        final hits = await DriverApplicationApi.searchPlaces(value, latitude: useBias ? bias.latitude : null, longitude: useBias ? bias.longitude : null);
+        if (!mounted || request != _placeSearchSequence) return;
+        listAddress = hits;
+        setState(() {});
+      } catch (error) {
+        if (!mounted || request != _placeSearchSequence) return;
+        listAddress = [];
+        setState(() {});
+        log(error);
+      }
+    });
+  }
+
+  void _selectPlace(Map<String, dynamic> place) {
+    final lat = (place['lat'] as num?)?.toDouble();
+    final lng = (place['lng'] as num?)?.toDouble();
+    if (lat == null || lng == null) return;
+    final title = (place['title'] ?? '').toString().trim();
+    final subtitle = (place['subtitle'] ?? '').toString().trim();
+    final address = subtitle.isEmpty || title.isEmpty ? (title.isEmpty ? subtitle : title) : '$title, $subtitle';
+    final point = LatLng(lat, lng);
+    if (_activePlaceField == 'source') { sourceLocation.text = address; polylineSource = point; _sourceHasPoint = true; }
+    else if (_activePlaceField == 'destination') { destinationLocation.text = address; polylineDestination = point; _destinationHasPoint = true; }
+    else if (_activePlaceField == 'multi' && _activeMultiDropIndex < multipleDropPoints.length) {
+      multipleDropPoints[_activeMultiDropIndex].text = address;
+      multiDropLatLng[_activeMultiDropIndex] = point;
+    }
+    _placeSearchTimer?.cancel();
+    _placeSearchSequence++;
+    listAddress = [];
+    hideKeyboard(context);
+    setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _placeSearchTimer?.cancel();
+    sourceLocation.dispose();
+    destinationLocation.dispose();
+    sourceFocus.dispose();
+    desFocus.dispose();
+    for (final controller in multipleDropPoints) { controller.dispose(); }
+    for (final focus in multipleDropPointsFocus) { focus.dispose(); }
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -40,6 +109,7 @@ class TripTypeLocationComponentState extends State<TripTypeLocationComponent> {
     if (widget.trip_type == tripTypeRegular || widget.trip_type == tripTypeAirportDropoff) {
       polylineSource = LatLng(sharedPref.getDouble(LATITUDE) ?? 0.0, sharedPref.getDouble(LONGITUDE) ?? 0.0);
       sourceLocation.text = widget.addressTitle ?? "";
+      _sourceHasPoint = polylineSource.latitude != 0 || polylineSource.longitude != 0;
       setState(() {});
     }
   }
@@ -145,29 +215,7 @@ class TripTypeLocationComponentState extends State<TripTypeLocationComponent> {
                                                     }
                                                   }
                                                 },
-                                                onChanged: (val) {
-                                                  if (val.isNotEmpty) {
-                                                    if (val.length < 3) {
-                                                      isDone = false;
-                                                      listAddress.clear();
-                                                      setState(() {});
-                                                    } else {
-                                                      Map req = {
-                                                        "search_text": val,
-                                                        "language": appStore.selectedLanguage.validate(value: defaultLanguageCode),
-                                                      };
-                                                      searchAddressRequest(req).then((value) {
-                                                        isDone = true;
-                                                        listAddress = value.suggestions ?? [];
-                                                        setState(() {});
-                                                      }).catchError((error) {
-                                                        log(error);
-                                                      });
-                                                    }
-                                                  } else {
-                                                    setState(() {});
-                                                  }
-                                                },
+                                                onChanged: (val) => _onPlaceQueryChanged(val, field: 'source'),
                                               ),
                                             ),
                                             IconButton(
@@ -176,9 +224,11 @@ class TripTypeLocationComponentState extends State<TripTypeLocationComponent> {
                                               onPressed: () async {
                                                 sourceId = null;
                                                 SourceZoneId = null;
+                                                _sourceHasPoint = false;
                                                 sourceLocation.clear();
 
                                                 destinationId = null;
+                                                _destinationHasPoint = false;
                                                 destinationLocation.clear();
                                               },
                                               icon: Icon(Icons.cancel_outlined),
@@ -191,6 +241,7 @@ class TripTypeLocationComponentState extends State<TripTypeLocationComponent> {
                                                   var selectedPlace = await launchScreen(context, GoogleMapScreen(isDestination: true), pageRouteAnimation: PageRouteAnimation.SlideBottomTop);
                                                   sourceLocation.text = selectedPlace['formatted_address'];
                                                   polylineSource = selectedPlace['position'];
+                                                  _sourceHasPoint = true;
                                                 },
                                                 icon: Icon(Icons.map_outlined),
                                               )
@@ -282,27 +333,7 @@ class TripTypeLocationComponentState extends State<TripTypeLocationComponent> {
                                                     }
                                                     setState(() {});
                                                   },
-                                                  onChanged: (val) {
-                                                    if (val.isNotEmpty) {
-                                                      if (val.length < 3) {
-                                                        listAddress.clear();
-                                                        setState(() {});
-                                                      } else {
-                                                        Map req = {
-                                                          "search_text": val,
-                                                          "language": appStore.selectedLanguage.validate(value: defaultLanguageCode),
-                                                        };
-                                                        searchAddressRequest(req).then((value) {
-                                                          listAddress = value.suggestions ?? [];
-                                                          setState(() {});
-                                                        }).catchError((error) {
-                                                          log(error);
-                                                        });
-                                                      }
-                                                    } else {
-                                                      setState(() {});
-                                                    }
-                                                  },
+                                                  onChanged: (val) => _onPlaceQueryChanged(val, field: 'destination'),
                                                 ),
                                               ),
                                               IconButton(
@@ -322,6 +353,7 @@ class TripTypeLocationComponentState extends State<TripTypeLocationComponent> {
                                                     var selectedPlace = await launchScreen(context, GoogleMapScreen(isDestination: true), pageRouteAnimation: PageRouteAnimation.SlideBottomTop);
                                                     destinationLocation.text = selectedPlace['formatted_address'];
                                                     polylineDestination = selectedPlace['position'];
+                                                    _destinationHasPoint = true;
                                                   },
                                                   icon: Icon(Icons.map_outlined),
                                                 )
@@ -357,51 +389,44 @@ class TripTypeLocationComponentState extends State<TripTypeLocationComponent> {
                           language.addDropPoint,
                           style: primaryTextStyle(),
                         )),
-                  if (listAddress.isNotEmpty) SizedBox(height: 16),
-                  ListView.builder(
-                    controller: ScrollController(),
-                    padding: EdgeInsets.zero,
-                    shrinkWrap: true,
-                    itemCount: listAddress.length,
-                    itemBuilder: (context, index) {
-                      Suggestion mData = listAddress[index];
-                      return ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: Icon(
-                          Icons.location_on_outlined,
-                          color: primaryColor,
-                        ),
-                        minLeadingWidth: 16,
-                        title: Text(mData.placePrediction.text.text ?? "", style: primaryTextStyle()),
-                        onTap: () async {
-                          await searchAddressRequestPlaceId(mData.placePrediction.placeId).then((value) async {
-                            double lat = value.location.latitude;
-                            double lng = value.location.longitude;
-
-                            if (sourceFocus.hasFocus) {
-                              sourceLocation.text = value.formattedAddress;
-                              polylineSource = LatLng(lat, lng);
-                            } else if (desFocus.hasFocus) {
-                              destinationLocation.text = value.formattedAddress;
-                              polylineDestination = LatLng(lat, lng);
-                            } else if (multipleDropPoints.isNotEmpty) {
-                              multiDropLatLng[multiDropFieldPosition] = LatLng(lat, lng);
-                              multipleDropPoints[multiDropFieldPosition].text = value.formattedAddress;
-                            }
-
-                            listAddress.clear();
-                            setState(() {});
-                          }).catchError((error) {
-                            log(error);
-                          });
+                  if (listAddress.isNotEmpty) ...[
+                    SizedBox(height: 8),
+                    Material(
+                      color: Theme.of(context).cardColor,
+                      borderRadius: BorderRadius.circular(12),
+                      elevation: 2,
+                      child: ListView.separated(
+                        padding: EdgeInsets.zero,
+                        shrinkWrap: true,
+                        physics: NeverScrollableScrollPhysics(),
+                        itemCount: listAddress.length,
+                        separatorBuilder: (_, __) => Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final place = listAddress[index];
+                          final title = (place['title'] ?? '').toString();
+                          final subtitle = (place['subtitle'] ?? '').toString();
+                          return ListTile(
+                            dense: true,
+                            leading: Icon(Icons.location_on_outlined, color: primaryColor),
+                            title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: primaryTextStyle()),
+                            subtitle: subtitle.isEmpty ? null : Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: secondaryTextStyle()),
+                            onTap: () => _selectPlace(place),
+                          );
                         },
-                      );
-                    },
-                  ),
-                  SizedBox(height: 16),
+                      ),
+                    ),
+                  ],
                   AppButtonWidget(
                     width: MediaQuery.of(context).size.width,
                     onTap: () async {
+                      if (multipleDropPoints.isNotEmpty && List.generate(multipleDropPoints.length, (i) => multiDropLatLng.containsKey(i)).contains(false)) {
+                        toast("Please choose a suggested address for every stop.");
+                        return;
+                      }
+                      if (multipleDropPoints.isEmpty && widget.trip_type == tripTypeRegular && (!_sourceHasPoint || !_destinationHasPoint)) {
+                        toast("Please choose a suggested pickup and destination, or select them on the map.");
+                        return;
+                      }
                       if (multipleDropPoints.isNotEmpty) {
                         var abc = {};
                         polylineDestination = multiDropLatLng[multipleDropPoints.length - 1];
@@ -517,31 +542,7 @@ class TripTypeLocationComponentState extends State<TripTypeLocationComponent> {
                               multiDropFieldPosition = i;
                               setState(() {});
                             },
-                            onChanged: (val) {
-                              if (val.isNotEmpty) {
-                                multiDropFieldPosition = i;
-                                try {
-                                  multiDropLatLng.remove(multiDropFieldPosition);
-                                } catch (e) {}
-                                if (val.length < 3) {
-                                  listAddress.clear();
-                                  setState(() {});
-                                } else {
-                                  Map req = {
-                                    "search_text": val,
-                                    "language": appStore.selectedLanguage.validate(value: defaultLanguageCode),
-                                  };
-                                  searchAddressRequest(req).then((value) {
-                                    listAddress = value.suggestions ?? [];
-                                    setState(() {});
-                                  }).catchError((error) {
-                                    log(error);
-                                  });
-                                }
-                              } else {
-                                setState(() {});
-                              }
-                            },
+                            onChanged: (val) => _onPlaceQueryChanged(val, field: 'multi', index: i),
                           ),
                         ],
                       ),
