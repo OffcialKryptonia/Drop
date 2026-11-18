@@ -1129,7 +1129,7 @@
           if (serial !== requestNo) return;
           list.innerHTML = ""; var err = document.createElement("div"); err.className = "address-suggestion-empty"; err.textContent = "Address search is temporarily unavailable. You can still choose the location on the map."; list.appendChild(err); list.hidden = false;
         });
-      }, 280);
+      }, 900);
     });
     input.addEventListener("keydown", function (event) {
       if (event.key === "Escape") close();
