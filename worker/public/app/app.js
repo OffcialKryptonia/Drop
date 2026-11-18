@@ -376,6 +376,9 @@
         if (passengerPollTimer) clearInterval(passengerPollTimer);
         driverPollTimer = null; passengerPollTimer = null;
         daReq = null; daApp = null; daLoadedFor = null;
+        routeStops.forEach(function (stop) { if (stop.marker) removeMapMarker(stop.marker); });
+        routeStops = []; maxRouteStops = 0;
+        $("routeStops").innerHTML = ""; $("addRouteStop").disabled = true; $("routeStopLimit").textContent = "Loading stop limit…";
         $("driverApp").hidden = true;
         $("login-password").value = "";
         show("auth");
