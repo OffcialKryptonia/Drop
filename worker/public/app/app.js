@@ -1051,6 +1051,7 @@
   // ---- passenger and driver web workspaces -------------------------------
   var rideMap = null, pickupPoint = null, dropoffPoint = null;
   var pickupMarker = null, dropoffMarker = null, driverMarker = null, selectedRideType = null, lastQuote = null;
+  var routeStops = [], maxRouteStops = 3;
   var driverOnline = false, driverPollTimer = null, passengerPollTimer = null;
   function api(path, options) {
     options = options || {};
@@ -1067,6 +1068,79 @@
   }
   function setPassengerMessage(message, kind) { setMsg($("passengerMsg"), message, kind); }
   function pointLabel(p) { return p ? p.lat.toFixed(5) + ", " + p.lng.toFixed(5) : "Not selected"; }
+  function invalidateRideQuote() {
+    lastQuote = null; selectedRideType = null;
+    $("fareOptions").innerHTML = "";
+    $("requestRideWrap").hidden = true;
+  }
+  function renderRouteStops() {
+    var box = $("routeStops");
+    if (!box) return;
+    box.innerHTML = "";
+    routeStops.forEach(function (stop, index) {
+      var row = document.createElement("div"); row.className = "route-stop-row";
+      var fieldWrap = document.createElement("div");
+      var label = document.createElement("label"); label.className = "f"; label.textContent = "Stop " + (index + 1);
+      var input = document.createElement("input"); input.type = "text"; input.maxLength = 300;
+      input.placeholder = "Enter a landmark or address"; input.value = stop.address || "";
+      input.setAttribute("aria-label", "Stop " + (index + 1) + " address");
+      input.addEventListener("input", function () { stop.address = input.value; invalidateRideQuote(); });
+      fieldWrap.append(label, input);
+      var mapLabel = document.createElement("label"); mapLabel.className = "route-stop-map";
+      var radio = document.createElement("input"); radio.type = "radio"; radio.name = "mapTarget"; radio.value = "stop:" + index;
+      mapLabel.append(radio, document.createTextNode("Set on map"));
+      var remove = document.createElement("button"); remove.type = "button"; remove.className = "route-stop-remove";
+      remove.textContent = "Remove"; remove.setAttribute("aria-label", "Remove stop " + (index + 1));
+      remove.addEventListener("click", function () {
+        if (stop.marker) removeMapMarker(stop.marker);
+        routeStops.splice(index, 1);
+        renderRouteStops(); updateSelectedCoords(); invalidateRideQuote();
+      });
+      row.append(fieldWrap, mapLabel, remove);
+      if (stop.point) {
+        var selected = document.createElement("p"); selected.className = "muted small";
+        selected.textContent = "Map point: " + pointLabel(stop.point);
+        fieldWrap.appendChild(selected);
+      }
+      box.appendChild(row);
+    });
+    $("addRouteStop").disabled = maxRouteStops < 1 || routeStops.length >= maxRouteStops;
+    $("routeStopLimit").textContent = maxRouteStops > 0
+      ? routeStops.length + " of " + maxRouteStops + " additional stops"
+      : "Additional stops are disabled by DROP Admin";
+  }
+  function updateSelectedCoords() {
+    var stopText = routeStops.map(function (s, i) { return "Stop " + (i + 1) + ": " + pointLabel(s.point); }).join(" · ");
+    $("selectedCoords").textContent = "Pickup: " + pointLabel(pickupPoint) +
+      (stopText ? " · " + stopText : "") + " · Destination: " + pointLabel(dropoffPoint);
+  }
+  function loadRouteStopSettings() {
+    api("/ride/stop-settings").then(function (r) {
+      if (r.status === 200 && r.body && r.body.data) {
+        maxRouteStops = Math.max(0, Math.min(20, Number(r.body.data.max_additional_stops) || 0));
+        if (routeStops.length > maxRouteStops) {
+          routeStops.slice(maxRouteStops).forEach(function (stop) { if (stop.marker) removeMapMarker(stop.marker); });
+          routeStops = routeStops.slice(0, maxRouteStops);
+        }
+        renderRouteStops(); updateSelectedCoords();
+      } else {
+        $("routeStopLimit").textContent = "Could not load stop limit";
+        $("addRouteStop").disabled = true;
+      }
+    }).catch(function () { $("routeStopLimit").textContent = "Could not load stop limit"; $("addRouteStop").disabled = true; });
+  }
+  function routeStopPayload() {
+    var stops = [];
+    for (var i = 0; i < routeStops.length; i++) {
+      var stop = routeStops[i];
+      if (!stop.point) {
+        setPassengerMessage("Set Stop " + (i + 1) + " on the map before calculating the fare.", "err");
+        return null;
+      }
+      stops.push({ lat: stop.point.lat, lng: stop.point.lng, address: stop.address.trim() });
+    }
+    return stops;
+  }
   var mapProvider = null, mapConfig = null, passengerMarker = null, passengerWatchId = null;
   function markerElement(kind, iconUrl) {
     var el = document.createElement("div");
@@ -1097,10 +1171,21 @@
   function setPoint(which, latlng) {
     var p = { lat: Number(latlng.lat), lng: Number(latlng.lng) };
     if (!Number.isFinite(p.lat) || !Number.isFinite(p.lng)) return;
-    if (which === "pickup") { pickupPoint = p; if (pickupMarker) moveMapMarker(pickupMarker, p); else pickupMarker = createMapMarker(p, "pickup"); }
-    else { dropoffPoint = p; if (dropoffMarker) moveMapMarker(dropoffMarker, p); else dropoffMarker = createMapMarker(p, "dropoff"); }
-    $("selectedCoords").textContent = "Pickup: " + pointLabel(pickupPoint) + " · Destination: " + pointLabel(dropoffPoint);
-    lastQuote = null; selectedRideType = null; $("fareOptions").innerHTML = ""; $("requestRideWrap").hidden = true;
+    if (which === "pickup") {
+      pickupPoint = p;
+      if (pickupMarker) moveMapMarker(pickupMarker, p); else pickupMarker = createMapMarker(p, "pickup");
+    } else if (which === "dropoff") {
+      dropoffPoint = p;
+      if (dropoffMarker) moveMapMarker(dropoffMarker, p); else dropoffMarker = createMapMarker(p, "dropoff");
+    } else if (String(which).indexOf("stop:") === 0) {
+      var index = Number(String(which).split(":")[1]), stop = routeStops[index];
+      if (!stop) return;
+      stop.point = p;
+      if (stop.marker) moveMapMarker(stop.marker, p); else stop.marker = createMapMarker(p, "stop");
+      renderRouteStops();
+    }
+    updateSelectedCoords();
+    invalidateRideQuote();
   }
   function setMapView(point, zoom) {
     if (!rideMap) return;
@@ -1236,6 +1321,7 @@
       if (driverPollTimer) clearInterval(driverPollTimer);
       driverPollTimer = null;
       initRideMap();
+      loadRouteStopSettings();
       loadPassengerData();
       if (!passengerPollTimer) passengerPollTimer = setInterval(loadCurrentRide, 12000);
     } else {
@@ -1274,8 +1360,9 @@
         driverMarker = null;
         return;
       }
+      var stopSummary = (trip.stops || []).map(function (stop, i) { return "Stop " + (i + 1) + ": " + (stop.address || "Location") + " (" + String(stop.status || "pending") + ")"; }).join(" → ");
       var summary = "Trip #" + trip.id + " · " + String(trip.status).replace(/_/g, " ") +
-        " · " + (trip.pickup && trip.pickup.address || "Pickup") + " → " + (trip.dropoff && trip.dropoff.address || "Destination") +
+        " · " + (trip.pickup && trip.pickup.address || "Pickup") + (stopSummary ? " → " + stopSummary : "") + " → " + (trip.dropoff && trip.dropoff.address || "Destination") +
         " · " + money(trip.fare, trip.currency);
       if (trip.driver) {
         summary += " · Driver: " + (trip.driver.name || "Assigned");
@@ -1294,6 +1381,16 @@
       $("cancelRide").hidden = !["searching", "accepted", "arrived"].includes(trip.status);
     }).catch(function () {});
   }
+  $("addRouteStop").addEventListener("click", function () {
+    if (routeStops.length >= maxRouteStops) return;
+    routeStops.push({ point: null, address: "", marker: null });
+    renderRouteStops(); updateSelectedCoords(); invalidateRideQuote();
+    var radios = $("routeStops").querySelectorAll('input[name="mapTarget"]');
+    if (radios.length) radios[radios.length - 1].checked = true;
+    setPassengerMessage("Tap the map to place Stop " + routeStops.length + ".", "ok");
+  });
+  renderRouteStops();
+
   $("useMyLocation").addEventListener("click", function () {
     var msg = $("locationMsg");
     if (!navigator.geolocation) { msg.textContent = "Location is not supported by this browser."; return; }
@@ -1307,10 +1404,12 @@
   });
   $("getEstimate").addEventListener("click", function () {
     if (!pickupPoint || !dropoffPoint) { setPassengerMessage("Choose both pickup and destination on the map first.", "err"); return; }
-    var btn = $("getEstimate"); btn.disabled = true; setPassengerMessage("Calculating fares…");
+    var stops = routeStopPayload(); if (stops === null) return;
+    var btn = $("getEstimate"); btn.disabled = true; setPassengerMessage("Calculating fares for the complete route…");
     api("/ride/estimate", { method: "POST", body: JSON.stringify({
       pickup: Object.assign({}, pickupPoint, { address: $("pickupAddress").value.trim() }),
-      dropoff: Object.assign({}, dropoffPoint, { address: $("dropoffAddress").value.trim() })
+      dropoff: Object.assign({}, dropoffPoint, { address: $("dropoffAddress").value.trim() }),
+      stops: stops
     }) }).then(function (r) {
       if (r.status !== 200 || !r.body || r.body.status !== true) throw new Error(r.body && r.body.message || "Could not estimate this trip.");
       lastQuote = r.body; selectedRideType = null;
@@ -1341,10 +1440,12 @@
   });
   $("requestRide").addEventListener("click", function () {
     if (!selectedRideType || !lastQuote) return;
+    var stops = routeStopPayload(); if (stops === null) return;
     var btn = $("requestRide"); btn.disabled = true; setPassengerMessage("Requesting your ride…");
     api("/ride/request", { method: "POST", body: JSON.stringify({
       pickup: Object.assign({}, pickupPoint, { address: $("pickupAddress").value.trim() }),
       dropoff: Object.assign({}, dropoffPoint, { address: $("dropoffAddress").value.trim() }),
+      stops: stops,
       service_id: selectedRideType.id, payment_method: $("ridePayment").value, option_ids: []
     }) }).then(function (r) {
       if (r.status !== 201 && !(r.status === 200 && r.body && r.body.status)) throw new Error(r.body && r.body.message || "Ride request failed.");
@@ -1384,10 +1485,26 @@
       if (active) {
         var a = document.createElement("article"); a.className = "history-item";
         var h = document.createElement("strong"); h.textContent = "Trip #" + active.id + " · " + active.status.replace(/_/g, " ");
-        var d = document.createElement("p"); d.textContent = (active.pickup.address || "Pickup") + " → " + (active.dropoff.address || "Destination") + " · " + money(active.fare, {code:"NGN"});
+        var stops = Array.isArray(active.stops) ? active.stops : [];
+        var route = [active.pickup.address || "Pickup"].concat(stops.map(function (stop) { return stop.address || ("Stop " + stop.sequence); })).concat([active.dropoff.address || "Destination"]);
+        var d = document.createElement("p"); d.textContent = route.join(" → ") + " · " + money(active.fare, {code:"NGN"});
         a.append(h, d);
+        if (stops.length) {
+          var list = document.createElement("ol"); list.className = "driver-stop-list";
+          stops.forEach(function (stop, i) {
+            var li = document.createElement("li"); li.textContent = "Stop " + (i + 1) + ": " + (stop.address || "Pinned location") + " — " + String(stop.status || "pending");
+            list.appendChild(li);
+          });
+          a.appendChild(list);
+        }
         var actions = document.createElement("div"); actions.className = "driver-actions";
-        var steps = active.status === "accepted" ? [["arrived","I've arrived"]] : active.status === "arrived" ? [["start","Start trip"]] : active.status === "in_progress" ? [["complete","Complete trip"]] : [];
+        var steps = active.status === "accepted" ? [["arrived","I've arrived"]] : active.status === "arrived" ? [["start","Start trip"]] : [];
+        if (active.status === "in_progress") {
+          var nextStop = stops.find(function (stop) { return stop.status !== "completed"; });
+          if (nextStop && nextStop.status === "pending") steps.push(["stops/" + nextStop.id + "/arrived", "Arrived at stop " + nextStop.sequence]);
+          else if (nextStop && nextStop.status === "arrived") steps.push(["stops/" + nextStop.id + "/complete", "Complete stop " + nextStop.sequence]);
+          else steps.push(["complete", "Complete trip"]);
+        }
         steps.forEach(function (step) {
           var b = document.createElement("button"); b.type = "button"; b.className = "primary"; b.textContent = step[1];
           b.addEventListener("click", function () { driverAction("/driver/rides/" + active.id + "/" + step[0], "POST", {}); });
@@ -1407,7 +1524,8 @@
       rows.forEach(function (req) {
         var a = document.createElement("article"); a.className = "history-item";
         var h = document.createElement("strong"); h.textContent = "Request #" + req.id + " · " + money(req.fare, {code:"NGN"});
-        var d = document.createElement("p"); d.textContent = (req.pickup.address || "Pickup") + " → " + (req.dropoff.address || "Destination") + " · " + req.pickup_distance_km + " km away";
+        var route = [req.pickup.address || "Pickup"].concat((req.stops || []).map(function (stop) { return stop.address || "Additional stop"; })).concat([req.dropoff.address || "Destination"]);
+        var d = document.createElement("p"); d.textContent = route.join(" → ") + " · " + req.pickup_distance_km + " km away";
         var actions = document.createElement("div"); actions.className = "driver-actions";
         [["accept","Accept"],["decline","Decline"]].forEach(function (act) {
           var b = document.createElement("button"); b.type = "button"; b.className = act[0] === "accept" ? "primary" : "ghost"; b.textContent = act[1];
