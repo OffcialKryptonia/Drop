@@ -214,7 +214,7 @@ class TripTypeLocationComponentState extends State<TripTypeLocationComponent> {
                                                     }
                                                   }
                                                 },
-                                                onChanged: (val) => _onPlaceQueryChanged(val, field: 'source'),,
+                                                onChanged: (val) => _onPlaceQueryChanged(val, field: 'source'),
                                               ),
                                             ),
                                             IconButton(
@@ -330,7 +330,7 @@ class TripTypeLocationComponentState extends State<TripTypeLocationComponent> {
                                                     }
                                                     setState(() {});
                                                   },
-                                                  onChanged: (val) => _onPlaceQueryChanged(val, field: 'destination'),,
+                                                  onChanged: (val) => _onPlaceQueryChanged(val, field: 'destination'),
                                                 ),
                                               ),
                                               IconButton(
@@ -539,7 +539,7 @@ class TripTypeLocationComponentState extends State<TripTypeLocationComponent> {
                               multiDropFieldPosition = i;
                               setState(() {});
                             },
-                            onChanged: (val) => _onPlaceQueryChanged(val, field: 'multi', index: i),,
+                            onChanged: (val) => _onPlaceQueryChanged(val, field: 'multi', index: i),
                           ),
                         ],
                       ),
