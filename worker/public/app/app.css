@@ -205,3 +205,6 @@ body { min-height:100dvh; background:#f4f5f6; }
 .drop-map-marker-stop { width:30px; height:30px; border:3px solid #fff; border-radius:50% 50% 50% 0; background:#e28a16; box-shadow:0 2px 8px rgba(0,0,0,.3); transform:rotate(-45deg); }
 .drop-map-marker-stop::after { content:""; width:7px; height:7px; border-radius:50%; background:#fff; }
 @media (max-width:560px) { .route-stop-row { grid-template-columns:minmax(0,1fr) auto; } .route-stop-map { grid-column:1; grid-row:2; padding:.15rem 0; } .route-stop-remove { grid-column:2; grid-row:1 / span 2; } .route-stop-heading { display:block; } }
+
+.route-stop-map input { width:auto; }
+.driver-stop-list { margin:.75rem 0; padding-left:1.25rem; font-size:.9rem; color:var(--ink-soft); }
