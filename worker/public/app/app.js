@@ -1051,7 +1051,7 @@
   // ---- passenger and driver web workspaces -------------------------------
   var rideMap = null, pickupPoint = null, dropoffPoint = null;
   var pickupMarker = null, dropoffMarker = null, driverMarker = null, selectedRideType = null, lastQuote = null;
-  var routeStops = [], maxRouteStops = 3;
+  var routeStops = [], maxRouteStops = 0;
   var driverOnline = false, driverPollTimer = null, passengerPollTimer = null;
   function api(path, options) {
     options = options || {};
@@ -1389,8 +1389,6 @@
     if (radios.length) radios[radios.length - 1].checked = true;
     setPassengerMessage("Tap the map to place Stop " + routeStops.length + ".", "ok");
   });
-  renderRouteStops();
-
   $("useMyLocation").addEventListener("click", function () {
     var msg = $("locationMsg");
     if (!navigator.geolocation) { msg.textContent = "Location is not supported by this browser."; return; }
@@ -1434,7 +1432,8 @@
         box.appendChild(card);
       });
       if (!box.children.length) throw new Error("No ride types are available for this trip right now.");
-      setPassengerMessage("Fare estimate ready. Select a ride type to continue.", "ok");
+      var routeDistance = Number(r.body.distance || 0).toFixed(1) + " " + (r.body.distance_unit || "km");
+      setPassengerMessage("Fare estimate ready · " + routeDistance + " · " + Number(r.body.duration_minutes || 0) + " min for the complete route. Select a ride type to continue.", "ok");
     }).catch(function (e) { setPassengerMessage(e.message, "err"); })
       .finally(function () { btn.disabled = false; });
   });
