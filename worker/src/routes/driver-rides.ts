@@ -36,6 +36,7 @@ const request = (r: Row, rule: CommissionRule) => {
     payment_method: r.payment_method,
     pickup: { lat: r.pickup_lat, lng: r.pickup_lng, address: r.pickup_address },
     dropoff: { lat: r.dropoff_lat, lng: r.dropoff_lng, address: r.dropoff_address },
+    stops: Array.isArray(r.stops) ? r.stops : [],
     distance: Number(r.distance),
     distance_unit: r.distance_unit,
     duration_minutes: Number(r.duration_minutes),
@@ -54,7 +55,10 @@ async function activeOf(c: C) {
   return (
     await c.get("db").query(
       `select r.*, u.first_name as rider_first_name, u.contact_number as rider_contact_number,
-              du.latitude as driver_lat, du.longitude as driver_lng, du.last_location_update_at as driver_location_at
+              du.latitude as driver_lat, du.longitude as driver_lng, du.last_location_update_at as driver_location_at,
+              coalesce((select jsonb_agg(jsonb_build_object('id', st.id, 'sequence', st.sequence, 'lat', st.lat, 'lng', st.lng,
+                'address', st.address, 'status', st.status, 'arrived_at', st.arrived_at, 'completed_at', st.completed_at) order by st.sequence)
+                from app.ride_request_stops st where st.ride_request_id = r.id), '[]'::jsonb) as stops
          from app.ride_requests r join app.users u on u.id = r.rider_id
          left join app.users du on du.id = r.driver_id
         where r.driver_id = $1 and r.status in ('accepted', 'arrived', 'in_progress') order by r.id desc limit 1`,
@@ -81,7 +85,10 @@ driverRideRoutes.get("/driver/requests", ...mw, async (c) => {
   const radius = await getSetting(db, "nearby_driver_radius_m", 5000);
   const rows = (
     await db.query(
-      `select r.*, u.first_name as rider_first_name, extensions.st_distance(du.location, ${POINT}) as pickup_m
+      `select r.*, u.first_name as rider_first_name, extensions.st_distance(du.location, ${POINT}) as pickup_m,
+              coalesce((select jsonb_agg(jsonb_build_object('id', st.id, 'sequence', st.sequence, 'lat', st.lat, 'lng', st.lng,
+                'address', st.address, 'status', st.status, 'arrived_at', st.arrived_at, 'completed_at', st.completed_at) order by st.sequence)
+                from app.ride_request_stops st where st.ride_request_id = r.id), '[]'::jsonb) as stops
          from app.ride_requests r
          join app.users u on u.id = r.rider_id
          join app.users du on du.id = $1
@@ -165,8 +172,44 @@ driverRideRoutes.post("/driver/rides/:id/arrived", ...mw, (c) => step(c, "accept
 /** Passenger is in the car: trip starts. */
 driverRideRoutes.post("/driver/rides/:id/start", ...mw, (c) => step(c, "arrived", "in_progress", "started_at"));
 
+/** Driver stop progression is ordered and enforced by the server. */
+driverRideRoutes.post("/driver/rides/:id/stops/:stopId/arrived", ...mw, async (c) => {
+  const rideId = idOf(c), stopId = Number(c.req.param("stopId")), db = c.get("db"), driverId = c.get("user").id;
+  if (!Number.isInteger(stopId) || stopId <= 0) return notYours(c);
+  const result = await db.query(
+    `update app.ride_request_stops st set status='arrived', arrived_at=now()
+      where st.id=$1 and st.ride_request_id=$2 and st.status='pending'
+        and exists (select 1 from app.ride_requests r where r.id=st.ride_request_id and r.driver_id=$3 and r.status='in_progress')
+        and not exists (select 1 from app.ride_request_stops earlier
+          where earlier.ride_request_id=st.ride_request_id and earlier.sequence<st.sequence and earlier.status<>'completed')
+      returning st.id`,
+    [stopId, rideId, driverId],
+  );
+  if (!result.rowCount) return c.json({ status:false, code:"stop_out_of_order", message:"Complete the previous stop before arriving at this one." },409);
+  const active = await activeOf(c);
+  return c.json({ status:true, data: active ? request(active, await ruleOf(c, active.service_id)) : null });
+});
+driverRideRoutes.post("/driver/rides/:id/stops/:stopId/complete", ...mw, async (c) => {
+  const rideId = idOf(c), stopId = Number(c.req.param("stopId")), db = c.get("db"), driverId = c.get("user").id;
+  if (!Number.isInteger(stopId) || stopId <= 0) return notYours(c);
+  const result = await db.query(
+    `update app.ride_request_stops st set status='completed', completed_at=now()
+      where st.id=$1 and st.ride_request_id=$2 and st.status='arrived'
+        and exists (select 1 from app.ride_requests r where r.id=st.ride_request_id and r.driver_id=$3 and r.status='in_progress')
+        and not exists (select 1 from app.ride_request_stops earlier
+          where earlier.ride_request_id=st.ride_request_id and earlier.sequence<st.sequence and earlier.status<>'completed')
+      returning st.id`,
+    [stopId, rideId, driverId],
+  );
+  if (!result.rowCount) return c.json({ status:false, code:"stop_out_of_order", message:"Arrive at the current stop after completing the previous stop." },409);
+  const active = await activeOf(c);
+  return c.json({ status:true, data: active ? request(active, await ruleOf(c, active.service_id)) : null });
+});
+
 /** Trip finished: pays the driver / takes commission and frees the driver for the next request. */
 driverRideRoutes.post("/driver/rides/:id/complete", ...mw, async (c) => {
+  const remaining = Number((await c.get("db").query("select count(*)::int as n from app.ride_request_stops where ride_request_id=$1 and status<>'completed'", [idOf(c)])).rows[0]?.n ?? 0);
+  if (remaining > 0) return c.json({ status:false, code:"stops_remaining", message:"Complete every additional stop before ending this trip." },409);
   const done = await completeRide(c.get("db"), idOf(c), c.get("user").id);
   if (!done) return notYours(c);
   pushLater(c, pushRideEvent(c.get("db"), c.env, Number(done.rider_id), "completed", Number(done.id), { fare: done.fare, currency: done.currency }));
