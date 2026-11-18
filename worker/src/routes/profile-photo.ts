@@ -8,7 +8,7 @@ export const profilePhotoRoutes = new Hono<AppEnv>();
 const mw = [withDb, requireWebOrBearer] as const;
 
 /** Upload one authenticated user's profile image. Accepts multipart (Flutter) or raw image bytes (web). */
-profilePhotoRoutes.put("/profile/photo", ...mw, async (c) => {
+profilePhotoRoutes.on(["PUT", "POST"], "/profile/photo", ...mw, async (c) => {
   if (!c.env.DOCS) return c.json({ message: "Profile photo storage is not configured.", status: 503 }, 503);
   const type = c.req.header("content-type") ?? "";
   let bytes: Uint8Array;
