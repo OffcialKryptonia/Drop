@@ -35,14 +35,13 @@ class TripTypeLocationComponentState extends State<TripTypeLocationComponent> {
   int _placeSearchSequence = 0;
   String _activePlaceField = 'source';
   int _activeMultiDropIndex = 0;
+  bool _sourceHasPoint = false;
+  bool _destinationHasPoint = false;
 
   void _onPlaceQueryChanged(String value, {required String field, int index = 0}) {
     _activePlaceField = field;
-    if (field == 'source') {
-      // Editing a selected address invalidates its old map coordinates until a new result is chosen.
-    } else if (field == 'destination') {
-      // The previous destination coordinates must not be reused for edited text.
-    }
+    if (field == 'source') _sourceHasPoint = false;
+    if (field == 'destination') _destinationHasPoint = false;
     if (field == 'multi') { _activeMultiDropIndex = index; multiDropLatLng.remove(index); }
     final request = ++_placeSearchSequence;
     _placeSearchTimer?.cancel();
@@ -390,7 +389,7 @@ class TripTypeLocationComponentState extends State<TripTypeLocationComponent> {
                   if (listAddress.isNotEmpty) ...[
                     SizedBox(height: 8),
                     Material(
-                      color: context.cardColor,
+                      color: Theme.of(context).cardColor,
                       borderRadius: BorderRadius.circular(12),
                       elevation: 2,
                       child: ListView.separated(
