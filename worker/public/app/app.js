@@ -1092,7 +1092,7 @@
   }
   var activeAppScreen = "home";
   function activateAppScreen(screen) {
-    var allowed = ["home", "trips", "wallet", "profile"];
+    var allowed = ["home", "trips", "wallet", "profile", "help"];
     if (allowed.indexOf(screen) < 0) screen = "home";
     activeAppScreen = screen;
     var driverMode = currentUser && currentUser.active_mode === "driver";
