@@ -38,7 +38,7 @@ profilePhotoRoutes.on(["PUT", "POST"], "/profile/photo", ...mw, async (c) => {
   }
   if (old) await c.env.DOCS.delete(old).catch(() => undefined);
   c.header("Cache-Control", "no-store");
-  return c.json({ status: true, message: "Profile photo saved.", profile_image: `/api/users/${me.id}/profile-photo` });
+  return c.json({ status: true, message: "Profile photo saved.", profile_image: `${new URL(c.req.url).origin}/api/users/${me.id}/profile-photo` });
 });
 
 /** Authenticated profile image delivery; photos are private, never exposed as public R2 objects. */
