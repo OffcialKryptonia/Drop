@@ -1,4 +1,5 @@
-import { rideEta } from "../lib/eta";
+import { etaSettings, rideEta } from "../lib/eta";
+import { riderReceipt } from "../lib/receipt";
 import { iconKeyFor } from "./map-icons";
 import { Hono, type Context } from "hono";
 import { z } from "zod";
@@ -99,7 +100,8 @@ rideRoutes.get("/ride/types", ...mw, async (c) => {
   const lat = Number(c.req.query("lat")), lng = Number(c.req.query("lng"));
   if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return validationFailed(c, { location: ["Location is missing."] });
   const r = await listRideTypes(c.get("db"), { lat, lng });
-  return c.json(r.ok ? { status: true, ride_types: r.ride_types } : { status: true, ride_types: [], message: r.message });
+  const eta = (await etaSettings(c.get("db"))).rider;
+  return c.json(r.ok ? { status: true, ride_types: r.ride_types.map((t) => (eta ? t : { ...t, pickup_eta_minutes: null })) } : { status: true, ride_types: [], message: r.message });
 });
 
 /** Prices for every ride type available for this trip, with nearby drivers and pickup time. Nothing is saved. */
@@ -117,7 +119,7 @@ rideRoutes.post("/ride/estimate", ...mw, async (c) => {
     duration_minutes: q.route.duration_minutes,
     route_source: q.route.source,
     options: q.options,
-    ride_types: q.ride_types,
+    ride_types: (await etaSettings(c.get("db"))).rider ? q.ride_types : q.ride_types.map((t) => ({ ...t, pickup_eta_minutes: null })),
   });
 });
 
@@ -173,7 +175,9 @@ rideRoutes.post("/ride/request", ...mw, async (c) => {
 rideRoutes.get("/ride/current", ...mw, async (c) => {
   await expireStale(c);
   const row = await currentOf(c);
-  return c.json({ status: true, data: row ? ride(row) : null });
+  const data = row ? ride(row) : null;
+  if (data && !(await etaSettings(c.get("db"))).rider) data.eta = null;
+  return c.json({ status: true, data });
 });
 
 /** Cancel the open request. After a driver has accepted, a late cancellation can cost the ride type's cancellation fee. */
@@ -208,4 +212,13 @@ rideRoutes.get("/ride/history", ...mw, async (c) => {
   const rows = (await c.get("db").query(
     `${RIDE_SELECT} where r.rider_id = $1 and r.status in ('completed', 'cancelled', 'expired') order by r.id desc limit 50`, [c.get("user").id])).rows;
   return c.json({ status: true, data: rows.map(ride) });
+});
+
+/** The passenger's receipt for one finished trip. */
+rideRoutes.get("/ride/:id/receipt", ...mw, async (c) => {
+  const id = Number(c.req.param("id"));
+  if (!Number.isInteger(id) || id <= 0) return c.json({ status: false, message: "Trip not found." }, 404);
+  const row = (await c.get("db").query(`${RIDE_SELECT} where r.id = $1 and r.rider_id = $2 and r.status = 'completed'`, [id, c.get("user").id])).rows[0];
+  if (!row) return c.json({ status: false, message: "No receipt for this trip yet." }, 404);
+  return c.json({ status: true, data: riderReceipt(row) });
 });

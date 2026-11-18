@@ -13,6 +13,7 @@ Widget _host(Widget child, {double scale = 1.0}) => MaterialApp(
 
 void main() {
   etaTests();
+  receiptTests();
   group('DropMoney.format', () {
     test('positive, whole and fractional', () {
       expect(DropMoney.format(2912.96), '₦2,912.96');
@@ -88,5 +89,12 @@ void etaTests() {
   test('dropClock handles bad input', () {
     expect(dropClock(null), '');
     expect(dropClock('nope'), '');
+  });
+}
+
+void receiptTests() {
+  testWidgets('DropMoneyText uses the given currency symbol', (t) async {
+    await t.pumpWidget(_host(const DropMoneyText(1500, symbol: 'GH₵')));
+    expect(find.text('GH₵1,500'), findsOneWidget);
   });
 }
