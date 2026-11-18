@@ -115,6 +115,9 @@ class EditProfileScreenState extends State<EditProfileScreen> {
     if (_formKey.currentState!.validate()) {
       _formKey.currentState!.save();
       appStore.setLoading(true);
+      if (imageProfile != null) {
+        await uploadProfilePhoto(File(imageProfile!.path));
+      }
       await updateProfile(
         uid: sharedPref.getString(UID).toString(),
         file: imageProfile != null ? File(imageProfile!.path.validate()) : null,
