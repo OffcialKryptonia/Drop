@@ -1376,7 +1376,7 @@
       photoInput.addEventListener("change", function () {
         var file = photoInput.files && photoInput.files[0];
         if (!file) return;
-        if (!/^image\\/(jpeg|png|webp)$/.test(file.type) || file.size > 5 * 1024 * 1024) {
+        if (!/^image\/(jpeg|png|webp)$/.test(file.type) || file.size > 5 * 1024 * 1024) {
           photoMsg.textContent = "Choose a JPG, PNG or WebP image no larger than 5 MB.";
           photoInput.value = ""; return;
         }
