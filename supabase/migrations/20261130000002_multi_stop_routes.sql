@@ -14,8 +14,26 @@ create table if not exists app.ride_request_stops (
   unique (ride_request_id, sequence)
 );
 create index if not exists ride_request_stops_ride_idx on app.ride_request_stops (ride_request_id, sequence);
-create trigger ride_request_stops_touch before update on app.ride_request_stops
-  for each row execute function app.touch_updated_at();
+
+-- The production schema may receive this migration through the managed
+-- Supabase migration API before the repository migration is replayed.
+-- Make trigger creation safe in either order.
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_trigger
+    where tgname = 'ride_request_stops_touch'
+      and tgrelid = 'app.ride_request_stops'::regclass
+      and not tgisinternal
+  ) then
+    create trigger ride_request_stops_touch
+      before update on app.ride_request_stops
+      for each row execute function app.touch_updated_at();
+  end if;
+end
+$$;
+
 alter table app.ride_request_stops enable row level security;
 
 insert into app.settings (key, value) values ('ride_max_additional_stops', '3'::jsonb)
