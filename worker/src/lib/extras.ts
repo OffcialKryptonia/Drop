@@ -9,7 +9,7 @@ export type ExtraKind = (typeof EXTRA_KINDS)[number];
 
 export type ExtrasSettings = { enabled: boolean; max_percent: number; commission_percent: number; window_minutes: number };
 
-/** Defaults: on, an extra can add up to 20% of the fare, DROP takes no commission on extras, 30 minutes to add and answer. */
+/** Defaults: on, an extra can add up to 20% of the fare, DROP takes no commission on extras, the passenger has 10 minutes to answer. */
 export async function extrasSettings(db: Client): Promise<ExtrasSettings> {
   const v = ((await db.query("select value from app.settings where key = 'extras'")).rows[0]?.value ?? {}) as Record<string, unknown>;
   const num = (x: unknown, d: number, min: number, max: number) => {
@@ -20,7 +20,7 @@ export async function extrasSettings(db: Client): Promise<ExtrasSettings> {
     enabled: v.enabled !== false,
     max_percent: num(v.max_percent, 20, 0, 100),
     commission_percent: num(v.commission_percent, 0, 0, 100),
-    window_minutes: Math.round(num(v.window_minutes, 30, 5, 240)),
+    window_minutes: Math.round(num(v.window_minutes, 10, 1, 60)),
   };
 }
 
@@ -42,17 +42,15 @@ export const extraView = (e: Row) => ({
 
 type Fail = { ok: false; code: string; message: string; remaining?: number };
 
-/** Driver adds an extra charge to one of their finished trips. Not saved unless every rule passes. */
+/** Driver adds an extra charge after accepting, while heading to the pickup. Locked once they arrive. Not saved unless every rule passes. */
 export async function proposeExtra(
   db: Client,
   p: { rideId: number; driverId: number; kind: ExtraKind; amount: number; note?: string },
 ): Promise<{ ok: true; extra: Row; rider_id: number } | Fail> {
   const s = await extrasSettings(db);
   if (!s.enabled) return { ok: false, code: "disabled", message: "Extra charges are switched off." };
-  const ride = (await db.query("select id, rider_id, status, fare, currency, completed_at from app.ride_requests where id = $1 and driver_id = $2", [p.rideId, p.driverId])).rows[0];
-  if (!ride || ride.status !== "completed") return { ok: false, code: "not_completed", message: "You can add an extra charge only to a trip you have completed." };
-  const ageMin = (Date.now() - new Date(ride.completed_at as string).getTime()) / 60000;
-  if (ageMin > s.window_minutes) return { ok: false, code: "window_closed", message: `Extra charges can be added within ${s.window_minutes} minutes of the trip ending.` };
+  const ride = (await db.query("select id, rider_id, status, fare, currency from app.ride_requests where id = $1 and driver_id = $2", [p.rideId, p.driverId])).rows[0];
+  if (!ride || ride.status !== "accepted") return { ok: false, code: "wrong_stage", message: "An extra charge can be added only after you accept, before you arrive at the pickup." };
 
   const open = (await db.query("select coalesce(sum(amount) filter (where status in ('pending','paid')), 0) as used, count(*) filter (where status = 'pending') as pending from app.ride_extras where ride_request_id = $1", [p.rideId])).rows[0];
   if (Number(open.pending) > 0) return { ok: false, code: "pending_exists", message: "Wait for the passenger to answer your last extra charge." };
@@ -128,6 +126,37 @@ export async function closeExtra(db: Client, extraId: number, who: { riderId?: n
   const col = who.riderId ? "rider_id" : "driver_id";
   const id = who.riderId ?? who.driverId;
   return (await db.query(`update app.ride_extras set status = $3, responded_at = now() where id = $1 and ${col} = $2 and status = 'pending' returning *`, [extraId, id, status])).rows[0] ?? null;
+}
+
+/**
+ * The ride was cancelled (by the passenger or the driver) before the trip started: close open extras and
+ * give back anything already paid. Wallet payments are refunded from the driver's wallet; cash was never collected.
+ */
+export async function voidExtrasForRide(db: Client, rideId: number): Promise<void> {
+  const rows = (await db.query("select * from app.ride_extras where ride_request_id = $1 and status in ('pending', 'paid') for update", [rideId])).rows;
+  for (const e of rows) {
+    const id = Number(e.id);
+    if (e.status === "paid" && e.paid_with === "wallet") {
+      const amount = Number(e.amount);
+      await postToWallet(db, {
+        userId: Number(e.rider_id), direction: "credit", amount: toMoney(amount) ?? "0", kind: "refund", rideRequestId: rideId,
+        idempotencyKey: `extra_refund:${id}`, description: "Extra charge refunded", wallet: "rider",
+      });
+      const earning = toMoney(amount - Number(e.commission ?? 0));
+      if (earning) {
+        await postToWallet(db, {
+          userId: Number(e.driver_id), direction: "debit", amount: earning, kind: "refund", rideRequestId: rideId,
+          idempotencyKey: `extra_refund_debit:${id}`, description: "Extra charge refunded", wallet: "driver", allowNegative: true,
+        });
+      }
+    } else if (e.status === "paid" && Number(e.commission ?? 0) > 0) {
+      await postToWallet(db, {
+        userId: Number(e.driver_id), direction: "credit", amount: toMoney(Number(e.commission)) ?? "0", kind: "adjustment", rideRequestId: rideId,
+        idempotencyKey: `extra_commission_back:${id}`, description: "Commission on extra charge returned", wallet: "driver",
+      });
+    }
+    await db.query("update app.ride_extras set status = 'cancelled', responded_at = now() where id = $1", [id]);
+  }
 }
 
 export async function expireExtras(db: Client): Promise<number> {

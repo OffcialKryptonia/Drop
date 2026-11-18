@@ -21,7 +21,7 @@ String dropExtraLabel(dynamic kind) => switch ('$kind') {
       _ => 'Extra charge',
     };
 
-/// Driver: add a toll, parking or waiting charge to a finished trip. Returns true when it was sent.
+/// Driver: add a toll, parking or waiting charge after accepting, before you reach the pickup. Returns true when it was sent.
 Future<bool> showDropAddExtraSheet(BuildContext context, {required int rideId}) async {
   final sent = await showModalBottomSheet<bool>(
     context: context,
@@ -48,7 +48,7 @@ class _AddExtraState extends State<_AddExtra> {
   bool _loading = true;
   bool _canAdd = true;
   num _remaining = 0;
-  int _window = 30;
+  int _window = 10;
   String? _error;
 
   @override
@@ -69,7 +69,7 @@ class _AddExtraState extends State<_AddExtra> {
       final r = await RideApi.driverExtras(widget.rideId);
       _canAdd = r['can_add'] == true;
       _remaining = (r['remaining'] as num?) ?? 0;
-      _window = (r['window_minutes'] as num?)?.toInt() ?? 30;
+      _window = (r['window_minutes'] as num?)?.toInt() ?? 10;
     } catch (_) {
       // let the server decide when the driver presses Send
     }
@@ -109,7 +109,7 @@ class _AddExtraState extends State<_AddExtra> {
         else if (!_canAdd)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Text('You can’t add an extra charge to this trip now. It must be within $_window minutes of the trip ending, within the limit, and with no earlier charge still waiting.', style: TextStyle(fontSize: 15, color: DropColors.text(context))),
+            child: Text('You can’t add an extra charge to this trip now. Extra charges can be added only after you accept and before you arrive at the pickup, within the limit, and with no earlier charge still waiting.', style: TextStyle(fontSize: 15, color: DropColors.text(context))),
           )
         else ...[
           Wrap(spacing: 8, runSpacing: 8, children: [

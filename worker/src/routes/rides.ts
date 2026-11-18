@@ -1,3 +1,4 @@
+import { voidExtrasForRide } from "../lib/extras";
 import { etaSettings, rideEta } from "../lib/eta";
 import { riderReceipt } from "../lib/receipt";
 import { iconKeyFor } from "./map-icons";
@@ -198,6 +199,8 @@ rideRoutes.post("/ride/cancel", ...mw, async (c) => {
   );
   if (!r.rowCount) return c.json({ status: false, code: "nothing_to_cancel", message: "That ride just changed. Please check again." }, 409);
   let fee = 0;
+  await db.query("begin");
+  try { await voidExtrasForRide(db, Number(r.rows[0].id)); await db.query("commit"); } catch (e) { await db.query("rollback").catch(() => {}); throw e; }
   if (r.rows[0].driver_id) {
     fee = await chargeCancellationFee(db, { ...before, status_before: before.status }, await getSetting(db, "ride_cancel_grace_seconds", 120));
     // The driver who had accepted is free to take other requests again.

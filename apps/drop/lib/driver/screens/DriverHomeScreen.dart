@@ -574,12 +574,6 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
               ),
             const SizedBox(height: 16),
             DropActionButton(label: 'Done', primary: true, onPressed: () => Navigator.pop(c)),
-            TextButton(
-              onPressed: () => showDropAddExtraSheet(c, rideId: rideId).then((sent) {
-                if (sent) _say('Extra charge sent to the passenger.');
-              }),
-              child: const Text('Add extra charge (toll, parking, waiting)'),
-            ),
             if (cash && commission > 0)
               TextButton(
                 onPressed: () {
@@ -700,6 +694,16 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
           const SizedBox(width: 12),
           Expanded(child: DropActionButton(label: 'SOS', icon: Icons.sos, danger: true, onPressed: () => showDropSos(context, rideId: (a['id'] as num?)?.toInt()))),
         ]),
+        if (status == 'accepted') ...[
+          const SizedBox(height: 10),
+          DropActionButton(
+            label: 'Add extra charge',
+            icon: Icons.add_card,
+            onPressed: () => showDropAddExtraSheet(context, rideId: (a['id'] as num).toInt()).then((sent) {
+              if (sent) _say('Extra charge sent to the passenger.');
+            }),
+          ),
+        ],
         const SizedBox(height: 10),
         DropActionButton(
           label: primaryLabel,

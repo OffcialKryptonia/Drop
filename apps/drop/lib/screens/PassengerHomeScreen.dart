@@ -112,7 +112,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
   bool _extraOpen = false;
   final Set<int> _extraAsked = {};
 
-  /// A driver added a toll, parking or waiting charge after the trip: ask the passenger to approve and pay, or decline.
+  /// A driver added a toll, parking or waiting charge after accepting (before pickup): ask the passenger to approve and pay, or decline.
   Future<void> _checkExtras() async {
     if (!mounted || _extraOpen) return;
     try {
@@ -501,6 +501,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
         if (changed && ride?['status'] == 'searching' && r['status'] == 'accepted') ToneService.play(ToneEvent.passengerAccepted);
         if (mounted) setState(() { ride = r; _trackHeading(); });
         if (changed) _fitTrip();
+        if (r['status'] == 'accepted') _checkExtras();
       } else {
         await _rideEnded();
       }

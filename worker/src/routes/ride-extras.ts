@@ -34,7 +34,7 @@ const proposeSchema = z.object({
   note: z.string().trim().max(120).optional(),
 });
 
-/** The driver adds an extra charge (toll, parking, waiting) to a finished trip. The passenger is asked to approve. */
+/** The driver adds an extra charge (toll, parking, waiting) after accepting, before arriving at the pickup. The passenger is asked to approve. */
 rideExtraRoutes.post("/driver/rides/:id/extras", ...driverMw, async (c) => {
   const rideId = rideIdOf(c);
   if (!rideId) return c.json({ status: false, message: "Trip not found." }, 404);
@@ -57,13 +57,13 @@ rideExtraRoutes.get("/driver/rides/:id/extras", ...driverMw, async (c) => {
   const rideId = rideIdOf(c);
   if (!rideId) return c.json({ status: false, message: "Trip not found." }, 404);
   const db = c.get("db");
-  const ride = (await db.query("select fare, status, completed_at from app.ride_requests where id = $1 and driver_id = $2", [rideId, c.get("user").id])).rows[0];
+  const ride = (await db.query("select fare, status from app.ride_requests where id = $1 and driver_id = $2", [rideId, c.get("user").id])).rows[0];
   if (!ride) return c.json({ status: false, message: "Trip not found." }, 404);
   const s = await extrasSettings(db);
   const rows = (await db.query("select * from app.ride_extras where ride_request_id = $1 order by id", [rideId])).rows;
   const used = rows.filter((x) => x.status === "pending" || x.status === "paid").reduce((a, x) => a + Number(x.amount), 0);
   const remaining = Math.max(0, Math.round((Number(ride.fare) * s.max_percent) / 100 * 100) / 100 - used);
-  const open = s.enabled && ride.status === "completed" && ride.completed_at && Date.now() - new Date(ride.completed_at as string).getTime() <= s.window_minutes * 60000;
+  const open = s.enabled && ride.status === "accepted";
   return c.json({ status: true, data: rows.map(extraView), can_add: !!open && remaining > 0 && !rows.some((x) => x.status === "pending"), remaining: Math.round(remaining * 100) / 100, window_minutes: s.window_minutes });
 });
 
@@ -127,7 +127,7 @@ rideExtraRoutes.put("/admin/extras-settings", ...guard("service_option edit"), a
     enabled: z.boolean(),
     max_percent: z.coerce.number().min(0, "Use 0 to 100.").max(100, "Use 0 to 100."),
     commission_percent: z.coerce.number().min(0, "Use 0 to 100.").max(100, "Use 0 to 100."),
-    window_minutes: z.coerce.number().int().min(5, "Use 5 to 240 minutes.").max(240, "Use 5 to 240 minutes."),
+    window_minutes: z.coerce.number().int().min(1, "Use 1 to 60 minutes.").max(60, "Use 1 to 60 minutes."),
   }).safeParse(await readBody(c));
   if (!p.success) return validationFailed(c, { extras: [p.error.issues[0].message] });
   await c.get("db").query("insert into app.settings (key, value) values ('extras', $1::jsonb) on conflict (key) do update set value = excluded.value", [JSON.stringify(p.data)]);

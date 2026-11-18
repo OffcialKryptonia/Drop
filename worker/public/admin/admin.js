@@ -535,13 +535,13 @@
     var card = h("div", { class: "card" }, h("div", { class: "t", text: "Extra charges after the ride" }), h("p", { class: "muted", text: "A driver can add a toll, parking or waiting charge after a trip. The passenger approves and pays from their wallet or in cash." }));
     root.appendChild(card);
     api("GET", "/admin/extras-settings").then(function (r) {
-      var s = (r.body || {}).data || { enabled: true, max_percent: 20, commission_percent: 0, window_minutes: 30 };
+      var s = (r.body || {}).data || { enabled: true, max_percent: 20, commission_percent: 0, window_minutes: 10 };
       var on = select([["1", "On"], ["0", "Off"]], s.enabled === false ? "0" : "1");
-      var max = num(String(s.max_percent), "20"), com = num(String(s.commission_percent), "0"), win = num(String(s.window_minutes), "30");
+      var max = num(String(s.max_percent), "20"), com = num(String(s.commission_percent), "0"), win = num(String(s.window_minutes), "10");
       var out = h("p", { class: "msg" });
       card.appendChild(field("Extra charges", on));
       card.appendChild(h("div", { class: "grid2" }, field("Maximum (% of the fare)", max, "Total extras on one trip cannot pass this."), field("DROP commission on extras (%)", com, "0 means the driver keeps all of it.")));
-      card.appendChild(field("Minutes to add and answer", win, "From the moment the trip ends. 5 to 240."));
+      card.appendChild(field("Minutes for the passenger to answer", win, "Drivers add an extra after accepting, before arriving at pickup. 1 to 60."));
       if (can("service_option edit")) {
         var save = h("button", { text: "Save", class: "small", style: "margin-top:10px" });
         save.addEventListener("click", function () {
