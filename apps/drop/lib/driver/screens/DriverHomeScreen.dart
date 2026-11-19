@@ -709,7 +709,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     final pillText = status == 'accepted' ? 'Heading to pickup' : (status == 'arrived' ? 'Waiting for passenger' : 'Trip in progress');
     final pillColor = status == 'in_progress' ? DropColors.success : DropColors.primary;
     final pillIcon = status == 'accepted' ? Icons.navigation : (status == 'arrived' ? Icons.hourglass_top : Icons.directions_car);
-    final primaryLabel = status == 'accepted' ? 'I have arrived' : (status == 'arrived' ? 'Start trip' : (nextStop == null ? 'Complete trip' : (nextStop['status'] == 'arrived' ? 'Complete stop' : 'I have arrived at stop')));
+    final needsCode = status == 'arrived' && a['pickup_required'] == true;
+    final primaryLabel = status == 'accepted' ? 'I have arrived' : (status == 'arrived' ? (needsCode ? 'Verify pickup code' : 'Start trip') : (nextStop == null ? 'Complete trip' : (nextStop['status'] == 'arrived' ? 'Complete stop' : 'I have arrived at stop')));
     return DropSheet(
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Row(children: [
@@ -770,7 +771,13 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
               : () {
                   final id = (a['id'] as num).toInt();
                   if (status == 'accepted') _rideAction(() => RideApi.arrived(id));
-                  if (status == 'arrived') _rideAction(() => RideApi.start(id));
+                  if (status == 'arrived' && needsCode) {
+                    showDropVerifyPickupSheet(context, rideId: id).then((ok) {
+                      if (ok) _rideAction(() => RideApi.start(id), thenSay: 'Pickup verified. Trip started.');
+                    });
+                  } else if (status == 'arrived') {
+                    _rideAction(() => RideApi.start(id));
+                  }
                   if (status == 'in_progress') {
                     if (nextStop == null) { _complete(a); }
                     else if (nextStop['status'] == 'arrived') { _completeStop(a, nextStop); }
