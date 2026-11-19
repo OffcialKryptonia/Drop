@@ -141,13 +141,10 @@ driverRideRoutes.post("/driver/requests/:id/accept", ...mw, async (c) => {
       return c.json({ status: false, code: "request_gone", message: "This request is no longer available." }, 409);
     }
     await db.query("update app.users set is_available = false where id = $1", [me.id]);
-    try {
-      await db.query("savepoint pickup");
-      await issuePickupCode(db, c.env.SETTINGS_ENCRYPTION_KEY, id);
-    } catch (err) {
-      await db.query("rollback to savepoint pickup");
-      console.error("pickup code not issued", (err as Error).message);
-    }
+    // Do not accept a ride if pickup-code issuance fails while the feature is enabled.
+    // Keeping acceptance and code issuance in the same transaction prevents an accepted ride
+    // from silently bypassing the pickup verification requirement.
+    await issuePickupCode(db, c.env.SETTINGS_ENCRYPTION_KEY, id);
     await db.query("commit");
     pushLater(c, pushRideEvent(db, c.env, Number(r.rows[0].rider_id), "accepted", id));
   } catch (e) {
