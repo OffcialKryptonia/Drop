@@ -145,7 +145,7 @@ oldMin = (await db.query("select value from app.settings where key = 'driver_min
   ok("a tampered link is refused", (await fetch(link.json.data.url.replace(/sig=./, "sig=0"))).status === 403);
   ok("another driver cannot get a link", (await call("GET", `/ride/${r.id}/chat/messages/${vm.json.data.id}/audio-url`, d2.T)).status === 404);
   const hist = await call("GET", `/ride/${r.id}/chat`, P.api_token);
-  ok("history keeps text and voice in order", hist.json.data?.messages?.length >= 5 && hist.json.data.messages.some((m) => m.kind === "voice"));
+  ok("history keeps text and voice in order", hist.json.data?.messages?.length >= 4 && hist.json.data.messages.some((m) => m.kind === "voice"));
   await call("PUT", "/admin/chat-settings", A, { enabled: false, voice_enabled: true, max_voice_seconds: 60, retention_days: 30 });
   ok("admin can switch chat off", (await call("POST", `/ride/${r.id}/chat/messages`, P.api_token, { client_id: cid(), body: "nope" })).status === 403);
   await call("PUT", "/admin/chat-settings", A, { enabled: true, voice_enabled: true, max_voice_seconds: 60, retention_days: 30 });

@@ -81,6 +81,7 @@ class _DropChatScreenState extends State<DropChatScreen> with WidgetsBindingObse
   bool _recording = false;
   bool _holdMode = false;
   bool _cancelHint = false;
+  double _holdStartX = 0;
   int _recSeconds = 0;
   Timer? _recTimer;
   StreamSubscription<Amplitude>? _ampSub;
@@ -670,12 +671,15 @@ class _DropChatScreenState extends State<DropChatScreen> with WidgetsBindingObse
         _roundButton(Icons.send, () => _sendText(_text.text), 'Send message')
       else if (_voiceEnabled)
         GestureDetector(
-          onLongPressStart: (_) => _startRecording(hold: true),
+          onLongPressStart: (d) {
+            _holdStartX = d.globalPosition.dx;
+            _startRecording(hold: true);
+          },
           onLongPressMoveUpdate: (d) {
             final hint = d.offsetFromOrigin.dx < -70;
             if (hint != _cancelHint) setState(() => _cancelHint = hint);
           },
-          onLongPressEnd: (d) => _finishRecording(send: d.offsetFromOrigin.dx > -70),
+          onLongPressEnd: (d) => _finishRecording(send: d.globalPosition.dx - _holdStartX > -70),
           child: _roundButton(Icons.mic, () => _startRecording(hold: false), 'Record voice message. Hold to record, or tap to start.'),
         ),
     ]);
