@@ -1141,6 +1141,10 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
         const SizedBox(height: 10),
         DropEtaStrip(eta: _m(r['eta'])),
       ],
+      if (r['pickup_code'] is Map && (r['pickup_code'] as Map)['code'] != null) ...[
+        const SizedBox(height: 12),
+        DropPickupCodeCard(code: '${(r['pickup_code'] as Map)['code']}'),
+      ],
       if (driver.isNotEmpty) ...[
         const SizedBox(height: 12),
         Row(children: [
