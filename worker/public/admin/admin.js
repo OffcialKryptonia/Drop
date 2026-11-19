@@ -106,6 +106,7 @@
     { id: "transfers", label: "Wallet transfers", group: "Financial", perm: "wallet_transfer list", render: pageTransfers },
     { id: "paymyride", label: "PayMyRide", group: "Financial", perm: "paymyride list", render: pagePayMyRide },
     { id: "payouts", label: "Driver payouts", group: "Financial", perm: "payout list", render: pagePayouts },
+    { id: "extras", label: "Extra charges", group: "Operations", perm: "ride_extra list", render: pageExtras },
     { id: "sos", label: "SOS alerts", group: "Safety", perm: "sos list", render: pageSos },
     { id: "complaints", label: "Complaints", group: "Safety", perm: "complaint list", render: pageComplaints },
     { id: "banks", label: "Banks", group: "Financial", perm: "bank list", render: pageBanks },
@@ -1080,6 +1081,51 @@
   }
 
   // ---------- SOS alerts and complaints ----------
+  var ex = { status: "paid", page: 1 };
+  function pageExtras(root) {
+    loading(root);
+    api("GET", "/admin/extras?status=" + ex.status + "&page=" + ex.page).then(function (r) {
+      var b = r.body || {}, list = b.data || [], pg = b.pagination || { page: 1, total_pages: 1, total: 0 };
+      root.textContent = "";
+      root.appendChild(head("Extra charges", "Tolls, parking and waiting charges that drivers add after accepting a ride. Settings are under Ride options. Refund a paid one if there is a dispute: wallet money goes back to the passenger and is taken from the driver."));
+      var tabs = h("div", { style: "display:flex;gap:8px;margin:12px 0;flex-wrap:wrap" });
+      [["paid", "Paid"], ["pending", "Waiting"], ["declined", "Declined"], ["expired", "Expired"], ["cancelled", "Cancelled / refunded"]].forEach(function (t) {
+        var bt = h("button", { text: t[1], class: "small" + (ex.status === t[0] ? "" : " secondary") });
+        bt.addEventListener("click", function () { ex.status = t[0]; ex.page = 1; pageExtras(root); });
+        tabs.appendChild(bt);
+      });
+      root.appendChild(tabs);
+      var card = h("div", { class: "card" }, h("div", { class: "t", text: pg.total + " extra charge" + (pg.total === 1 ? "" : "s") }));
+      if (!list.length) card.appendChild(h("div", { class: "empty", text: "Nothing here." }));
+      list.forEach(function (x) {
+        var sym = (x.currency && x.currency.symbol) || "\u20A6";
+        var row = h("div", { class: "row", style: "padding:10px 0;border-top:1px solid var(--line,#eee)" },
+          h("div", { class: "t", text: "#" + x.id + " \u00B7 " + x.kind + " \u00B7 " + sym + Number(x.amount).toLocaleString() + (x.paid_with ? " \u00B7 " + x.paid_with : "") }),
+          h("div", { class: "s", text: "Trip #" + x.ride_id + " \u00B7 Driver: " + (x.driver_name || "") + " \u00B7 Passenger: " + (x.passenger_name || "") }),
+          h("div", { class: "s", text: String(x.created_at).slice(0, 16).replace("T", " ") + " UTC" + (x.note ? " \u00B7 " + x.note : "") }));
+        if ((x.status === "paid" || x.status === "pending") && can("ride_extra edit")) {
+          var bt = h("button", { text: x.status === "paid" ? "Refund" : "Cancel", class: "small secondary", style: "margin-top:8px" });
+          bt.addEventListener("click", function () {
+            confirmDo((x.status === "paid" ? "Refund this extra charge? " + (x.paid_with === "wallet" ? "The passenger's wallet is credited and the driver's wallet is debited." : "It was a cash extra, so no wallet money moves.") : "Cancel this extra charge?"), function () {
+              api("POST", "/admin/extras/" + x.id + "/refund", {}).then(function (z) { toast(z.ok ? z.body.message : errText(z), !z.ok); if (z.ok) pageExtras(root); });
+            });
+          });
+          row.appendChild(bt);
+        }
+        card.appendChild(row);
+      });
+      root.appendChild(card);
+      if (pg.total_pages > 1) {
+        var nav = h("div", { style: "display:flex;gap:8px;margin-top:12px" });
+        var prev = h("button", { text: "Previous", class: "small secondary" }), next = h("button", { text: "Next", class: "small secondary" });
+        prev.disabled = pg.page <= 1; next.disabled = pg.page >= pg.total_pages;
+        prev.addEventListener("click", function () { ex.page--; pageExtras(root); });
+        next.addEventListener("click", function () { ex.page++; pageExtras(root); });
+        nav.appendChild(prev); nav.appendChild(next); root.appendChild(nav);
+      }
+    });
+  }
+
   var so = { status: "open", page: 1 };
   function pageSos(root) {
     loading(root);

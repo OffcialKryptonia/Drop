@@ -6,7 +6,7 @@ import { requireAuth } from "../auth/middleware";
 import { guard, audit } from "../lib/permissions";
 import { readBody, validationFailed } from "../lib/legacy";
 import { requireApprovedDriver } from "../lib/roles";
-import { closeExtra, EXTRA_KINDS, extraView, extrasSettings, kindLabel, payExtra, proposeExtra } from "../lib/extras";
+import { closeExtra, reverseExtra, EXTRA_KINDS, extraView, extrasSettings, kindLabel, payExtra, proposeExtra } from "../lib/extras";
 import { currencyInfo } from "../lib/currency";
 import { pushLater, sendPush } from "../lib/push";
 
@@ -133,4 +133,43 @@ rideExtraRoutes.put("/admin/extras-settings", ...guard("service_option edit"), a
   await c.get("db").query("insert into app.settings (key, value) values ('extras', $1::jsonb) on conflict (key) do update set value = excluded.value", [JSON.stringify(p.data)]);
   await audit(c, "extras_settings.update", "extras", p.data);
   return c.json({ status: true, data: p.data });
+});
+
+/** Admin: every extra charge, newest first, filtered by status. */
+rideExtraRoutes.get("/admin/extras", ...guard("ride_extra list"), async (c) => {
+  const db = c.get("db");
+  const status = ["pending", "paid", "declined", "expired", "cancelled"].includes(String(c.req.query("status"))) ? String(c.req.query("status")) : null;
+  const page = Math.max(1, Number(c.req.query("page")) || 1);
+  const per = 20;
+  const where = status ? "where x.status = $1" : "where $1::text is null";
+  const total = Number((await db.query(`select count(*) from app.ride_extras x ${where}`, [status])).rows[0].count);
+  const rows = (await db.query(
+    `select x.*, d.display_name as driver_name, p.display_name as passenger_name
+       from app.ride_extras x join app.users d on d.id = x.driver_id join app.users p on p.id = x.rider_id
+       ${where} order by x.id desc limit ${per} offset ${(page - 1) * per}`, [status])).rows;
+  return c.json({
+    data: rows.map((x) => ({ ...extraView(x), driver_name: x.driver_name, passenger_name: x.passenger_name })),
+    pagination: { page, total, total_pages: Math.max(1, Math.ceil(total / per)) },
+  });
+});
+
+/** Admin: cancel a pending extra, or refund a paid one (wallet money goes back to the passenger and is taken from the driver). */
+rideExtraRoutes.post("/admin/extras/:id/refund", ...guard("ride_extra edit"), async (c) => {
+  const id = rideIdOf(c);
+  if (!id) return c.json({ status: false, message: "Extra charge not found." }, 404);
+  const db = c.get("db");
+  await db.query("begin");
+  try {
+    const e = (await db.query("select * from app.ride_extras where id = $1 for update", [id])).rows[0];
+    if (!e) { await db.query("rollback"); return c.json({ status: false, message: "Extra charge not found." }, 404); }
+    if (e.status !== "pending" && e.status !== "paid") { await db.query("rollback"); return c.json({ status: false, message: "Only a pending or paid extra charge can be cancelled or refunded." }, 409); }
+    await reverseExtra(db, e);
+    await db.query("commit");
+    await audit(c, "extra.refund", `extra:${id}`, { status: e.status, paid_with: e.paid_with, amount: Number(e.amount) });
+    pushLater(c, sendPush(db, c.env, [Number(e.rider_id)], {
+      title: e.status === "paid" && e.paid_with === "wallet" ? "Extra charge refunded" : "Extra charge cancelled",
+      body: `${kindLabel(e.kind)} · ${money(e.amount, e.currency)}`, data: { type: "extra_charge_refunded", extra_id: String(id), ride_id: String(e.ride_request_id) },
+    }));
+    return c.json({ status: true, message: e.status === "paid" && e.paid_with === "wallet" ? "Refunded to the passenger's wallet." : "Extra charge cancelled." });
+  } catch (err) { await db.query("rollback").catch(() => {}); throw err; }
 });
