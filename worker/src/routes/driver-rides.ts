@@ -238,7 +238,7 @@ driverRideRoutes.post("/driver/rides/:id/stops/:stopId/complete", ...mw, async (
   );
   if (!result.rowCount) return c.json({ status:false, code:"stop_out_of_order", message:"Arrive at the current stop after completing the previous stop." },409);
   const active = await activeOf(c);
-  return c.json({ status:true, data: active ? request(active, await ruleOf(c, active.service_id)) : null });
+  return c.json({ status: true, data: active ? await shapeActive(c, active) : null });
 });
 
 /** Trip finished: pays the driver / takes commission and frees the driver for the next request. */
