@@ -66,8 +66,9 @@ class RideApi {
     required double dropLat,
     required double dropLng,
     required String dropAddress,
+    List<Map<String, dynamic>> stops = const [],
   }) =>
-      _post('ride/estimate', {'pickup': _point(pickupLat, pickupLng, pickupAddress), 'dropoff': _point(dropLat, dropLng, dropAddress)});
+      _post('ride/estimate', {'pickup': _point(pickupLat, pickupLng, pickupAddress), 'dropoff': _point(dropLat, dropLng, dropAddress), 'stops': stops});
 
   static Future<Map<String, dynamic>> request({
     required double pickupLat,
@@ -79,14 +80,25 @@ class RideApi {
     required int serviceId,
     required String paymentMethod,
     List<int> optionIds = const [],
+    List<Map<String, dynamic>> stops = const [],
   }) =>
       _post('ride/request', {
         'pickup': _point(pickupLat, pickupLng, pickupAddress),
         'dropoff': _point(dropLat, dropLng, dropAddress),
+        'stops': stops,
         'service_id': serviceId,
         'payment_method': paymentMethod,
         'option_ids': optionIds,
       });
+
+  /// Server-controlled maximum number of additional passenger stops (zero disables them).
+  static Future<int> stopLimit() async {
+    final response = await _get('ride/stop-settings');
+    final data = response['data'];
+    if (data is! Map) return 0;
+    final value = data['max_additional_stops'];
+    return value is num ? value.toInt().clamp(0, 20).toInt() : 0;
+  }
 
   /// Ride types open at the passenger's location, with drivers nearby (no fares yet).
   static Future<Map<String, dynamic>> rideTypes(double lat, double lng) => _get('ride/types?lat=$lat&lng=$lng');
@@ -140,8 +152,16 @@ class RideApi {
 
   static Future<Map<String, dynamic>> arrived(int id) => _post('driver/rides/$id/arrived');
 
-  /// The server checks the passenger's four-digit code; the trip cannot start until it is accepted.
+  /// Verify the passenger's four-digit pickup code before starting a ride.
   static Future<Map<String, dynamic>> verifyPickup(int id, String code) => _post('driver/rides/$id/verify-pickup', {'code': code});
+
+  /// Driver: arrive at the next server-ordered additional stop.
+  static Future<Map<String, dynamic>> arriveAtStop(int rideId, int stopId) =>
+      _post('driver/rides/$rideId/stops/$stopId/arrived');
+
+  /// Driver: confirm completion of the currently arrived additional stop.
+  static Future<Map<String, dynamic>> completeStop(int rideId, int stopId) =>
+      _post('driver/rides/$rideId/stops/$stopId/complete');
 
   static Future<Map<String, dynamic>> start(int id) => _post('driver/rides/$id/start');
 
