@@ -178,15 +178,20 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
   void _refit() {
     final a = active;
     final me = myPos;
-    final key = a == null ? 'idle' : '${a['id']}:${a['status']}';
+    final key = a == null ? 'idle' : '${a['id']}:${a['status']}:${_stops(a).map((s) => '${s['id']}-${s['status']}').join(',')}';
     if (key == _fitKey) return;
     _fitKey = key;
     if (a == null) {
       if (me != null) _map.animateTo(me, zoom: 17);
       return;
     }
-    final target = a['status'] == 'in_progress' ? _ll(a['dropoff']) : _ll(a['pickup']);
-    _map.fitPoints([if (me != null) me, target]);
+    final points = <LatLng>[if (me != null) me];
+    if (a['status'] != 'in_progress') points.add(_ll(a['pickup']));
+    for (final stop in _stops(a)) {
+      if (stop['status'] != 'completed') points.add(LatLng(_num(stop['lat']), _num(stop['lng'])));
+    }
+    points.add(_ll(a['dropoff']));
+    _map.fitPoints(points);
   }
 
   RouteSnap? get _mySnap {
@@ -363,7 +368,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
 
   final Set<int> _heardRequests = {};
   bool _requestsPrimed = false;
-  int? _arrivedFor;
+  final Set<String> _arrivalToneKeys = {};
 
   /// Rings once for each ride request that appears for the first time.
   void _toneForRequests(List<Map<String, dynamic>> list) {
@@ -381,9 +386,10 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     final id = (a['id'] as num?)?.toInt();
     final nextStop = _nextStop(a);
     final target = nextStop == null ? _ll(a['dropoff']) : LatLng(_num(nextStop['lat']), _num(nextStop['lng']));
-    if (id == null || _arrivedFor == id) return;
+    final toneKey = '$id:${nextStop?['id'] ?? 'dropoff'}';
+    if (id == null || _arrivalToneKeys.contains(toneKey)) return;
     if (Geolocator.distanceBetween(here.latitude, here.longitude, target.latitude, target.longitude) <= 80) {
-      _arrivedFor = id;
+      _arrivalToneKeys.add(toneKey);
       ToneService.play(ToneEvent.driverArrived);
     }
   }
