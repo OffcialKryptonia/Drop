@@ -1004,13 +1004,13 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
                 Icon(Icons.more_vert, color: primaryColor, size: 18),
                 const SizedBox(width: 8),
                 Expanded(child: Text('Stop ${i + 1}: ${additionalStops[i]['address']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600))),
-                IconButton(tooltip: 'Move stop up', onPressed: i == 0 ? null : () => setState(() { final x = additionalStops.removeAt(i); additionalStops.insert(i - 1, x); }), icon: const Icon(Icons.arrow_upward, size: 18)),
-                IconButton(tooltip: 'Move stop down', onPressed: i == additionalStops.length - 1 ? null : () => setState(() { final x = additionalStops.removeAt(i); additionalStops.insert(i + 1, x); }), icon: const Icon(Icons.arrow_downward, size: 18)),
-                IconButton(tooltip: 'Remove stop', onPressed: () => setState(() => additionalStops.removeAt(i)), icon: const Icon(Icons.close, size: 18)),
+                IconButton(tooltip: 'Move stop up', onPressed: busy || i == 0 ? null : () => setState(() { final x = additionalStops.removeAt(i); additionalStops.insert(i - 1, x); }), icon: const Icon(Icons.arrow_upward, size: 18)),
+                IconButton(tooltip: 'Move stop down', onPressed: busy || i == additionalStops.length - 1 ? null : () => setState(() { final x = additionalStops.removeAt(i); additionalStops.insert(i + 1, x); }), icon: const Icon(Icons.arrow_downward, size: 18)),
+                IconButton(tooltip: 'Remove stop', onPressed: busy ? null : () => setState(() => additionalStops.removeAt(i)), icon: const Icon(Icons.close, size: 18)),
               ]),
             ),
           if (additionalStops.length < maxAdditionalStops)
-            Align(alignment: Alignment.centerLeft, child: TextButton.icon(onPressed: () => _openRouteScreen(addingStop: true), icon: const Icon(Icons.add_location_alt_outlined), label: Text('Add stop (${additionalStops.length}/$maxAdditionalStops)'))),
+            Align(alignment: Alignment.centerLeft, child: TextButton.icon(onPressed: busy ? null : () => _openRouteScreen(addingStop: true), icon: const Icon(Icons.add_location_alt_outlined), label: Text('Add stop (${additionalStops.length}/$maxAdditionalStops)'))),
         ],
         const SizedBox(height: 14),
         SizedBox(
