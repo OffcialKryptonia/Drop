@@ -5,6 +5,7 @@ import 'package:drop/service/DriverApplicationApi.dart';
 import 'package:drop/drop/design/drop_design.dart';
 import 'package:drop/drop/widgets/drop_eta.dart';
 import 'package:drop/drop/widgets/drop_extras.dart';
+import 'package:drop/drop/widgets/drop_pickup.dart';
 import 'package:drop/drop/widgets/drop_money.dart';
 import 'package:drop/drop/widgets/drop_ride_ui.dart';
 import 'package:drop/driver/screens/DriverNavigationScreen.dart';
