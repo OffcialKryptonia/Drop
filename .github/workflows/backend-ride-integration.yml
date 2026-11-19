@@ -1,0 +1,103 @@
+name: Backend ride-flow integration
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "worker/**"
+      - "supabase/migrations/**"
+      - ".github/workflows/backend-ride-integration.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ride-flow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: drop_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d drop_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/drop_test
+      CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE: postgresql://postgres:postgres@127.0.0.1:5432/drop_test
+      ADMIN_BOOTSTRAP_TOKEN: ci-bootstrap-${{ github.run_id }}-${{ github.run_attempt }}
+      ADMIN_EMAIL: ci-admin-${{ github.run_id }}@example.test
+      ADMIN_PASSWORD: CiOnly-${{ github.run_id }}-Password-2026
+      SESSION_SECRET: ci-session-secret-${{ github.run_id }}-not-for-production
+      SETTINGS_ENCRYPTION_KEY: ci-encryption-key-${{ github.run_id }}-not-for-production-32bytes
+      BASE: http://127.0.0.1:8787
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
+
+      - name: Install Worker dependencies
+        working-directory: worker
+        run: npm ci
+
+      - name: Apply every database migration to disposable PostGIS
+        shell: bash
+        run: |
+          set -euo pipefail
+          for migration in supabase/migrations/*.sql; do
+            echo "Applying $migration"
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$migration"
+          done
+
+      - name: Start local Worker
+        working-directory: worker
+        run: |
+          nohup npx wrangler dev --local --ip 127.0.0.1 --port 8787 \
+            --var "ADMIN_BOOTSTRAP_TOKEN:$ADMIN_BOOTSTRAP_TOKEN" \
+            --var "SESSION_SECRET:$SESSION_SECRET" \
+            --var "SETTINGS_ENCRYPTION_KEY:$SETTINGS_ENCRYPTION_KEY" \
+            > /tmp/drop-worker.log 2>&1 &
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent "$BASE/api/health/db" >/tmp/drop-health.json; then
+              cat /tmp/drop-health.json
+              exit 0
+            fi
+            sleep 2
+          done
+          cat /tmp/drop-worker.log
+          echo "Worker did not become healthy"
+          exit 1
+
+      - name: Create disposable test administrator
+        run: |
+          set -euo pipefail
+          payload=$(jq -n \
+            --arg token "$ADMIN_BOOTSTRAP_TOKEN" \
+            --arg email "$ADMIN_EMAIL" \
+            --arg password "$ADMIN_PASSWORD" \
+            '{token:$token,first_name:"CI",last_name:"Administrator",email:$email,username:"ciadmin",password:$password}')
+          response=$(curl --fail-with-body --silent --show-error \
+            -H "Content-Type: application/json" \
+            -d "$payload" "$BASE/api/admin/bootstrap")
+          echo "$response" | jq -e '.api_token | type == "string" and length > 20' >/dev/null
+          echo "Disposable CI administrator bootstrapped."
+
+      - name: Run full ride-flow integration test
+        working-directory: worker
+        run: node test/rides-trip-smoke.mjs
+
+      - name: Worker logs on failure
+        if: failure()
+        run: cat /tmp/drop-worker.log || true
