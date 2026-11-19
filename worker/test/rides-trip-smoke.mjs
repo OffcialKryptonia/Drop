@@ -104,6 +104,51 @@ oldMin = (await db.query("select value from app.settings where key = 'driver_min
   ok("correct code accepted", (await call("POST", `/driver/rides/${r.id}/verify-pickup`, d.T, { code: shown.code })).json.status === true);
   ok("code reused after verify is harmless and the code is hidden", (await call("GET", "/ride/current", P.api_token)).json.data?.pickup_code?.verified === true);
   ok("started", (await call("POST", `/driver/rides/${r.id}/start`, d.T)).json.data?.status === "in_progress");
+
+  // ---- Ride chat: text and voice notes between this passenger and this driver only ----
+  const cid = () => "c" + Math.random().toString(36).slice(2, 12) + Date.now();
+  const sent = await call("POST", `/ride/${r.id}/chat/messages`, P.api_token, { client_id: cid(), body: "I am at the gate" });
+  ok("passenger can send a chat message", sent.status === 201 && sent.json.data?.mine === true, JSON.stringify(sent.json));
+  const dup = cid();
+  const once1 = await call("POST", `/ride/${r.id}/chat/messages`, P.api_token, { client_id: dup, body: "once" });
+  const again = await call("POST", `/ride/${r.id}/chat/messages`, P.api_token, { client_id: dup, body: "once" });
+  ok("a retried send does not create a duplicate", once1.json.data?.id === again.json.data?.id);
+  const drvView = await call("GET", `/ride/${r.id}/chat`, d.T);
+  ok("assigned driver receives the message", drvView.json.data?.messages?.some((m) => m.body === "I am at the gate" && m.mine === false), JSON.stringify(drvView.json));
+  ok("driver sees an unread count and can_send", drvView.json.data?.unread >= 2 && drvView.json.data?.can_send === true);
+  await call("POST", `/ride/${r.id}/chat/read`, d.T);
+  ok("driver reply works", (await call("POST", `/ride/${r.id}/chat/messages`, d.T, { client_id: cid(), body: "Coming now" })).status === 201);
+  const paxView = await call("GET", `/ride/${r.id}/chat`, P.api_token);
+  ok("passenger sees the reply and the read tick on their own message", paxView.json.data?.messages?.some((m) => m.body === "Coming now") && paxView.json.data.messages.find((m) => m.body === "I am at the gate")?.read_at);
+  ok("another driver cannot read this chat", (await call("GET", `/ride/${r.id}/chat`, d2.T)).status === 404);
+  ok("another driver cannot send into this chat", (await call("POST", `/ride/${r.id}/chat/messages`, d2.T, { client_id: cid(), body: "hi" })).status === 404);
+  ok("empty and oversized messages are refused", (await call("POST", `/ride/${r.id}/chat/messages`, P.api_token, { client_id: cid(), body: "   " })).status === 422 && (await call("POST", `/ride/${r.id}/chat/messages`, P.api_token, { client_id: cid(), body: "x".repeat(1001) })).status === 422);
+
+  const voice = async (token, bytes, seconds = 3) => {
+    const f = new FormData();
+    f.set("client_id", cid()); f.set("seconds", String(seconds)); f.set("waveform", "10,40,80,30");
+    f.set("file", new Blob([bytes], { type: "audio/mp4" }), "voice.m4a");
+    const res = await fetch(`${API}/ride/${r.id}/chat/voice`, { method: "POST", headers: { Authorization: "Bearer " + token, Accept: "application/json" }, body: f });
+    return { status: res.status, json: await res.json().catch(() => ({})) };
+  };
+  const m4a = new Uint8Array([0, 0, 0, 0x20, 0x66, 0x74, 0x79, 0x70, 0x4d, 0x34, 0x41, 0x20, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8]);
+  const vm = await voice(P.api_token, m4a);
+  ok("passenger can send a voice note", vm.status === 201 && vm.json.data?.kind === "voice" && vm.json.data?.seconds === 3, JSON.stringify(vm.json));
+  ok("voice response never exposes the storage key", !JSON.stringify(vm.json).includes("chat/"));
+  ok("a non-audio file is refused as a voice note", (await voice(P.api_token, new TextEncoder().encode("<script>x</script>"))).status === 422);
+  ok("too-long voice note is refused", (await voice(P.api_token, m4a, 9999)).status === 422);
+  ok("another driver cannot send a voice note", (await voice(d2.T, m4a)).status === 404);
+  const link = await call("GET", `/ride/${r.id}/chat/messages/${vm.json.data.id}/audio-url`, d.T);
+  ok("driver gets a signed link for the voice note", link.status === 200 && /sig=/.test(link.json.data?.url ?? ""), JSON.stringify(link.json));
+  const audio = await fetch(link.json.data.url);
+  ok("signed link serves the stored audio", audio.status === 200 && (await audio.arrayBuffer()).byteLength === m4a.length);
+  ok("a tampered link is refused", (await fetch(link.json.data.url.replace(/sig=./, "sig=0"))).status === 403);
+  ok("another driver cannot get a link", (await call("GET", `/ride/${r.id}/chat/messages/${vm.json.data.id}/audio-url`, d2.T)).status === 404);
+  const hist = await call("GET", `/ride/${r.id}/chat`, P.api_token);
+  ok("history keeps text and voice in order", hist.json.data?.messages?.length >= 5 && hist.json.data.messages.some((m) => m.kind === "voice"));
+  await call("PUT", "/admin/chat-settings", A, { enabled: false, voice_enabled: true, max_voice_seconds: 60, retention_days: 30 });
+  ok("admin can switch chat off", (await call("POST", `/ride/${r.id}/chat/messages`, P.api_token, { client_id: cid(), body: "nope" })).status === 403);
+  await call("PUT", "/admin/chat-settings", A, { enabled: true, voice_enabled: true, max_voice_seconds: 60, retention_days: 30 });
   const tr = await call("POST", "/ride/cancel", P.api_token, {});
   ok("passenger cannot cancel a started trip", tr.status === 409 && tr.json.code === "trip_in_progress");
   const w0 = await bal(d.id, "driver");
