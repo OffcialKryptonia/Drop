@@ -1061,7 +1061,24 @@
     options.credentials = "same-origin";
     options.headers = Object.assign({}, options.headers || {}, authedHeaders());
     return fetch("/api" + path, options).then(function (res) {
-      return readJson(res).then(function (body) { if (res.status === 401) { csrfToken = null; if (viewAuth && viewHome) { show("auth"); setMsg($("loginMsg"), "Your session has expired. Please sign in again.", "err"); } } return { status: res.status, body: body }; });
+      return readJson(res).then(function (body) {
+        if (res.status === 401) {
+          // A protected API may reject its own auth transport (for example,
+          // a mobile-only Bearer route called by the cookie-authenticated web app).
+          // Only sign the browser out if its actual web session is also invalid.
+          fetch("/api/web/me", { credentials: "same-origin", cache: "no-store" })
+            .then(function (sessionRes) { return readJson(sessionRes).then(function (sessionBody) {
+              if (sessionRes.ok && sessionBody && sessionBody.signed_in === false) {
+                csrfToken = null;
+                if (viewAuth && viewHome) { show("auth"); setMsg($("loginMsg"), "Your session has expired. Please sign in again.", "err"); }
+              }
+            }); })
+            .catch(function () {
+              // A temporary verification/network failure is not proof of logout.
+            });
+        }
+        return { status: res.status, body: body };
+      });
     });
   }
   function money(value, currency) {
