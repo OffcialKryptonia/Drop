@@ -24,8 +24,9 @@ class DropRouteScreen extends StatefulWidget {
   final LatLng pickup;
   final String pickupAddress;
   final List<Map<String, dynamic>> recents;
+  final String selectionLabel;
 
-  const DropRouteScreen({Key? key, required this.pickup, required this.pickupAddress, required this.recents}) : super(key: key);
+  const DropRouteScreen({Key? key, required this.pickup, required this.pickupAddress, required this.recents, this.selectionLabel = 'To'}) : super(key: key);
 
   @override
   State<DropRouteScreen> createState() => _DropRouteScreenState();
@@ -146,7 +147,7 @@ class _DropRouteScreenState extends State<DropRouteScreen> {
       _toFocus.requestFocus();
       return;
     }
-    Navigator.pop(context, DropRouteResult('drop', point: LatLng(lat, lng), address: address.isEmpty ? title : address, pickup: _pickupChanged ? _pickup : null, pickupAddress: _pickupChanged ? _pickupAddress : null));
+    Navigator.pop(context, DropRouteResult(widget.selectionLabel == 'Stop' ? 'stop' : 'drop', point: LatLng(lat, lng), address: address.isEmpty ? title : address, pickup: _pickupChanged ? _pickup : null, pickupAddress: _pickupChanged ? _pickupAddress : null));
   }
 
   Future<void> _save(String kind, String title, String address, double lat, double lng) async {
@@ -351,7 +352,7 @@ class _DropRouteScreenState extends State<DropRouteScreen> {
             _field(
               c: _to,
               f: _toFocus,
-              label: _adding == null ? 'To' : 'Address to save',
+              label: _adding == null ? widget.selectionLabel : 'Address to save',
               icon: Icons.flag,
               autofocus: true,
               trailing: IconButton(
