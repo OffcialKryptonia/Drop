@@ -1,6 +1,8 @@
 name: Drop Mapbox integration checks
 
 on:
+  push:
+    branches: [feat/flutter-multi-stop-routes]
   pull_request:
     branches: [main]
     paths:
