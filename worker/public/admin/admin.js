@@ -571,27 +571,66 @@
   }
 
   // ---------- Ride options ----------
-  // ---------- Extra charges after a ride (shown on the Ride options page) ----------
+  // ---------- Extra charges: master switch, limits and the list of charge types (Extra charges page) ----------
   function extrasCard(root) {
-    var card = h("div", { class: "card" }, h("div", { class: "t", text: "Extra charges after the ride" }), h("p", { class: "muted", text: "A driver can add a toll, parking or waiting charge after a trip. The passenger approves and pays from their wallet or in cash." }));
+    var card = h("div", { class: "card" }, h("div", { class: "t", text: "Extra charges in the app" }), h("p", { class: "muted", text: "A driver can add a charge (fuel hike, toll, parking...) after accepting a ride, before arriving at the pickup. The passenger approves it and pays from the wallet or in cash. Switch it off and drivers no longer see the button." }));
     root.appendChild(card);
     api("GET", "/admin/extras-settings").then(function (r) {
-      var s = (r.body || {}).data || { enabled: true, max_percent: 20, commission_percent: 0, window_minutes: 10 };
+      var s = (r.body || {}).data || { enabled: true, max_percent: 20, window_minutes: 10 };
       var on = select([["1", "On"], ["0", "Off"]], s.enabled === false ? "0" : "1");
-      var max = num(String(s.max_percent), "20"), com = num(String(s.commission_percent), "0"), win = num(String(s.window_minutes), "10");
+      var max = num(String(s.max_percent), "20"), win = num(String(s.window_minutes), "10");
       var out = h("p", { class: "msg" });
-      card.appendChild(field("Extra charges", on));
-      card.appendChild(h("div", { class: "grid2" }, field("Maximum (% of the fare)", max, "Total extras on one trip cannot pass this."), field("DROP commission on extras (%)", com, "0 means the driver keeps all of it.")));
-      card.appendChild(field("Minutes for the passenger to answer", win, "Drivers add an extra after accepting, before arriving at pickup. 1 to 60."));
-      if (can("service_option edit")) {
+      card.appendChild(field("Extra charges feature", on));
+      card.appendChild(h("div", { class: "grid2" }, field("Maximum (% of the fare)", max, "Total extras on one trip cannot pass this."), field("Minutes for the passenger to answer", win, "1 to 60.")));
+      if (can("ride_extra edit")) {
         var save = h("button", { text: "Save", class: "small", style: "margin-top:10px" });
         save.addEventListener("click", function () {
           save.disabled = true;
-          api("PUT", "/admin/extras-settings", { enabled: on.value === "1", max_percent: nn(max), commission_percent: nn(com), window_minutes: nn(win) }).then(function (x) { save.disabled = false; if (x.ok) toast("Saved"); else msg(out, errText(x)); });
+          api("PUT", "/admin/extras-settings", { enabled: on.value === "1", max_percent: nn(max), window_minutes: nn(win) }).then(function (x) { save.disabled = false; if (x.ok) toast("Saved"); else msg(out, errText(x)); });
         });
         card.appendChild(save);
-      } else { on.disabled = true; max.disabled = true; com.disabled = true; win.disabled = true; }
+      } else { on.disabled = true; max.disabled = true; win.disabled = true; }
       card.appendChild(out);
+    });
+  }
+
+  function extraTypesCard(root) {
+    var card = h("div", { class: "card" }, h("div", { class: "t", text: "Charge types" }), h("p", { class: "muted", text: "What a driver can choose from. For each one: turn it on or off, choose whether DROP takes its commission on it, and optionally set the most a driver can charge. When commission is on, it uses the ride type's own commission rate and is added to the trip's commission." }));
+    root.appendChild(card);
+    api("GET", "/admin/extra-types").then(function (r) {
+      var list = (r.body || {}).data || [];
+      list.forEach(function (t) {
+        var row = h("div", { class: "row", style: "display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line,#eee);flex-wrap:wrap" });
+        row.appendChild(h("div", { style: "flex:1;min-width:150px" }, h("div", { class: "t", text: t.name }),
+          h("div", { class: "s", text: (t.active ? "On" : "Hidden") + " \u00B7 " + (t.take_commission ? "DROP takes commission" : "No commission") + " \u00B7 " + (t.max_amount ? "Max " + Number(t.max_amount).toLocaleString() : "No limit") })));
+        if (can("ride_extra edit")) {
+          var tog = h("button", { text: t.active ? "Hide" : "Show", class: "small secondary" });
+          tog.addEventListener("click", function () { api("PUT", "/admin/extra-types/" + t.id, { active: !t.active }).then(function (x) { if (x.ok) pageExtras(root.parentNode || root); else toast(errText(x), true); }); });
+          var com = h("button", { text: t.take_commission ? "Stop commission" : "Take commission", class: "small secondary" });
+          com.addEventListener("click", function () { api("PUT", "/admin/extra-types/" + t.id, { take_commission: !t.take_commission }).then(function (x) { if (x.ok) { toast("Saved"); pageExtras(root.parentNode || root); } else toast(errText(x), true); }); });
+          var ed = h("button", { text: "Edit", class: "small secondary" });
+          ed.addEventListener("click", function () {
+            var n = window.prompt("Name", t.name); if (n === null) return;
+            var m = window.prompt("Most a driver can charge for this (empty = no limit)", t.max_amount || ""); if (m === null) return;
+            api("PUT", "/admin/extra-types/" + t.id, { name: n, max_amount: m }).then(function (x) { if (x.ok) { toast("Saved"); pageExtras(root.parentNode || root); } else toast(errText(x), true); });
+          });
+          var del = h("button", { text: "Delete", class: "small danger" });
+          del.addEventListener("click", function () { confirmDo("Delete " + t.name + "? Past charges keep their name.", function () { api("DELETE", "/admin/extra-types/" + t.id).then(function (x) { if (x.ok) pageExtras(root.parentNode || root); else toast(errText(x), true); }); }); });
+          row.appendChild(tog); row.appendChild(com); row.appendChild(ed); row.appendChild(del);
+        }
+        card.appendChild(row);
+      });
+      if (!list.length) card.appendChild(h("div", { class: "empty", text: "No charge types yet. Drivers cannot add extra charges until you add one." }));
+      if (can("ride_extra edit")) {
+        var n = text("", "e.g. Airport fee"), mx = num("", "Limit (optional)"), cm = select([["0", "No commission"], ["1", "DROP takes commission"]], "0"), out = h("p", { class: "msg" });
+        var add = h("button", { text: "Add charge type", class: "small", style: "margin-top:10px" });
+        add.addEventListener("click", function () {
+          if (!n.value.trim()) return msg(out, "Enter a name.");
+          add.disabled = true;
+          api("POST", "/admin/extra-types", { name: n.value.trim(), take_commission: cm.value === "1", max_amount: mx.value }).then(function (x) { add.disabled = false; if (x.ok) { toast("Added"); pageExtras(root.parentNode || root); } else msg(out, errText(x)); });
+        });
+        card.appendChild(h("div", { style: "border-top:1px solid var(--line,#eee);margin-top:10px;padding-top:10px" }, h("div", { class: "t", text: "Add a charge type" }), field("Name", n), h("div", { class: "grid2" }, field("Commission", cm), field("Limit", mx)), add, out));
+      }
     });
   }
 
@@ -601,7 +640,6 @@
       var list = (r.body && r.body.data) || [];
       root.textContent = "";
       root.appendChild(head("Ride options", "Extras passengers can tick when booking, each with its own price."));
-      extrasCard(root);
       if (can("service_option add")) {
         var n = text("", "e.g. Roof rack"), p = num("", "Price (₦)"), out = h("p", { class: "msg" });
         var add = h("button", { text: "Add option", style: "width:100%;margin-top:14px" });
@@ -1087,7 +1125,8 @@
     api("GET", "/admin/extras?status=" + ex.status + "&page=" + ex.page).then(function (r) {
       var b = r.body || {}, list = b.data || [], pg = b.pagination || { page: 1, total_pages: 1, total: 0 };
       root.textContent = "";
-      root.appendChild(head("Extra charges", "Tolls, parking and waiting charges that drivers add after accepting a ride. Settings are under Ride options. Refund a paid one if there is a dispute: wallet money goes back to the passenger and is taken from the driver."));
+      root.appendChild(head("Extra charges", "Tolls, parking and waiting charges that drivers add after accepting a ride. Refund a paid one if there is a dispute: wallet money goes back to the passenger and is taken from the driver."));
+      var top = h("div"); root.appendChild(top); extrasCard(top); extraTypesCard(top);
       var tabs = h("div", { style: "display:flex;gap:8px;margin:12px 0;flex-wrap:wrap" });
       [["paid", "Paid"], ["pending", "Waiting"], ["declined", "Declined"], ["expired", "Expired"], ["cancelled", "Cancelled / refunded"]].forEach(function (t) {
         var bt = h("button", { text: t[1], class: "small" + (ex.status === t[0] ? "" : " secondary") });

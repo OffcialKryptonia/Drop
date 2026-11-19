@@ -694,7 +694,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
           const SizedBox(width: 12),
           Expanded(child: DropActionButton(label: 'SOS', icon: Icons.sos, danger: true, onPressed: () => showDropSos(context, rideId: (a['id'] as num?)?.toInt()))),
         ]),
-        if (status == 'accepted') ...[
+        if (status == 'accepted' && a['extras_enabled'] != false) ...[
           const SizedBox(height: 10),
           DropActionButton(
             label: 'Add extra charge',

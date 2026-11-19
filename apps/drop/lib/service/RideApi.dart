@@ -154,8 +154,8 @@ class RideApi {
   // ---- Extra charges after a trip (toll, parking, waiting) ----
 
   /// Driver: add an extra charge to a finished trip. The passenger is asked to approve it.
-  static Future<Map<String, dynamic>> proposeExtra(int rideId, {required String kind, required double amount, String? note}) =>
-      _post('driver/rides/$rideId/extras', {'kind': kind, 'amount': amount, if (note != null && note.isNotEmpty) 'note': note});
+  static Future<Map<String, dynamic>> proposeExtra(int rideId, {required int typeId, required double amount, String? note}) =>
+      _post('driver/rides/$rideId/extras', {'type_id': typeId, 'amount': amount, if (note != null && note.isNotEmpty) 'note': note});
 
   /// Driver: extras on a trip, whether one can still be added, and how much more is allowed.
   static Future<Map<String, dynamic>> driverExtras(int rideId) => _get('driver/rides/$rideId/extras');

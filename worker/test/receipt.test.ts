@@ -27,6 +27,13 @@ const tests: [string, () => void][] = [
     assert.equal(d.collect_cash, true);
     assert.equal(d.cash_extras, 400);
   }],
+  ["admin-named charge shows its label and its commission joins the trip commission", () => {
+    const x = [{ kind: "fuel_hike", label: "Fuel hike", amount: "500.00", status: "paid", paid_with: "wallet", commission: "75.00" }];
+    const d = driverReceipt(ride, x);
+    assert.equal(d.commission, 375);
+    assert.equal(d.earning, 2125);
+    assert.ok(d.lines.map((l) => l.label).includes("Fuel hike"));
+  }],
   ["without extras nothing changes", () => {
     const d = driverReceipt(ride);
     assert.equal(d.earning, 1700);
