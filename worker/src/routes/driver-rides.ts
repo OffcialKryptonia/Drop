@@ -9,7 +9,7 @@ import { driverOnlineBlock, requireApprovedDriver } from "../lib/roles";
 import { getSetting } from "../lib/driver-application";
 import { voidExtrasForRide } from "../lib/extras";
 import { extraTypes, extrasSettings } from "../lib/extras";
-import { driverPickupFlags, pickupSettings, startAllowedSql, verifyPickup } from "../lib/pickup";
+import { driverPickupFlags, issuePickupCode, pickupSettings, startAllowedSql, verifyPickup } from "../lib/pickup";
 import { completeRide } from "../lib/ride-settlement";
 import { pushLater, pushRideEvent } from "../lib/push";
 
@@ -141,6 +141,13 @@ driverRideRoutes.post("/driver/requests/:id/accept", ...mw, async (c) => {
       return c.json({ status: false, code: "request_gone", message: "This request is no longer available." }, 409);
     }
     await db.query("update app.users set is_available = false where id = $1", [me.id]);
+    try {
+      await db.query("savepoint pickup");
+      await issuePickupCode(db, c.env.SETTINGS_ENCRYPTION_KEY, id);
+    } catch (err) {
+      await db.query("rollback to savepoint pickup");
+      console.error("pickup code not issued", (err as Error).message);
+    }
     await db.query("commit");
     pushLater(c, pushRideEvent(db, c.env, Number(r.rows[0].rider_id), "accepted", id));
   } catch (e) {
