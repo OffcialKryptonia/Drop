@@ -827,7 +827,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
                 _roundButton(Icons.menu, () => _scaffoldKey.currentState?.openDrawer()),
                 const SizedBox(width: 10),
                 if (pinning) Expanded(child: _searchBar()),
-                if (pinning) ...[const SizedBox(width: 10), _roundButton(Icons.arrow_back, () => setState(() { pinMode = false; pinForPickup = false; }))],
+                if (pinning) ...[const SizedBox(width: 10), _roundButton(Icons.arrow_back, () => setState(() { pinMode = false; pinForPickup = false; pinForStop = false; }))],
                 if (phase == _Phase.choose) _roundButton(Icons.arrow_back, () => setState(() => phase = _Phase.plan)),
               ]),
               if (home)
