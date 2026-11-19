@@ -216,19 +216,30 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     final drop = _ll(a['dropoff']);
     final me = myPos;
     final toPickup = (a['status'] == 'accepted' || a['status'] == 'arrived') && me != null;
-    final nextStop = _nextStop(a);
-    final LatLng from = toPickup ? me! : pick;
-    final LatLng to = toPickup ? pick : (nextStop == null ? drop : LatLng(_num(nextStop['lat']), _num(nextStop['lng'])));
-    final key = '${a['id']}:${toPickup ? 'toPickup' : (nextStop == null ? 'dropoff' : 'stop-${nextStop['id']}')}';
+    final waypoints = <LatLng>[toPickup ? me! : pick];
+    if (toPickup) {
+      waypoints.add(pick);
+    } else {
+      for (final stop in _stops(a)) {
+        if (stop['status'] != 'completed') waypoints.add(LatLng(_num(stop['lat']), _num(stop['lng'])));
+      }
+      waypoints.add(drop);
+    }
+    final key = '${a['id']}:${toPickup ? 'toPickup' : waypoints.length > 2 ? 'stops' : 'trip'}';
     final moved = toPickup && _routeFrom != null && RouteGeometry.meters(_routeFrom!, me!) > 250;
     if (key == _routeKey && !moved) return;
     final changed = key != _routeKey;
     _routeKey = key;
-    _routeFrom = from;
+    _routeFrom = waypoints.first;
     if (changed) setState(() => _routeFull = const []);
-    RouteLineApi.fetch(from, to).then((pts) {
-      if (mounted && _routeKey == key) setState(() => _routeFull = pts);
-    });
+    () async {
+      final all = <LatLng>[];
+      for (var i = 0; i < waypoints.length - 1; i++) {
+        final segment = await RouteLineApi.fetch(waypoints[i], waypoints[i + 1]);
+        if (segment.isNotEmpty) all.addAll(all.isEmpty ? segment : segment.skip(1));
+      }
+      if (mounted && _routeKey == key) setState(() => _routeFull = all);
+    }();
   }
 
   /// Which way the vehicle faces: the phone's heading when moving, else the direction of the last movement.
@@ -368,9 +379,10 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     final a = active;
     if (a == null || a['status'] != 'in_progress') return;
     final id = (a['id'] as num?)?.toInt();
-    final drop = _ll(a['dropoff']);
+    final nextStop = _nextStop(a);
+    final target = nextStop == null ? _ll(a['dropoff']) : LatLng(_num(nextStop['lat']), _num(nextStop['lng']));
     if (id == null || _arrivedFor == id) return;
-    if (Geolocator.distanceBetween(here.latitude, here.longitude, drop.latitude, drop.longitude) <= 80) {
+    if (Geolocator.distanceBetween(here.latitude, here.longitude, target.latitude, target.longitude) <= 80) {
       _arrivedFor = id;
       ToneService.play(ToneEvent.driverArrived);
     }
