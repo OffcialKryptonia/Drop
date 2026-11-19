@@ -11,6 +11,13 @@ const call = async (method, path, token, body) => {
   const r = await fetch(API + path, { method, headers: { Accept: "application/json", ...(body ? { "Content-Type": "application/json" } : {}), ...(token ? { Authorization: "Bearer " + token } : {}) }, body: body ? JSON.stringify(body) : undefined });
   return { status: r.status, json: await r.json().catch(() => ({})) };
 };
+// Pickup code: the passenger's app shows it, the driver types it, then the trip can start.
+const verifyPickup = async (rideId, d, P) => {
+  const cur = await call("GET", "/ride/current", P.api_token);
+  const code = cur.json.data?.pickup_code?.code;
+  if (!code) return null; // ride from before pickup codes
+  return call("POST", `/driver/rides/${rideId}/verify-pickup`, d.T, { code });
+};
 const s = Math.random().toString(36).slice(2, 8);
 const phone = () => "0803" + Math.floor(1000000 + Math.random() * 8999999);
 const reg = async (type, tag) => (await call("POST", "/register", null, { first_name: "M", last_name: tag + s, email: `${tag}${s}@x.com`, username: `${tag}${s}`, password: "secret123", user_type: type, contact_number: phone() })).json.data;
@@ -52,6 +59,17 @@ try {
   ok("another driver cannot mark arrival", (await call("POST", `/driver/rides/${r.id}/arrived`, d2.T)).status === 409);
   ok("arrived", (await call("POST", `/driver/rides/${r.id}/arrived`, d.T)).json.data?.status === "arrived");
   ok("passenger sees arrived", (await call("GET", "/ride/current", P.api_token)).json.data?.status === "arrived");
+  const blocked = await call("POST", `/driver/rides/${r.id}/start`, d.T);
+  ok("cannot start without the pickup code", blocked.status === 409 && blocked.json.code === "pickup_not_verified", JSON.stringify(blocked.json));
+  const shown = (await call("GET", "/ride/current", P.api_token)).json.data?.pickup_code;
+  ok("passenger sees a 4-digit pickup code", /^\d{4}$/.test(shown?.code ?? ""), JSON.stringify(shown));
+  ok("driver response never contains the code", !JSON.stringify((await call("GET", "/driver/requests", d.T)).json).includes(shown?.code ? `"${shown.code}"` : "no-code"));
+  const wrong = String((Number(shown.code) + 1) % 10000).padStart(4, "0");
+  const bad = await call("POST", `/driver/rides/${r.id}/verify-pickup`, d.T, { code: wrong });
+  ok("wrong code rejected", bad.status === 422 && bad.json.code === "wrong_code", JSON.stringify(bad.json));
+  ok("other driver cannot verify", (await call("POST", `/driver/rides/${r.id}/verify-pickup`, d2.T, { code: shown.code })).status === 409);
+  ok("correct code accepted", (await call("POST", `/driver/rides/${r.id}/verify-pickup`, d.T, { code: shown.code })).json.status === true);
+  ok("code reused after verify is harmless and the code is hidden", (await call("GET", "/ride/current", P.api_token)).json.data?.pickup_code?.verified === true);
   ok("started", (await call("POST", `/driver/rides/${r.id}/start`, d.T)).json.data?.status === "in_progress");
   const tr = await call("POST", "/ride/cancel", P.api_token, {});
   ok("passenger cannot cancel a started trip", tr.status === 409 && tr.json.code === "trip_in_progress");
@@ -71,7 +89,7 @@ try {
   await db.query("insert into app.wallets (user_id, kind, balance) values ($1,'rider',5000) on conflict (user_id, kind) do update set balance = 5000", [P.id]);
   r = await book("wallet");
   const dw0 = await bal(d.id, "driver");
-  await call("POST", `/driver/requests/${r.id}/accept`, d.T); await call("POST", `/driver/rides/${r.id}/arrived`, d.T); await call("POST", `/driver/rides/${r.id}/start`, d.T);
+  await call("POST", `/driver/requests/${r.id}/accept`, d.T); await call("POST", `/driver/rides/${r.id}/arrived`, d.T); await verifyPickup(r.id, d, P); await call("POST", `/driver/rides/${r.id}/start`, d.T);
   const dw = await call("POST", `/driver/rides/${r.id}/complete`, d.T);
   const f2 = Number(r.fare), c2 = Math.round(f2 * 10) / 100;
   ok("wallet trip paid from rider wallet", dw.json.data?.paid_with === "wallet" && dw.json.data.collect_cash === false && Math.abs((await bal(P.id, "rider")) - (5000 - f2)) < 0.011, JSON.stringify(dw.json));
@@ -79,7 +97,7 @@ try {
 
   // --- wallet trip but rider's money is gone -> settled as cash ---
   r = await book("wallet");
-  await call("POST", `/driver/requests/${r.id}/accept`, d.T); await call("POST", `/driver/rides/${r.id}/arrived`, d.T); await call("POST", `/driver/rides/${r.id}/start`, d.T);
+  await call("POST", `/driver/requests/${r.id}/accept`, d.T); await call("POST", `/driver/rides/${r.id}/arrived`, d.T); await verifyPickup(r.id, d, P); await call("POST", `/driver/rides/${r.id}/start`, d.T);
   await db.query("update app.wallets set balance = 0 where user_id = $1 and kind = 'rider'", [P.id]);
   const fb = await call("POST", `/driver/rides/${r.id}/complete`, d.T);
   ok("empty rider wallet falls back to cash", fb.json.data?.paid_with === "cash" && fb.json.data.collect_cash === true, JSON.stringify(fb.json));

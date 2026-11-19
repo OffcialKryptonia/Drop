@@ -1,3 +1,4 @@
+import { riderPickupView } from "../lib/pickup";
 import { voidExtrasForRide } from "../lib/extras";
 import { etaSettings, rideEta } from "../lib/eta";
 import { riderReceipt } from "../lib/receipt";
@@ -203,7 +204,9 @@ rideRoutes.get("/ride/current", ...mw, async (c) => {
   const row = await currentOf(c);
   const data = row ? ride(row) : null;
   if (data && !(await etaSettings(c.get("db"))).rider) data.eta = null;
-  return c.json({ status: true, data });
+  // The passenger's pickup code (shown to them only, never to the driver), until the driver has verified it.
+  const pickup = data ? await riderPickupView(c.get("db"), c.env.SETTINGS_ENCRYPTION_KEY, data.id, String(data.status)) : null;
+  return c.json({ status: true, data: data ? { ...data, pickup_code: pickup } : null });
 });
 
 /** Cancel the open request. After a driver has accepted, a late cancellation can cost the ride type's cancellation fee. */

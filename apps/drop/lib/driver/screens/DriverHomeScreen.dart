@@ -5,6 +5,7 @@ import 'package:drop/service/DriverApplicationApi.dart';
 import 'package:drop/drop/design/drop_design.dart';
 import 'package:drop/drop/widgets/drop_eta.dart';
 import 'package:drop/drop/widgets/drop_extras.dart';
+import 'package:drop/drop/widgets/drop_pickup.dart';
 import 'package:drop/drop/widgets/drop_money.dart';
 import 'package:drop/drop/widgets/drop_ride_ui.dart';
 import 'package:drop/driver/screens/DriverNavigationScreen.dart';
@@ -655,7 +656,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     final pillText = status == 'accepted' ? 'Heading to pickup' : (status == 'arrived' ? 'Waiting for passenger' : 'Trip in progress');
     final pillColor = status == 'in_progress' ? DropColors.success : DropColors.primary;
     final pillIcon = status == 'accepted' ? Icons.navigation : (status == 'arrived' ? Icons.hourglass_top : Icons.directions_car);
-    final primaryLabel = status == 'accepted' ? 'I have arrived' : (status == 'arrived' ? 'Start trip' : 'Complete trip');
+    final needsCode = status == 'arrived' && a['pickup_required'] == true;
+    final primaryLabel = status == 'accepted' ? 'I have arrived' : (status == 'arrived' ? (needsCode ? 'Verify pickup code' : 'Start trip') : 'Complete trip');
     return DropSheet(
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Row(children: [
@@ -714,7 +716,13 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
               : () {
                   final id = (a['id'] as num).toInt();
                   if (status == 'accepted') _rideAction(() => RideApi.arrived(id));
-                  if (status == 'arrived') _rideAction(() => RideApi.start(id));
+                  if (status == 'arrived' && needsCode) {
+                    showDropVerifyPickupSheet(context, rideId: id).then((ok) {
+                      if (ok) _rideAction(() => RideApi.start(id), thenSay: 'Pickup verified. Trip started.');
+                    });
+                  } else if (status == 'arrived') {
+                    _rideAction(() => RideApi.start(id));
+                  }
                   if (status == 'in_progress') _complete(a);
                 },
         ),
