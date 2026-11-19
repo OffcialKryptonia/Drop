@@ -247,8 +247,11 @@ driverRideRoutes.post("/driver/rides/:id/cancel", ...mw, async (c) => {
 /** The driver's finished trips with what they earned. */
 driverRideRoutes.get("/driver/rides/history", ...mw, async (c) => {
   const rows = (await c.get("db").query(
-    `select id, status, fare, commission, paid_with, pickup_address, dropoff_address, distance, distance_unit, completed_at, cancellation_fee
-       from app.ride_requests where driver_id = $1 and status = 'completed' order by id desc limit 50`, [c.get("user").id])).rows;
+    `select r.id, r.status, r.fare, r.commission, r.paid_with, r.pickup_address, r.dropoff_address, r.distance, r.distance_unit, r.completed_at, r.cancellation_fee,
+            coalesce((select jsonb_agg(jsonb_build_object('id', st.id, 'sequence', st.sequence, 'lat', st.lat, 'lng', st.lng,
+              'address', st.address, 'status', st.status, 'arrived_at', st.arrived_at, 'completed_at', st.completed_at) order by st.sequence)
+              from app.ride_request_stops st where st.ride_request_id = r.id), '[]'::jsonb) as stops
+       from app.ride_requests r where r.driver_id = $1 and r.status = 'completed' order by r.id desc limit 50`, [c.get("user").id])).rows;
   return c.json({ status: true, data: rows.map((r) => ({ ...r, id: Number(r.id), fare: Number(r.fare), commission: Number(r.commission), earning: Math.round((Number(r.fare) - Number(r.commission)) * 100) / 100 })) });
 });
 
