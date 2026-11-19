@@ -257,7 +257,10 @@ driverRideRoutes.get("/driver/rides/:id/receipt", ...mw, async (c) => {
   const id = Number(c.req.param("id"));
   if (!Number.isInteger(id) || id <= 0) return c.json({ status: false, message: "Trip not found." }, 404);
   const row = (await c.get("db").query(
-    `select r.*, s.name as service_name, u.first_name as rider_first_name
+    `select r.*, s.name as service_name, u.first_name as rider_first_name,
+              coalesce((select jsonb_agg(jsonb_build_object('id', st.id, 'sequence', st.sequence, 'lat', st.lat, 'lng', st.lng,
+                'address', st.address, 'status', st.status, 'arrived_at', st.arrived_at, 'completed_at', st.completed_at) order by st.sequence)
+                from app.ride_request_stops st where st.ride_request_id = r.id), '[]'::jsonb) as stops
        from app.ride_requests r join app.services s on s.id = r.service_id join app.users u on u.id = r.rider_id
       where r.id = $1 and r.driver_id = $2 and r.status = 'completed'`, [id, c.get("user").id])).rows[0];
   if (!row) return c.json({ status: false, message: "No receipt for this trip yet." }, 404);
