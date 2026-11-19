@@ -183,7 +183,7 @@ class _DropRouteScreenState extends State<DropRouteScreen> {
     _toFocus.requestFocus();
   }
 
-  Widget _field({required TextEditingController c, required FocusNode f, required String label, required IconData icon, Widget? trailing, bool autofocus = false}) {
+  Widget _field({required TextEditingController c, required FocusNode f, required String label, required IconData icon, Widget? trailing, bool autofocus = false, bool readOnly = false}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: BoxDecoration(color: const Color(0xFFF1F0EC), borderRadius: BorderRadius.circular(14)),
@@ -195,7 +195,8 @@ class _DropRouteScreenState extends State<DropRouteScreen> {
             controller: c,
             focusNode: f,
             autofocus: autofocus,
-            onChanged: _onChanged,
+            readOnly: readOnly,
+            onChanged: readOnly ? null : _onChanged,
             textInputAction: TextInputAction.search,
             style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
             decoration: InputDecoration(labelText: label, border: InputBorder.none, floatingLabelBehavior: FloatingLabelBehavior.always, labelStyle: TextStyle(color: Colors.grey.shade700, fontSize: 15)),
@@ -342,7 +343,8 @@ class _DropRouteScreenState extends State<DropRouteScreen> {
               f: _fromFocus,
               label: 'From',
               icon: Icons.my_location,
-              trailing: IconButton(
+              readOnly: widget.selectionLabel == 'Stop',
+              trailing: widget.selectionLabel == 'Stop' ? null : IconButton(
                 icon: const Icon(Icons.map_outlined),
                 tooltip: 'Set pickup on the map',
                 onPressed: () => Navigator.pop(context, DropRouteResult('mapFrom', pickup: _pickupChanged ? _pickup : null, pickupAddress: _pickupChanged ? _pickupAddress : null)),
