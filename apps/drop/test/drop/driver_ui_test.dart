@@ -1,5 +1,6 @@
 import 'package:drop/drop/widgets/drop_eta.dart';
 import 'package:drop/drop/widgets/drop_extras.dart';
+import 'package:drop/drop/widgets/drop_pickup.dart';
 import 'package:drop/drop/widgets/drop_money.dart';
 import 'package:drop/drop/widgets/drop_ride_ui.dart';
 import 'package:flutter/material.dart';
@@ -120,4 +121,27 @@ void extraTests() {
       expect(dropExtraLabel({'kind': 'fuel_hike', 'label': 'Fuel hike'}), 'Fuel hike');
     });
   }
+
+  group('pickup code', () {
+    testWidgets('passenger card shows each digit', (t) async {
+      await t.pumpWidget(const MaterialApp(home: Scaffold(body: DropPickupCodeCard(code: '4827'))));
+      for (final d in ['4', '8', '2', '7']) {
+        expect(find.text(d), findsOneWidget);
+      }
+      expect(find.textContaining('Do not share it'), findsOneWidget);
+    });
+
+    testWidgets('driver sheet asks for four digits before calling the server', (t) async {
+      await t.pumpWidget(MaterialApp(
+        home: Scaffold(body: Builder(builder: (c) => TextButton(onPressed: () => showDropVerifyPickupSheet(c, rideId: 1), child: const Text('open')))),
+      ));
+      await t.tap(find.text('open'));
+      await t.pumpAndSettle();
+      expect(find.text('Verify passenger'), findsOneWidget);
+      expect(find.byType(TextField), findsNWidgets(4));
+      await t.tap(find.text('Verify pickup'));
+      await t.pump();
+      expect(find.text('Enter all four digits.'), findsOneWidget);
+    });
+  });
 }
