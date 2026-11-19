@@ -149,7 +149,7 @@ driverRideRoutes.post("/driver/requests/:id/accept", ...mw, async (c) => {
     throw e;
   }
   const active = await activeOf(c);
-  return c.json({ status: true, data: active ? request(active, await ruleOf(c, active.service_id)) : null });
+  return c.json({ status: true, data: active ? await shapeActive(c, active) : null });
 });
 
 /** Not interested: the request is hidden from this driver only. */
@@ -190,7 +190,7 @@ async function step(c: C, from: string, to: string, stamp: string) {
 /** Driver types the passenger's four-digit pickup code. The server never sends the correct code to the driver app. */
 driverRideRoutes.post("/driver/rides/:id/verify-pickup", ...mw, async (c) => {
   const code = String((await readBody(c)).code ?? "").trim();
-  if (!/^\\d{4}$/.test(code)) return c.json({ status: false, code: "bad_format", message: "Enter the four-digit code." }, 422);
+  if (!/^\d{4}$/.test(code)) return c.json({ status: false, code: "bad_format", message: "Enter the four-digit code." }, 422);
   const result = await verifyPickup(c.get("db"), idOf(c), c.get("user").id, code);
   if (!result.ok) return c.json({ status: false, code: result.code, message: result.message, attempts_left: result.attempts_left ?? null, retry_after_seconds: result.retry_after_seconds ?? null }, result.code === "wrong_state" ? 409 : 422);
   const active = await activeOf(c);
@@ -217,7 +217,7 @@ driverRideRoutes.post("/driver/rides/:id/stops/:stopId/arrived", ...mw, async (c
   );
   if (!result.rowCount) return c.json({ status:false, code:"stop_out_of_order", message:"Complete the previous stop before arriving at this one." },409);
   const active = await activeOf(c);
-  return c.json({ status:true, data: active ? request(active, await ruleOf(c, active.service_id)) : null });
+  return c.json({ status:true, data: active ? await shapeActive(c, active) : null });
 });
 driverRideRoutes.post("/driver/rides/:id/stops/:stopId/complete", ...mw, async (c) => {
   const rideId = idOf(c), stopId = Number(c.req.param("stopId")), db = c.get("db"), driverId = c.get("user").id;
