@@ -24,14 +24,18 @@ const reg = async (type, tag) => (await call("POST", "/register", null, { first_
 const A = (await call("POST", "/login", null, { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, user_type: "admin" })).json.data?.api_token;
 
 const was = (await db.query("select id from app.regions where status")).rows.map((r) => r.id);
-await db.query("update app.regions set status = false where status");
-const region = (await db.query("insert into app.regions (name, distance_unit, status, timezone, boundary) values ($1,'km',true,'Africa/Lagos', extensions.st_geogfromtext('POLYGON((7 8.8, 7.8 8.8, 7.8 9.4, 7 9.4, 7 8.8))')) returning id", ["MatchTest" + s])).rows[0].id;
-const mk = async (n) => (await db.query(
-  `insert into app.services (name, region_id, capacity, base_fare, minimum_fare, minimum_distance, per_distance, per_minute_drive, cancellation_fee, commission_type, admin_commission, status, payment_methods, booking_modes, sort_order)
-   values ($1,$2,4,500,800,2,100,10,300,'percentage',10,true,array['cash','wallet'],array['now'],0) returning id`, [n + s, region])).rows[0].id;
-const svc = await mk("Car");
-const trip = { pickup: { lat: 9.0765, lng: 7.3986, address: "Wuse" }, dropoff: { lat: 9.0579, lng: 7.4951, address: "Gwarinpa" }, service_id: Number(svc), payment_method: "cash" };
+let region, svc, oldMin;
 const ids = [];
+try {
+  // All state-changing setup is inside the cleanup guard. If setup fails halfway,
+  // finally still restores the original active regions and removes partial fixtures.
+  await db.query("update app.regions set status = false where status");
+  region = (await db.query("insert into app.regions (name, distance_unit, status, timezone, boundary) values ($1,'km',true,'Africa/Lagos', extensions.st_geogfromtext('POLYGON((7 8.8, 7.8 8.8, 7.8 9.4, 7 9.4, 7 8.8))')) returning id", ["MatchTest" + s])).rows[0].id;
+  const mk = async (n) => (await db.query(
+    `insert into app.services (name, region_id, capacity, base_fare, minimum_fare, minimum_distance, per_distance, per_minute_drive, cancellation_fee, commission_type, admin_commission, status, payment_methods, booking_modes, sort_order)
+     values ($1,$2,4,500,800,2,100,10,300,'percentage',10,true,array['cash','wallet'],array['now'],0) returning id`, [n + s, region])).rows[0].id;
+  svc = await mk("Car");
+  const trip = { pickup: { lat: 9.0765, lng: 7.3986, address: "Wuse" }, dropoff: { lat: 9.0579, lng: 7.4951, address: "Gwarinpa" }, service_id: Number(svc), payment_method: "cash" };
 const driver = async (tag) => {
   const D = await reg("driver", tag); ids.push(D.id);
   await db.query("update app.driver_profiles set status = 'approved', service_id = $2 where user_id = $1", [D.id, svc]);
@@ -42,8 +46,7 @@ const driver = async (tag) => {
   return { id: D.id, T };
 };
 const bal = async (id, kind) => Number((await db.query("select balance from app.wallets where user_id = $1 and kind = $2", [id, kind])).rows[0]?.balance ?? 0);
-const oldMin = (await db.query("select value from app.settings where key = 'driver_min_wallet_balance'")).rows[0]?.value;
-try {
+oldMin = (await db.query("select value from app.settings where key = 'driver_min_wallet_balance'")).rows[0]?.value;
   await call("PUT", "/admin/wallet-settings", A, { driver_min_wallet_balance: 0 });
   const P = await reg("rider", "pax"); ids.push(P.id);
   const d = await driver("dx"), d2 = await driver("dy");
@@ -161,9 +164,11 @@ try {
   ok("late cancel charges only what the wallet has", cx.json.cancellation_fee === 100, JSON.stringify(cx.json));
 } finally {
   if (oldMin !== undefined) await db.query("update app.settings set value = $1::jsonb where key = 'driver_min_wallet_balance'", [JSON.stringify(oldMin)]);
-  await db.query("delete from app.ride_requests where service_id = $1", [svc]);
-  await db.query("delete from app.services where id = $1", [svc]);
-  await db.query("delete from app.regions where id = $1", [region]);
+  if (svc !== undefined) {
+    await db.query("delete from app.ride_requests where service_id = $1", [svc]);
+    await db.query("delete from app.services where id = $1", [svc]);
+  }
+  if (region !== undefined) await db.query("delete from app.regions where id = $1", [region]);
   await db.query("update app.regions set status = true where id = any($1)", [was]);
   for (const id of ids) await db.query("delete from app.users where id = $1", [id]).catch(() => {});
 }
