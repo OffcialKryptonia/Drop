@@ -775,7 +775,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
     } else if (pickup != null) {
       out.add(DropMarker(id: 'pickup', title: 'Pickup', color: Colors.green, point: pickup!));
       if (phase == _Phase.choose) out.add(DropMarker(id: 'drop', title: 'Drop-off', color: Colors.red, point: center));
-      if (phase == _Phase.choose) {
+      if (phase == _Phase.plan || phase == _Phase.choose) {
         for (var i = 0; i < additionalStops.length; i++) {
           final stop = additionalStops[i];
           out.add(DropMarker(id: 'stop-${i + 1}', title: 'Stop ${i + 1}', color: Colors.orange, point: LatLng(_d(stop['lat']), _d(stop['lng']))));
