@@ -1217,6 +1217,8 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
       if (done) ...[
         const SizedBox(height: 6),
         Text('${_m(f['pickup'])['address'] ?? ''}  →  ${_m(f['dropoff'])['address'] ?? ''}', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+        for (final stop in _l(f['stops']).map(_m))
+          Padding(padding: const EdgeInsets.only(top: 4), child: Text('Stop ${stop['sequence']}: ${stop['address'] ?? 'Additional stop'}', style: TextStyle(color: Colors.grey.shade600, fontSize: 12))),
       ],
       if (done && f['id'] != null) ...[
         const SizedBox(height: 12),
