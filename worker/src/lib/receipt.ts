@@ -21,6 +21,7 @@ const trip = (r: Row) => ({
   duration_minutes: Number(r.duration_minutes),
   currency: currencyInfo(r.currency as string),
   paid_with: r.paid_with ?? r.payment_method ?? null,
+  stops: Array.isArray(r.stops) ? r.stops : [],
 });
 
 /** The fare as lines a person can read: base, distance and time, or the minimum fare, plus chosen extras. */
