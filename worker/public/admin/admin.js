@@ -106,6 +106,7 @@
     { id: "transfers", label: "Wallet transfers", group: "Financial", perm: "wallet_transfer list", render: pageTransfers },
     { id: "paymyride", label: "PayMyRide", group: "Financial", perm: "paymyride list", render: pagePayMyRide },
     { id: "payouts", label: "Driver payouts", group: "Financial", perm: "payout list", render: pagePayouts },
+    { id: "pickup", label: "Pickup codes", group: "Operations", perm: "pickup_code list", render: pagePickup },
     { id: "extras", label: "Extra charges", group: "Operations", perm: "ride_extra list", render: pageExtras },
     { id: "sos", label: "SOS alerts", group: "Safety", perm: "sos list", render: pageSos },
     { id: "complaints", label: "Complaints", group: "Safety", perm: "complaint list", render: pageComplaints },
@@ -1119,6 +1120,54 @@
   }
 
   // ---------- SOS alerts and complaints ----------
+  function pagePickup(root) {
+    loading(root);
+    root.textContent = "";
+    root.appendChild(head("Pickup codes", "The passenger sees a 4-digit code once a driver accepts. The driver must type it before the trip can start, so the right person gets in the right car. Codes are never shown to admins or drivers."));
+    var card = h("div", { class: "card" }, h("div", { class: "t", text: "Settings" }));
+    root.appendChild(card);
+    api("GET", "/admin/pickup-settings").then(function (r) {
+      var s = (r.body || {}).data || { enabled: true, expiry_minutes: 180, max_attempts: 5, lock_minutes: 10 };
+      var on = select([["1", "On"], ["0", "Off"]], s.enabled === false ? "0" : "1");
+      var ex = num(String(s.expiry_minutes), "180"), at = num(String(s.max_attempts), "5"), lk = num(String(s.lock_minutes), "10"), out = h("p", { class: "msg" });
+      card.appendChild(field("Require the pickup code", on, "When off, drivers start trips without a code."));
+      card.appendChild(h("div", { class: "grid2" }, field("Code valid for (minutes)", ex, "10 to 720."), field("Wrong tries before lock", at, "3 to 10.")));
+      card.appendChild(field("Lock time after too many wrong tries (minutes)", lk, "1 to 120. After three locks only an admin can authorise the trip."));
+      if (can("pickup_code edit")) {
+        var save = h("button", { text: "Save", class: "small", style: "margin-top:10px" });
+        save.addEventListener("click", function () {
+          save.disabled = true;
+          api("PUT", "/admin/pickup-settings", { enabled: on.value === "1", expiry_minutes: nn(ex), max_attempts: nn(at), lock_minutes: nn(lk) }).then(function (x) { save.disabled = false; if (x.ok) toast("Saved"); else msg(out, errText(x)); });
+        });
+        card.appendChild(save);
+      } else { on.disabled = true; ex.disabled = true; at.disabled = true; lk.disabled = true; }
+      card.appendChild(out);
+    });
+    var live = h("div", { class: "card" }, h("div", { class: "t", text: "Rides waiting for pickup" }));
+    root.appendChild(live);
+    api("GET", "/admin/pickup-rides").then(function (r) {
+      var list = (r.body || {}).data || [];
+      if (!list.length) live.appendChild(h("div", { class: "empty", text: "No rides are waiting for pickup." }));
+      list.forEach(function (x) {
+        var state = x.overridden ? "Authorised by admin" : x.verified ? "Code verified" : !x.has_code ? "No code (older ride)" : x.locked ? "Locked after wrong tries" : "Waiting for code" + (x.failed ? " \u00B7 " + x.failed + " wrong" : "");
+        var row = h("div", { class: "row", style: "padding:10px 0;border-top:1px solid var(--line,#eee)" },
+          h("div", { class: "t", text: "Trip #" + x.id + " \u00B7 " + x.status + " \u00B7 " + state }),
+          h("div", { class: "s", text: "Driver: " + (x.driver || "") + " \u00B7 Passenger: " + (x.passenger || "") + (x.booking_source === "admin" ? " \u00B7 booked by admin" : "") }),
+          h("div", { class: "s", text: x.pickup || "" }));
+        if (x.has_code && !x.verified && !x.overridden && can("pickup_code edit")) {
+          var bt = h("button", { text: "Authorise start without code", class: "small secondary", style: "margin-top:8px" });
+          bt.addEventListener("click", function () {
+            confirmDo("Let the driver start trip #" + x.id + " without the pickup code? Use this only if you have confirmed the passenger by other means. This is recorded.", function () {
+              api("POST", "/admin/pickup-rides/" + x.id + "/override", {}).then(function (z) { toast(z.ok ? z.body.message : errText(z), !z.ok); if (z.ok) pagePickup(root); });
+            });
+          });
+          row.appendChild(bt);
+        }
+        live.appendChild(row);
+      });
+    });
+  }
+
   var ex = { status: "paid", page: 1 };
   function pageExtras(root) {
     loading(root);
