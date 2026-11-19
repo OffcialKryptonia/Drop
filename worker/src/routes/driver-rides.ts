@@ -218,8 +218,12 @@ driverRideRoutes.post("/driver/rides/:id/complete", ...mw, async (c) => {
   if (remaining > 0) return c.json({ status:false, code:"stops_remaining", message:"Complete every additional stop before ending this trip." },409);
   const done = await completeRide(c.get("db"), idOf(c), c.get("user").id);
   if (!done) return notYours(c);
+  const stops = (await c.get("db").query(
+    "select id, sequence, lat, lng, address, status, arrived_at, completed_at from app.ride_request_stops where ride_request_id = $1 order by sequence",
+    [idOf(c)],
+  )).rows;
   pushLater(c, pushRideEvent(c.get("db"), c.env, Number(done.rider_id), "completed", Number(done.id), { fare: done.fare, currency: done.currency }));
-  return c.json({ status: true, data: { id: Number(done.id), status: done.status, fare: Number(done.fare), commission: Number(done.commission), earning: Math.round((Number(done.fare) - Number(done.commission)) * 100) / 100, paid_with: done.paid_with, collect_cash: done.paid_with === "cash" } });
+  return c.json({ status: true, data: { id: Number(done.id), status: done.status, fare: Number(done.fare), commission: Number(done.commission), earning: Math.round((Number(done.fare) - Number(done.commission)) * 100) / 100, paid_with: done.paid_with, collect_cash: done.paid_with === "cash", stops } });
 });
 
 /** Driver backs out before the trip starts: the request goes back to other drivers (not this one). No fee for the passenger. */
