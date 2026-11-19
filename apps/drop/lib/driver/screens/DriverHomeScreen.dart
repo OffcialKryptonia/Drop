@@ -225,7 +225,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
       }
       waypoints.add(drop);
     }
-    final key = '${a['id']}:${toPickup ? 'toPickup' : waypoints.length > 2 ? 'stops' : 'trip'}';
+    final key = '${a['id']}:${toPickup ? 'toPickup' : 'trip'}:${waypoints.map((p) => '${p.latitude.toStringAsFixed(5)},${p.longitude.toStringAsFixed(5)}').join('|')}';
     final moved = toPickup && _routeFrom != null && RouteGeometry.meters(_routeFrom!, me!) > 250;
     if (key == _routeKey && !moved) return;
     final changed = key != _routeKey;
@@ -669,6 +669,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
         ]),
         const SizedBox(height: 14),
         DropStopTimeline(pickup: (pickup['address'] ?? '').toString(), dropoff: (drop['address'] ?? '').toString()),
+        for (final stop in _stops(r))
+          Padding(padding: const EdgeInsets.only(top: 6), child: Row(children: [const Icon(Icons.location_on_outlined, size: 16, color: Colors.orange), const SizedBox(width: 8), Expanded(child: Text('Stop ${stop['sequence']}: ${stop['address'] ?? 'Additional stop'}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)))])),
         const SizedBox(height: 10),
         Center(child: Text('Swipe down to accept \u00B7 up to decline', style: TextStyle(fontSize: 12, color: DropColors.mutedText(context)))),
         const SizedBox(height: 10),
