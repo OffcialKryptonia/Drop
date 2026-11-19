@@ -9,6 +9,7 @@ import { driverOnlineBlock, requireApprovedDriver } from "../lib/roles";
 import { getSetting } from "../lib/driver-application";
 import { voidExtrasForRide } from "../lib/extras";
 import { extraTypes, extrasSettings } from "../lib/extras";
+import { driverPickupFlags, pickupSettings, startAllowedSql, verifyPickup } from "../lib/pickup";
 import { completeRide } from "../lib/ride-settlement";
 import { pushLater, pushRideEvent } from "../lib/push";
 
@@ -68,6 +69,11 @@ async function activeOf(c: C) {
     )
   ).rows[0] as Row | undefined;
 }
+
+const shapeActive = async (c: C, active: Row) => ({
+  ...request(active, await ruleOf(c, active.service_id)),
+  ...(await driverPickupFlags(c.get("db"), Number(active.id))),
+});
 
 const ruleOf = async (c: C, serviceId: unknown) =>
   ((await c.get("db").query("select commission_type, admin_commission from app.services where id = $1", [serviceId])).rows[0] ?? { commission_type: null, admin_commission: 0 }) as CommissionRule;
@@ -163,15 +169,33 @@ const idOf = (c: C) => Number(c.req.param("id"));
 
 /** Move a ride one step forward, only if it is this driver's and in the expected state. */
 async function step(c: C, from: string, to: string, stamp: string) {
-  const r = await c.get("db").query(
-    `update app.ride_requests set status = $3, ${stamp} = now() where id = $1 and driver_id = $2 and status = $4 returning id, rider_id`,
-    [idOf(c), c.get("user").id, to, from],
+  const db = c.get("db");
+  const guarded = to === "in_progress";
+  const r = await db.query(
+    `update app.ride_requests set status = $3, ${stamp} = now() where id = $1 and driver_id = $2 and status = $4${guarded ? ` and ${startAllowedSql(5)}` : ""} returning id, rider_id`,
+    guarded ? [idOf(c), c.get("user").id, to, from, (await pickupSettings(db)).enabled] : [idOf(c), c.get("user").id, to, from],
   );
-  if (!r.rowCount) return notYours(c);
-  if (to === "arrived" || to === "in_progress") pushLater(c, pushRideEvent(c.get("db"), c.env, Number(r.rows[0].rider_id), to === "arrived" ? "arrived" : "started", idOf(c)));
+  if (!r.rowCount) {
+    if (guarded) {
+      const flags = await driverPickupFlags(db, idOf(c));
+      if (flags.pickup_required) return c.json({ status: false, code: "pickup_not_verified", message: "Enter the passenger’s pickup code before starting the trip." }, 409);
+    }
+    return notYours(c);
+  }
+  if (to === "arrived" || to === "in_progress") pushLater(c, pushRideEvent(db, c.env, Number(r.rows[0].rider_id), to === "arrived" ? "arrived" : "started", idOf(c)));
   const active = await activeOf(c);
-  return c.json({ status: true, data: active ? request(active, await ruleOf(c, active.service_id)) : null });
+  return c.json({ status: true, data: active ? await shapeActive(c, active) : null });
 }
+
+/** Driver types the passenger's four-digit pickup code. The server never sends the correct code to the driver app. */
+driverRideRoutes.post("/driver/rides/:id/verify-pickup", ...mw, async (c) => {
+  const code = String((await readBody(c)).code ?? "").trim();
+  if (!/^\\d{4}$/.test(code)) return c.json({ status: false, code: "bad_format", message: "Enter the four-digit code." }, 422);
+  const result = await verifyPickup(c.get("db"), idOf(c), c.get("user").id, code);
+  if (!result.ok) return c.json({ status: false, code: result.code, message: result.message, attempts_left: result.attempts_left ?? null, retry_after_seconds: result.retry_after_seconds ?? null }, result.code === "wrong_state" ? 409 : 422);
+  const active = await activeOf(c);
+  return c.json({ status: true, data: active ? await shapeActive(c, active) : null });
+});
 
 /** Driver is at the pickup point. */
 driverRideRoutes.post("/driver/rides/:id/arrived", ...mw, (c) => step(c, "accepted", "arrived", "arrived_at"));
