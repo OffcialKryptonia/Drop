@@ -134,29 +134,33 @@ export async function closeExtra(db: Client, extraId: number, who: { riderId?: n
  */
 export async function voidExtrasForRide(db: Client, rideId: number): Promise<void> {
   const rows = (await db.query("select * from app.ride_extras where ride_request_id = $1 and status in ('pending', 'paid') for update", [rideId])).rows;
-  for (const e of rows) {
-    const id = Number(e.id);
-    if (e.status === "paid" && e.paid_with === "wallet") {
-      const amount = Number(e.amount);
+  for (const e of rows) await reverseExtra(db, e);
+}
+
+/** Closes one pending/paid extra and reverses its money (wallet: refund the passenger, take it back from the driver). Call inside a transaction. */
+export async function reverseExtra(db: Client, e: Row): Promise<void> {
+  const id = Number(e.id);
+  const rideId = Number(e.ride_request_id);
+  if (e.status === "paid" && e.paid_with === "wallet") {
+    const amount = Number(e.amount);
+    await postToWallet(db, {
+      userId: Number(e.rider_id), direction: "credit", amount: toMoney(amount) ?? "0", kind: "refund", rideRequestId: rideId,
+      idempotencyKey: `extra_refund:${id}`, description: "Extra charge refunded", wallet: "rider",
+    });
+    const earning = toMoney(amount - Number(e.commission ?? 0));
+    if (earning) {
       await postToWallet(db, {
-        userId: Number(e.rider_id), direction: "credit", amount: toMoney(amount) ?? "0", kind: "refund", rideRequestId: rideId,
-        idempotencyKey: `extra_refund:${id}`, description: "Extra charge refunded", wallet: "rider",
-      });
-      const earning = toMoney(amount - Number(e.commission ?? 0));
-      if (earning) {
-        await postToWallet(db, {
-          userId: Number(e.driver_id), direction: "debit", amount: earning, kind: "refund", rideRequestId: rideId,
-          idempotencyKey: `extra_refund_debit:${id}`, description: "Extra charge refunded", wallet: "driver", allowNegative: true,
-        });
-      }
-    } else if (e.status === "paid" && Number(e.commission ?? 0) > 0) {
-      await postToWallet(db, {
-        userId: Number(e.driver_id), direction: "credit", amount: toMoney(Number(e.commission)) ?? "0", kind: "adjustment", rideRequestId: rideId,
-        idempotencyKey: `extra_commission_back:${id}`, description: "Commission on extra charge returned", wallet: "driver",
+        userId: Number(e.driver_id), direction: "debit", amount: earning, kind: "refund", rideRequestId: rideId,
+        idempotencyKey: `extra_refund_debit:${id}`, description: "Extra charge refunded", wallet: "driver", allowNegative: true,
       });
     }
-    await db.query("update app.ride_extras set status = 'cancelled', responded_at = now() where id = $1", [id]);
+  } else if (e.status === "paid" && Number(e.commission ?? 0) > 0) {
+    await postToWallet(db, {
+      userId: Number(e.driver_id), direction: "credit", amount: toMoney(Number(e.commission)) ?? "0", kind: "adjustment", rideRequestId: rideId,
+      idempotencyKey: `extra_commission_back:${id}`, description: "Commission on extra charge returned", wallet: "driver",
+    });
   }
+  await db.query("update app.ride_extras set status = 'cancelled', responded_at = now() where id = $1", [id]);
 }
 
 export async function expireExtras(db: Client): Promise<number> {
