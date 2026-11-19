@@ -193,7 +193,8 @@ async function step(c: C, from: string, to: string, stamp: string) {
 
 /** Driver types the passenger's four-digit pickup code. The server never sends the correct code to the driver app. */
 driverRideRoutes.post("/driver/rides/:id/verify-pickup", ...mw, async (c) => {
-  const code = String((await readBody(c)).code ?? "").trim();
+  const body = await c.req.json<{ code?: unknown }>().catch(() => ({}));
+  const code = String(body.code ?? "").trim();
   if (!/^\d{4}$/.test(code)) return c.json({ status: false, code: "bad_format", message: "Enter the four-digit code." }, 422);
   const result = await verifyPickup(c.get("db"), idOf(c), c.get("user").id, code);
   if (!result.ok) return c.json({ status: false, code: result.code, message: result.message, attempts_left: result.attempts_left ?? null, retry_after_seconds: result.retry_after_seconds ?? null }, result.code === "wrong_state" ? 409 : 422);
