@@ -19,6 +19,7 @@ import '../drop/widgets/drop_pickup.dart';
 import '../drop/screens/drop_route_screen.dart';
 import '../drop/widgets/drop_ride_type_strip.dart';
 import '../drop/widgets/drop_sos_sheet.dart';
+import '../drop/widgets/drop_ride_ui.dart';
 import '../service/DriverApplicationApi.dart' show ApiFailure, DriverApplicationApi;
 import '../service/RouteLineApi.dart';
 import '../drop/widgets/drop_extras.dart';
@@ -1108,6 +1109,9 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
   Widget _tripSheet() {
     final r = ride ?? {};
     final status = r['status']?.toString() ?? 'searching';
+    final tripStops = _l(r['stops']).map(_m).toList()..sort((a, b) => (_d(a['sequence'])).compareTo(_d(b['sequence'])));
+    final nextStopIndex = tripStops.indexWhere((stop) => stop['status'] != 'completed');
+    final activeTimelineStop = status != 'in_progress' ? 0 : (nextStopIndex < 0 ? tripStops.length + 1 : nextStopIndex + 1);
     final driver = _m(r['driver']);
     final v = _m(driver['vehicle']);
     String title;
@@ -1136,8 +1140,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
         Text(_money(r['fare'], r['currency']), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
       ]),
       if (sub.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text(sub, style: TextStyle(color: Colors.grey.shade700))),
-      for (final stop in _l(r['stops']).map(_m))
-        Padding(padding: const EdgeInsets.only(top: 6), child: Row(children: [Icon(stop['status'] == 'completed' ? Icons.check_circle : Icons.location_on_outlined, size: 17, color: stop['status'] == 'completed' ? Colors.green : primaryColor), const SizedBox(width: 8), Expanded(child: Text('Stop ${stop['sequence']}: ${stop['address'] ?? 'Additional stop'}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13))), Text(stop['status']?.toString() ?? 'pending', style: TextStyle(fontSize: 11, color: Colors.grey.shade600))])),
+      DropStopTimeline(pickup: (_m(r['pickup'])['address'] ?? '').toString(), dropoff: (_m(r['dropoff'])['address'] ?? '').toString(), stops: tripStops, activeStop: activeTimelineStop),
       if (r['eta'] is Map) ...[
         const SizedBox(height: 10),
         DropEtaStrip(eta: _m(r['eta'])),
