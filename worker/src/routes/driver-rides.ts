@@ -88,7 +88,7 @@ driverRideRoutes.get("/driver/requests", ...mw, async (c) => {
   if (active) {
     // The "Add extra charge" button only shows while the feature is on and the admin has at least one active charge type.
     const extrasOn = (await extrasSettings(db)).enabled && (await extraTypes(db, true)).length > 0;
-    return c.json({ status: true, active: { ...hideEta(request(active, await ruleOf(c, active.service_id))), extras_enabled: extrasOn }, requests: [] });
+    return c.json({ status: true, active: { ...hideEta(await shapeActive(c, active)), extras_enabled: extrasOn }, requests: [] });
   }
 
   const st = (await db.query("select is_online from app.users where id = $1", [me.id])).rows[0];
