@@ -2,6 +2,7 @@ import 'dart:ui' as ui;
 
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
+import '../drop/screens/drop_chat_screen.dart';
 
 import '../manage_imports.dart';
 import '../screens/DriverApplicationScreen.dart';
@@ -524,6 +525,12 @@ oneSignalSettings() async {
     },
     onClick: (notification) async {
     final data = notification.notification.additionalData ?? {};
+    // A new chat message opens that ride's conversation.
+    if (data['type'] == 'chat_message') {
+      final rideId = int.tryParse('${data['ride_id']}');
+      if (rideId != null) launchScreen(getContext, DropChatScreen(rideId: rideId));
+      return;
+    }
     // A document request or application decision opens the driver application page.
     if (data['type'] == 'documents' || data['type'] == 'application') {
       launchScreen(getContext, const DriverApplicationScreen());
