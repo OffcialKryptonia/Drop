@@ -58,8 +58,7 @@ jobs:
         run: |
           set -euo pipefail
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE SCHEMA IF NOT EXISTS extensions"
-          # The PostGIS image preinstalls PostGIS in public. Remove that disposable
-          # preinstallation so the repository migration can create it in extensions.
+          # Recreate the image-provided extension in the schema expected by Supabase migrations.
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DROP EXTENSION IF EXISTS postgis CASCADE"
 
       - name: Apply every database migration to disposable PostGIS

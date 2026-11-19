@@ -24,8 +24,9 @@ class DropRouteScreen extends StatefulWidget {
   final LatLng pickup;
   final String pickupAddress;
   final List<Map<String, dynamic>> recents;
+  final String selectionLabel;
 
-  const DropRouteScreen({Key? key, required this.pickup, required this.pickupAddress, required this.recents}) : super(key: key);
+  const DropRouteScreen({Key? key, required this.pickup, required this.pickupAddress, required this.recents, this.selectionLabel = 'To'}) : super(key: key);
 
   @override
   State<DropRouteScreen> createState() => _DropRouteScreenState();
@@ -146,7 +147,7 @@ class _DropRouteScreenState extends State<DropRouteScreen> {
       _toFocus.requestFocus();
       return;
     }
-    Navigator.pop(context, DropRouteResult('drop', point: LatLng(lat, lng), address: address.isEmpty ? title : address, pickup: _pickupChanged ? _pickup : null, pickupAddress: _pickupChanged ? _pickupAddress : null));
+    Navigator.pop(context, DropRouteResult(widget.selectionLabel == 'Stop' ? 'stop' : 'drop', point: LatLng(lat, lng), address: address.isEmpty ? title : address, pickup: _pickupChanged ? _pickup : null, pickupAddress: _pickupChanged ? _pickupAddress : null));
   }
 
   Future<void> _save(String kind, String title, String address, double lat, double lng) async {
@@ -182,7 +183,7 @@ class _DropRouteScreenState extends State<DropRouteScreen> {
     _toFocus.requestFocus();
   }
 
-  Widget _field({required TextEditingController c, required FocusNode f, required String label, required IconData icon, Widget? trailing, bool autofocus = false}) {
+  Widget _field({required TextEditingController c, required FocusNode f, required String label, required IconData icon, Widget? trailing, bool autofocus = false, bool readOnly = false}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: BoxDecoration(color: const Color(0xFFF1F0EC), borderRadius: BorderRadius.circular(14)),
@@ -194,7 +195,8 @@ class _DropRouteScreenState extends State<DropRouteScreen> {
             controller: c,
             focusNode: f,
             autofocus: autofocus,
-            onChanged: _onChanged,
+            readOnly: readOnly,
+            onChanged: readOnly ? null : _onChanged,
             textInputAction: TextInputAction.search,
             style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
             decoration: InputDecoration(labelText: label, border: InputBorder.none, floatingLabelBehavior: FloatingLabelBehavior.always, labelStyle: TextStyle(color: Colors.grey.shade700, fontSize: 15)),
@@ -341,7 +343,8 @@ class _DropRouteScreenState extends State<DropRouteScreen> {
               f: _fromFocus,
               label: 'From',
               icon: Icons.my_location,
-              trailing: IconButton(
+              readOnly: widget.selectionLabel == 'Stop',
+              trailing: widget.selectionLabel == 'Stop' ? null : IconButton(
                 icon: const Icon(Icons.map_outlined),
                 tooltip: 'Set pickup on the map',
                 onPressed: () => Navigator.pop(context, DropRouteResult('mapFrom', pickup: _pickupChanged ? _pickup : null, pickupAddress: _pickupChanged ? _pickupAddress : null)),
@@ -351,7 +354,7 @@ class _DropRouteScreenState extends State<DropRouteScreen> {
             _field(
               c: _to,
               f: _toFocus,
-              label: _adding == null ? 'To' : 'Address to save',
+              label: _adding == null ? widget.selectionLabel : 'Address to save',
               icon: Icons.flag,
               autofocus: true,
               trailing: IconButton(

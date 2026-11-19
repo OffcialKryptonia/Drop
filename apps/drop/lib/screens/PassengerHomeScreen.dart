@@ -15,13 +15,14 @@ import '../components/drawer_component.dart';
 import '../drop/services/drop_money.dart';
 import '../drop/widgets/drop_email_prompt.dart';
 import '../drop/widgets/drop_eta.dart';
+import '../drop/widgets/drop_pickup.dart';
 import '../drop/screens/drop_route_screen.dart';
 import '../drop/widgets/drop_ride_type_strip.dart';
 import '../drop/widgets/drop_sos_sheet.dart';
+import '../drop/widgets/drop_ride_ui.dart';
 import '../service/DriverApplicationApi.dart' show ApiFailure, DriverApplicationApi;
 import '../service/RouteLineApi.dart';
 import '../drop/widgets/drop_extras.dart';
-import '../drop/widgets/drop_pickup.dart';
 import '../service/MapConfig.dart';
 import '../service/RegionApi.dart';
 import '../service/RideApi.dart';
@@ -74,11 +75,14 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
   String pickupAddress = 'Your location';
   LatLng center = const LatLng(9.0765, 7.3986); // Abuja until we know where the person is
   String dropAddress = '';
+  final List<Map<String, dynamic>> additionalStops = [];
+  int maxAdditionalStops = 0;
   List<Map<String, dynamic>> homeTypes = [];
   int? homeType;
   List<Map<String, dynamic>> recents = [];
   bool pinMode = false;
   bool pinForPickup = false; // the pin is choosing the pickup (From), not the drop-off
+  bool pinForStop = false;
   String pinPickupAddress = '';
   bool locating = true;
 
@@ -179,6 +183,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
 
   Future<void> _start() async {
     mapConfig = await MapConfig.load();
+    try { maxAdditionalStops = await RideApi.stopLimit(); } catch (_) { maxAdditionalStops = 0; }
     if (mapConfig.mapboxRegionBorderingEnabled) {
       try { regionBoundaries = await RegionApi.boundaries(); } catch (_) { regionBoundaries = const []; }
     }
@@ -320,16 +325,18 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
   }
 
   /// "Enter your route": search, Suggested and Saved places. Choosing a place goes straight to prices.
-  Future<void> _openRouteScreen() async {
+  Future<void> _openRouteScreen({bool addingStop = false}) async {
     if (pickup == null) {
       await _locate();
       if (pickup == null) return;
     }
+    final routeOrigin = addingStop && additionalStops.isNotEmpty ? LatLng(_d(additionalStops.last['lat']), _d(additionalStops.last['lng'])) : pickup!;
+    final routeOriginAddress = addingStop && additionalStops.isNotEmpty ? additionalStops.last['address']?.toString() ?? pickupAddress : pickupAddress;
     final r = await Navigator.of(context).push<DropRouteResult>(
-      MaterialPageRoute(fullscreenDialog: true, builder: (_) => DropRouteScreen(pickup: pickup!, pickupAddress: pickupAddress, recents: recents)),
+      MaterialPageRoute(fullscreenDialog: true, builder: (_) => DropRouteScreen(pickup: routeOrigin, pickupAddress: routeOriginAddress, recents: recents, selectionLabel: addingStop ? 'Stop' : 'To')),
     );
     if (r == null || !mounted) return;
-    if (r.pickup != null) {
+    if (r.pickup != null && !addingStop) {
       _pickupAuto = false;
       setState(() {
         pickup = r.pickup;
@@ -349,7 +356,11 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
       return;
     }
     if (r.kind == 'mapDrop') {
-      setState(() { pinForPickup = false; pinMode = true; });
+      setState(() { pinForPickup = false; pinForStop = addingStop; pinMode = true; });
+      return;
+    }
+    if (r.kind == 'stop' && r.point != null) {
+      setState(() => additionalStops.add({'lat': r.point!.latitude, 'lng': r.point!.longitude, 'address': r.address}));
       return;
     }
     if (r.point != null) {
@@ -400,6 +411,23 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
     _loadHome();
   }
 
+  Future<void> _confirmStop() async {
+    if (busy || additionalStops.length >= maxAdditionalStops) return;
+    setState(() => busy = true);
+    try {
+      final address = await _addressOf(center, fallback: 'Selected stop');
+      if (!mounted) return;
+      setState(() {
+        additionalStops.add({'lat': center.latitude, 'lng': center.longitude, 'address': address});
+        pinMode = false;
+        pinForStop = false;
+      });
+    } catch (_) {
+      _say('Could not confirm this stop. Please try again.');
+    }
+    if (mounted) setState(() => busy = false);
+  }
+
   Future<void> _confirmDropoff() async {
     if (pickup == null) {
       setState(() => locating = true);
@@ -417,6 +445,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
         dropLat: center.latitude,
         dropLng: center.longitude,
         dropAddress: drop,
+        stops: List<Map<String, dynamic>>.from(additionalStops),
       );
       dropAddress = drop;
       final types = _l(quote['ride_types']);
@@ -468,6 +497,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
         serviceId: selectedType!,
         paymentMethod: payment,
         optionIds: extras.toList(),
+        stops: List<Map<String, dynamic>>.from(additionalStops),
       );
       _setRide(_m(res['data']));
     } on ApiFailure catch (e) {
@@ -604,6 +634,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
     final pts = <LatLng>[
       LatLng(_d(_m(r['pickup'])['lat']), _d(_m(r['pickup'])['lng'])),
       LatLng(_d(_m(r['dropoff'])['lat']), _d(_m(r['dropoff'])['lng'])),
+      for (final stop in _l(r['stops']).map(_m)) LatLng(_d(stop['lat']), _d(stop['lng'])),
     ];
     final loc = _m(_m(r['driver'])['location']);
     if (loc.isNotEmpty) pts.add(LatLng(_d(loc['lat']), _d(loc['lng'])));
@@ -631,6 +662,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
       finished = null;
       ride = null;
       quote = {};
+      additionalStops.clear();
       phase = _Phase.plan;
     });
     _locate();
@@ -681,46 +713,51 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
   /// is coming, then pickup -> drop-off again. A line fetched before is shown at once.
   void _syncRoute() {
     final r = ride;
-    LatLng from, to;
+    final waypoints = <LatLng>[];
     String key;
     var toPickup = false;
     final drv = _driverRaw;
     if (phase == _Phase.choose && pickup != null) {
-      from = pickup!;
-      to = center;
+      waypoints.add(pickup!);
+      waypoints.addAll(additionalStops.map((s) => LatLng(_d(s['lat']), _d(s['lng']))));
+      waypoints.add(center);
       key = 'choose';
     } else if (phase == _Phase.trip && r != null) {
       final pick = LatLng(_d(_m(r['pickup'])['lat']), _d(_m(r['pickup'])['lng']));
       final drop = LatLng(_d(_m(r['dropoff'])['lat']), _d(_m(r['dropoff'])['lng']));
       final status = r['status'];
       toPickup = (status == 'accepted' || status == 'arrived') && drv != null;
-      from = toPickup ? drv! : pick;
-      to = toPickup ? pick : drop;
+      if (toPickup) {
+        waypoints.add(drv!);
+        waypoints.add(pick);
+      } else {
+        waypoints.add(pick);
+        for (final stop in _l(r['stops']).map(_m)) {
+          if (stop['status'] != 'completed') waypoints.add(LatLng(_d(stop['lat']), _d(stop['lng'])));
+        }
+        waypoints.add(drop);
+      }
       key = '${r['id']}:${toPickup ? 'toPickup' : 'trip'}';
     } else {
       if (_routeFull.isNotEmpty || _routeKey != null) setState(() { _routeFull = const []; _routeKey = null; _routeFrom = null; _prevDriver = null; });
       return;
     }
     final moved = toPickup && _routeFrom != null && RouteGeometry.meters(_routeFrom!, drv!) > 250;
-    final target = '$key:${to.latitude.toStringAsFixed(5)},${to.longitude.toStringAsFixed(5)}';
+    final target = '$key:${waypoints.map((p) => '${p.latitude.toStringAsFixed(5)},${p.longitude.toStringAsFixed(5)}').join('|')}';
     if (target == _routeKey && !moved) return;
     _routeKey = target;
-    _routeFrom = from;
-    final known = RouteLineApi.cached(from, to);
-    final ends = '${from.latitude.toStringAsFixed(4)},${from.longitude.toStringAsFixed(4)}>${to.latitude.toStringAsFixed(4)},${to.longitude.toStringAsFixed(4)}';
-    if (known != null) {
-      _shownEnds = ends;
-      setState(() => _routeFull = known);
-      return;
-    }
-    // Keep the line on screen while the same journey is refreshed; clear it only for a different one.
-    if (!moved && _shownEnds != ends) setState(() => _routeFull = const []);
-    RouteLineApi.fetch(from, to).then((pts) {
+    _routeFrom = waypoints.first;
+    if (!moved) setState(() => _routeFull = const []);
+    () async {
+      final all = <LatLng>[];
+      for (var i = 0; i < waypoints.length - 1; i++) {
+        final segment = await RouteLineApi.fetch(waypoints[i], waypoints[i + 1]);
+        if (segment.isNotEmpty) all.addAll(all.isEmpty ? segment : segment.skip(1));
+      }
       if (!mounted || _routeKey != target) return;
-      _shownEnds = ends;
-      setState(() => _routeFull = pts);
-      if (key == 'choose' && pts.length > 1) _map.fitPoints([from, to, ...pts]);
-    });
+      setState(() => _routeFull = all);
+      if (all.length > 1 && key == 'choose') _map.fitPoints([...waypoints, ...all]);
+    }();
   }
 
   List<DropMarker> get _markers {
@@ -729,6 +766,9 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
       final r = ride!;
       out.add(DropMarker(id: 'pickup', title: 'Pickup', color: Colors.green, point: LatLng(_d(_m(r['pickup'])['lat']), _d(_m(r['pickup'])['lng']))));
       out.add(DropMarker(id: 'drop', title: 'Drop-off', color: Colors.red, point: LatLng(_d(_m(r['dropoff'])['lat']), _d(_m(r['dropoff'])['lng']))));
+      for (final stop in _l(r['stops']).map(_m)) {
+        out.add(DropMarker(id: 'stop-${stop['id']}', title: 'Stop ${stop['sequence']}', color: stop['status'] == 'completed' ? Colors.grey : Colors.orange, point: LatLng(_d(stop['lat']), _d(stop['lng']))));
+      }
       final v = _vehiclePoint;
       if (v != null) {
         final key = _m(r['service'])['map_icon']?.toString() ?? 'car';
@@ -737,6 +777,12 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
     } else if (pickup != null) {
       out.add(DropMarker(id: 'pickup', title: 'Pickup', color: Colors.green, point: pickup!));
       if (phase == _Phase.choose) out.add(DropMarker(id: 'drop', title: 'Drop-off', color: Colors.red, point: center));
+      if (phase == _Phase.plan || phase == _Phase.choose) {
+        for (var i = 0; i < additionalStops.length; i++) {
+          final stop = additionalStops[i];
+          out.add(DropMarker(id: 'stop-${i + 1}', title: 'Stop ${i + 1}', color: Colors.orange, point: LatLng(_d(stop['lat']), _d(stop['lng']))));
+        }
+      }
     }
     // The passenger: an arrow that moves with the phone and turns as it turns.
     final me = _live.point;
@@ -783,7 +829,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
                 _roundButton(Icons.menu, () => _scaffoldKey.currentState?.openDrawer()),
                 const SizedBox(width: 10),
                 if (pinning) Expanded(child: _searchBar()),
-                if (pinning) ...[const SizedBox(width: 10), _roundButton(Icons.arrow_back, () => setState(() { pinMode = false; pinForPickup = false; }))],
+                if (pinning) ...[const SizedBox(width: 10), _roundButton(Icons.arrow_back, () => setState(() { pinMode = false; pinForPickup = false; pinForStop = false; }))],
                 if (phase == _Phase.choose) _roundButton(Icons.arrow_back, () => setState(() => phase = _Phase.plan)),
               ]),
               if (home)
@@ -935,7 +981,11 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
         ),
       ]));
 
-  Widget _planSheet() => pinForPickup ? _pickupSheet() : _sheet(Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+  Widget _planSheet() => pinForPickup ? _pickupSheet() : (pinForStop ? _sheet(Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('Move the map to choose your additional stop.', style: TextStyle(fontWeight: FontWeight.w700)),
+        const SizedBox(height: 12),
+        SizedBox(width: double.infinity, child: ElevatedButton(onPressed: busy ? null : _confirmStop, child: busy ? const CircularProgressIndicator() : const Text('Confirm this stop'))),
+      ])) : _sheet(Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           const Icon(Icons.my_location, size: 18, color: Colors.green),
           const SizedBox(width: 8),
@@ -947,6 +997,23 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
           const SizedBox(width: 8),
           Expanded(child: Text(dropAddress.isEmpty ? 'Move the map to choose your drop-off' : dropAddress, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700))),
         ]),
+        if (maxAdditionalStops > 0) ...[
+          const SizedBox(height: 10),
+          for (var i = 0; i < additionalStops.length; i++)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(children: [
+                Icon(Icons.more_vert, color: primaryColor, size: 18),
+                const SizedBox(width: 8),
+                Expanded(child: Text('Stop ${i + 1}: ${additionalStops[i]['address']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600))),
+                IconButton(tooltip: 'Move stop up', onPressed: busy || i == 0 ? null : () => setState(() { final x = additionalStops.removeAt(i); additionalStops.insert(i - 1, x); }), icon: const Icon(Icons.arrow_upward, size: 18)),
+                IconButton(tooltip: 'Move stop down', onPressed: busy || i == additionalStops.length - 1 ? null : () => setState(() { final x = additionalStops.removeAt(i); additionalStops.insert(i + 1, x); }), icon: const Icon(Icons.arrow_downward, size: 18)),
+                IconButton(tooltip: 'Remove stop', onPressed: busy ? null : () => setState(() => additionalStops.removeAt(i)), icon: const Icon(Icons.close, size: 18)),
+              ]),
+            ),
+          if (additionalStops.length < maxAdditionalStops)
+            Align(alignment: Alignment.centerLeft, child: TextButton.icon(onPressed: busy ? null : () => _openRouteScreen(addingStop: true), icon: const Icon(Icons.add_location_alt_outlined), label: Text('Add stop (${additionalStops.length}/$maxAdditionalStops)'))),
+        ],
         const SizedBox(height: 14),
         SizedBox(
           width: double.infinity,
@@ -956,7 +1023,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
             child: busy ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Confirm drop-off', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
           ),
         ),
-      ]));
+      ])));
 
   Widget _chooseSheet() {
     final types = _l(quote['ride_types']).map(_m).toList();
@@ -1042,6 +1109,9 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
   Widget _tripSheet() {
     final r = ride ?? {};
     final status = r['status']?.toString() ?? 'searching';
+    final tripStops = _l(r['stops']).map(_m).toList()..sort((a, b) => (_d(a['sequence'])).compareTo(_d(b['sequence'])));
+    final nextStopIndex = tripStops.indexWhere((stop) => stop['status'] != 'completed');
+    final activeTimelineStop = status != 'in_progress' ? 0 : (nextStopIndex < 0 ? tripStops.length + 1 : nextStopIndex + 1);
     final driver = _m(r['driver']);
     final v = _m(driver['vehicle']);
     String title;
@@ -1070,6 +1140,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
         Text(_money(r['fare'], r['currency']), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
       ]),
       if (sub.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text(sub, style: TextStyle(color: Colors.grey.shade700))),
+      DropStopTimeline(pickup: (_m(r['pickup'])['address'] ?? '').toString(), dropoff: (_m(r['dropoff'])['address'] ?? '').toString(), stops: tripStops, activeStop: activeTimelineStop),
       if (r['eta'] is Map) ...[
         const SizedBox(height: 10),
         DropEtaStrip(eta: _m(r['eta'])),
@@ -1154,6 +1225,8 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
       if (done) ...[
         const SizedBox(height: 6),
         Text('${_m(f['pickup'])['address'] ?? ''}  →  ${_m(f['dropoff'])['address'] ?? ''}', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+        for (final stop in _l(f['stops']).map(_m))
+          Padding(padding: const EdgeInsets.only(top: 4), child: Text('Stop ${stop['sequence']}: ${stop['address'] ?? 'Additional stop'}', style: TextStyle(color: Colors.grey.shade600, fontSize: 12))),
       ],
       if (done && f['id'] != null) ...[
         const SizedBox(height: 12),

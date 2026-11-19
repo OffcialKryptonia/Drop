@@ -34,6 +34,14 @@ const tests: [string, () => void][] = [
     assert.equal(d.earning, 2125);
     assert.ok(d.lines.map((l) => l.label).includes("Fuel hike"));
   }],
+  ["ordered intermediate stops are included in both rider and driver receipts", () => {
+    const withStops = { ...ride, stops: [
+      { id: 2, sequence: 2, address: "Second stop", status: "completed" },
+      { id: 1, sequence: 1, address: "First stop", status: "completed" },
+    ] };
+    assert.deepEqual(riderReceipt(withStops).stops, withStops.stops);
+    assert.deepEqual(driverReceipt(withStops).stops, withStops.stops);
+  }],
   ["without extras nothing changes", () => {
     const d = driverReceipt(ride);
     assert.equal(d.earning, 1700);
