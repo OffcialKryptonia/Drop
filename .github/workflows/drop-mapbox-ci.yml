@@ -82,5 +82,7 @@ jobs:
       - run: npm run typecheck
       - name: Pickup code unit tests
         run: npx --yes tsx test/pickup.test.ts
+      - name: Receipt unit tests
+        run: npx --yes tsx test/receipt.test.ts
       - name: Ride-flow smoke test syntax
         run: node --check test/rides-trip-smoke.mjs
