@@ -80,6 +80,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
   List<Map<String, dynamic>> recents = [];
   bool pinMode = false;
   bool pinForPickup = false; // the pin is choosing the pickup (From), not the drop-off
+  bool pinForStop = false;
   String pinPickupAddress = '';
   bool locating = true;
 
@@ -353,7 +354,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
       return;
     }
     if (r.kind == 'mapDrop') {
-      setState(() { pinForPickup = false; pinMode = true; });
+      setState(() { pinForPickup = false; pinForStop = addingStop; pinMode = true; });
       return;
     }
     if (r.kind == 'stop' && r.point != null) {
@@ -406,6 +407,23 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
       pinForPickup = false;
     });
     _loadHome();
+  }
+
+  Future<void> _confirmStop() async {
+    if (busy || additionalStops.length >= maxAdditionalStops) return;
+    setState(() => busy = true);
+    try {
+      final address = await _addressOf(center, fallback: 'Selected stop');
+      if (!mounted) return;
+      setState(() {
+        additionalStops.add({'lat': center.latitude, 'lng': center.longitude, 'address': address});
+        pinMode = false;
+        pinForStop = false;
+      });
+    } catch (_) {
+      _say('Could not confirm this stop. Please try again.');
+    }
+    if (mounted) setState(() => busy = false);
   }
 
   Future<void> _confirmDropoff() async {
@@ -961,7 +979,11 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
         ),
       ]));
 
-  Widget _planSheet() => pinForPickup ? _pickupSheet() : _sheet(Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+  Widget _planSheet() => pinForPickup ? _pickupSheet() : (pinForStop ? _sheet(Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('Move the map to choose your additional stop.', style: TextStyle(fontWeight: FontWeight.w700)),
+        const SizedBox(height: 12),
+        SizedBox(width: double.infinity, child: ElevatedButton(onPressed: busy ? null : _confirmStop, child: busy ? const CircularProgressIndicator() : const Text('Confirm this stop'))),
+      ])) : _sheet(Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           const Icon(Icons.my_location, size: 18, color: Colors.green),
           const SizedBox(width: 8),
@@ -999,7 +1021,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
             child: busy ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Confirm drop-off', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
           ),
         ),
-      ]));
+      ])));
 
   Widget _chooseSheet() {
     final types = _l(quote['ride_types']).map(_m).toList();
