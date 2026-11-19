@@ -97,7 +97,7 @@ class RideApi {
     final data = response['data'];
     if (data is! Map) return 0;
     final value = data['max_additional_stops'];
-    return value is num ? value.toInt().clamp(0, 20) : 0;
+    return value is num ? value.toInt().clamp(0, 20).toInt() : 0;
   }
 
   /// Ride types open at the passenger's location, with drivers nearby (no fares yet).
