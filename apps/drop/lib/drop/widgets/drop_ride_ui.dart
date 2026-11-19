@@ -154,7 +154,7 @@ class DropStopTimeline extends StatelessWidget {
       (caption: 'PICKUP', address: pickup, completed: true, index: 0),
       for (var i = 0; i < ordered.length; i++)
         (caption: 'STOP ${ordered[i]['sequence'] ?? i + 1}', address: (ordered[i]['address'] ?? 'Additional stop').toString(), completed: ordered[i]['status'] == 'completed', index: i + 1),
-      (caption: 'DROP-OFF', address: dropoff, completed: true, index: ordered.length + 1),
+      (caption: 'DROP-OFF', address: dropoff, completed: false, index: ordered.length + 1),
     ];
     return Column(children: [
       for (var i = 0; i < entries.length; i++) ...[
