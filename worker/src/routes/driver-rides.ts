@@ -8,6 +8,7 @@ import { computeCommission, type CommissionRule } from "../lib/commission";
 import { driverOnlineBlock, requireApprovedDriver } from "../lib/roles";
 import { getSetting } from "../lib/driver-application";
 import { voidExtrasForRide } from "../lib/extras";
+import { extraTypes, extrasSettings } from "../lib/extras";
 import { completeRide } from "../lib/ride-settlement";
 import { pushLater, pushRideEvent } from "../lib/push";
 
@@ -78,7 +79,11 @@ driverRideRoutes.get("/driver/requests", ...mw, async (c) => {
   const active = await activeOf(c);
   const etaOn = (await etaSettings(db)).driver;
   const hideEta = <T extends object>(x: T) => (etaOn ? x : { ...x, eta: null, pickup_eta_minutes: null });
-  if (active) return c.json({ status: true, active: hideEta(request(active, await ruleOf(c, active.service_id))), requests: [] });
+  if (active) {
+    // The "Add extra charge" button only shows while the feature is on and the admin has at least one active charge type.
+    const extrasOn = (await extrasSettings(db)).enabled && (await extraTypes(db, true)).length > 0;
+    return c.json({ status: true, active: { ...hideEta(request(active, await ruleOf(c, active.service_id))), extras_enabled: extrasOn }, requests: [] });
+  }
 
   const st = (await db.query("select is_online from app.users where id = $1", [me.id])).rows[0];
   if (!st?.is_online) return c.json({ status: false, code: "not_online", message: "Go online to see ride requests." }, 409);

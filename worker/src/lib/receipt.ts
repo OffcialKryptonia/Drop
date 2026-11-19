@@ -1,5 +1,5 @@
 import { currencyInfo } from "./currency";
-import { kindLabel } from "./extras";
+import { extraName } from "./extras";
 
 type Row = Record<string, unknown>;
 const money = (v: unknown) => Math.round(Number(v ?? 0) * 100) / 100;
@@ -40,7 +40,7 @@ function fareLines(r: Row) {
 }
 
 /** Paid extra charges (toll, parking, waiting) as receipt lines. */
-const extraLines = (extras: Row[]) => extras.filter((e) => e.status === "paid").map((e) => ({ label: kindLabel(e.kind), amount: money(e.amount) }));
+const extraLines = (extras: Row[]) => extras.filter((e) => e.status === "paid").map((e) => ({ label: extraName(e), amount: money(e.amount) }));
 
 export function riderReceipt(r: Row, extras: Row[] = []) {
   const cancellationFee = money(r.cancellation_fee);

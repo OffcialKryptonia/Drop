@@ -6,7 +6,7 @@ import { requireAuth } from "../auth/middleware";
 import { guard, audit } from "../lib/permissions";
 import { readBody, validationFailed } from "../lib/legacy";
 import { requireApprovedDriver } from "../lib/roles";
-import { closeExtra, reverseExtra, EXTRA_KINDS, extraView, extrasSettings, kindLabel, payExtra, proposeExtra } from "../lib/extras";
+import { closeExtra, reverseExtra, extraName, extraTypes, extraView, extrasSettings, payExtra, proposeExtra, typeView } from "../lib/extras";
 import { currencyInfo } from "../lib/currency";
 import { pushLater, sendPush } from "../lib/push";
 
@@ -29,7 +29,8 @@ const rideIdOf = (c: C) => {
 // ---- Driver ----
 
 const proposeSchema = z.object({
-  kind: z.enum(EXTRA_KINDS, { error: "Choose what the charge is for." }),
+  type_id: z.coerce.number().int().positive().optional(),
+  kind: z.string().trim().max(40).optional(), // older app versions send a fixed kind (toll, parking...)
   amount: z.coerce.number({ error: "Enter the amount." }).positive({ error: "Enter the amount." }).max(100_000_000),
   note: z.string().trim().max(120).optional(),
 });
@@ -41,12 +42,18 @@ rideExtraRoutes.post("/driver/rides/:id/extras", ...driverMw, async (c) => {
   const p = proposeSchema.safeParse(await readBody(c));
   if (!p.success) return validationFailed(c, { extra: [p.error.issues[0].message] });
   const db = c.get("db");
-  const r = await proposeExtra(db, { rideId, driverId: c.get("user").id, kind: p.data.kind, amount: Math.round(p.data.amount * 100) / 100, note: p.data.note });
+  let typeId = p.data.type_id ?? 0;
+  if (!typeId && p.data.kind) {
+    const t = (await db.query("select id from app.extra_charge_types where active and regexp_replace(lower(name), '[^a-z0-9]+', '_', 'g') = $1 order by id limit 1", [p.data.kind])).rows[0];
+    typeId = Number(t?.id ?? 0);
+  }
+  if (!typeId) return validationFailed(c, { extra: ["Choose what the charge is for."] });
+  const r = await proposeExtra(db, { rideId, driverId: c.get("user").id, typeId, amount: Math.round(p.data.amount * 100) / 100, note: p.data.note });
   if (!r.ok) return c.json({ status: false, code: r.code, message: r.message, remaining: r.remaining ?? null }, 422);
   const e = r.extra;
   pushLater(c, sendPush(db, c.env, [r.rider_id], {
     title: "Extra charge from your driver",
-    body: `${kindLabel(e.kind)} · ${money(e.amount, e.currency)}. Open DROP to approve or decline.`,
+    body: `${extraName(e)} · ${money(e.amount, e.currency)}. Open DROP to approve or decline.`,
     data: { type: "extra_charge", extra_id: String(e.id), ride_id: String(rideId) },
   }));
   return c.json({ status: true, data: extraView(e) }, 201);
@@ -64,7 +71,7 @@ rideExtraRoutes.get("/driver/rides/:id/extras", ...driverMw, async (c) => {
   const used = rows.filter((x) => x.status === "pending" || x.status === "paid").reduce((a, x) => a + Number(x.amount), 0);
   const remaining = Math.max(0, Math.round((Number(ride.fare) * s.max_percent) / 100 * 100) / 100 - used);
   const open = s.enabled && ride.status === "accepted";
-  return c.json({ status: true, data: rows.map(extraView), can_add: !!open && remaining > 0 && !rows.some((x) => x.status === "pending"), remaining: Math.round(remaining * 100) / 100, window_minutes: s.window_minutes });
+  return c.json({ status: true, data: rows.map(extraView), can_add: !!open && remaining > 0 && !rows.some((x) => x.status === "pending"), remaining: Math.round(remaining * 100) / 100, window_minutes: s.window_minutes, types: await extraTypes(db, true) });
 });
 
 rideExtraRoutes.post("/driver/extras/:id/cancel", ...driverMw, async (c) => {
@@ -113,7 +120,7 @@ rideExtraRoutes.post("/ride/extras/:id/decline", ...riderMw, async (c) => {
   const row = id ? await closeExtra(db, id, { riderId: c.get("user").id }, "declined") : null;
   if (!row) return c.json({ status: false, message: "This extra charge has already been answered." }, 409);
   pushLater(c, sendPush(db, c.env, [Number(row.driver_id)], {
-    title: "Extra charge declined", body: `The passenger declined the ${kindLabel(row.kind).toLowerCase()} of ${money(row.amount, row.currency)}.`,
+    title: "Extra charge declined", body: `The passenger declined the ${extraName(row).toLowerCase()} of ${money(row.amount, row.currency)}.`,
     data: { type: "extra_charge_declined", extra_id: String(row.id), ride_id: String(row.ride_request_id) },
   }));
   return c.json({ status: true });
@@ -121,12 +128,11 @@ rideExtraRoutes.post("/ride/extras/:id/decline", ...riderMw, async (c) => {
 
 // ---- Admin ----
 
-rideExtraRoutes.get("/admin/extras-settings", ...guard("service_option list"), async (c) => c.json({ data: await extrasSettings(c.get("db")) }));
-rideExtraRoutes.put("/admin/extras-settings", ...guard("service_option edit"), async (c) => {
+rideExtraRoutes.get("/admin/extras-settings", ...guard("ride_extra list"), async (c) => c.json({ data: await extrasSettings(c.get("db")) }));
+rideExtraRoutes.put("/admin/extras-settings", ...guard("ride_extra edit"), async (c) => {
   const p = z.object({
     enabled: z.boolean(),
     max_percent: z.coerce.number().min(0, "Use 0 to 100.").max(100, "Use 0 to 100."),
-    commission_percent: z.coerce.number().min(0, "Use 0 to 100.").max(100, "Use 0 to 100."),
     window_minutes: z.coerce.number().int().min(1, "Use 1 to 60 minutes.").max(60, "Use 1 to 60 minutes."),
   }).safeParse(await readBody(c));
   if (!p.success) return validationFailed(c, { extras: [p.error.issues[0].message] });
@@ -168,8 +174,54 @@ rideExtraRoutes.post("/admin/extras/:id/refund", ...guard("ride_extra edit"), as
     await audit(c, "extra.refund", `extra:${id}`, { status: e.status, paid_with: e.paid_with, amount: Number(e.amount) });
     pushLater(c, sendPush(db, c.env, [Number(e.rider_id)], {
       title: e.status === "paid" && e.paid_with === "wallet" ? "Extra charge refunded" : "Extra charge cancelled",
-      body: `${kindLabel(e.kind)} · ${money(e.amount, e.currency)}`, data: { type: "extra_charge_refunded", extra_id: String(id), ride_id: String(e.ride_request_id) },
+      body: `${extraName(e)} · ${money(e.amount, e.currency)}`, data: { type: "extra_charge_refunded", extra_id: String(id), ride_id: String(e.ride_request_id) },
     }));
     return c.json({ status: true, message: e.status === "paid" && e.paid_with === "wallet" ? "Refunded to the passenger's wallet." : "Extra charge cancelled." });
   } catch (err) { await db.query("rollback").catch(() => {}); throw err; }
+});
+
+// ---- Admin: the list of charge types ----
+
+const typeSchema = z.object({
+  name: z.string().trim().min(2, "Enter a name (2 to 40 letters).").max(40, "Enter a name (2 to 40 letters)."),
+  active: z.boolean().default(true),
+  take_commission: z.boolean().default(false),
+  max_amount: z.preprocess((v) => (v === "" || v === null || v === undefined || Number(v) === 0 ? null : v), z.coerce.number().positive("Enter a positive amount, or leave empty for no limit.").max(100_000_000).nullable()),
+});
+
+rideExtraRoutes.get("/admin/extra-types", ...guard("ride_extra list"), async (c) => c.json({ data: await extraTypes(c.get("db"), false) }));
+
+rideExtraRoutes.post("/admin/extra-types", ...guard("ride_extra edit"), async (c) => {
+  const p = typeSchema.safeParse(await readBody(c));
+  if (!p.success) return validationFailed(c, { extra_type: [p.error.issues[0].message] });
+  const db = c.get("db");
+  const row = (await db.query(
+    "insert into app.extra_charge_types (name, active, take_commission, max_amount, sort_order) values ($1, $2, $3, $4, coalesce((select max(sort_order) from app.extra_charge_types), 0) + 1) returning *",
+    [p.data.name, p.data.active, p.data.take_commission, p.data.max_amount])).rows[0];
+  await audit(c, "extra_type.create", `extra_type:${row.id}`, p.data);
+  return c.json({ status: true, data: typeView(row) }, 201);
+});
+
+rideExtraRoutes.put("/admin/extra-types/:id", ...guard("ride_extra edit"), async (c) => {
+  const id = rideIdOf(c);
+  const p = typeSchema.partial().safeParse(await readBody(c));
+  if (!id || !p.success) return validationFailed(c, { extra_type: [p.success ? "Not found." : p.error.issues[0].message] });
+  const db = c.get("db");
+  const cur = (await db.query("select * from app.extra_charge_types where id = $1", [id])).rows[0];
+  if (!cur) return c.json({ status: false, message: "Charge type not found." }, 404);
+  const d = p.data;
+  const row = (await db.query(
+    "update app.extra_charge_types set name = $2, active = $3, take_commission = $4, max_amount = $5 where id = $1 returning *",
+    [id, d.name ?? cur.name, d.active ?? cur.active, d.take_commission ?? cur.take_commission, "max_amount" in d ? d.max_amount : cur.max_amount])).rows[0];
+  await audit(c, "extra_type.update", `extra_type:${id}`, d);
+  return c.json({ status: true, data: typeView(row) });
+});
+
+rideExtraRoutes.delete("/admin/extra-types/:id", ...guard("ride_extra edit"), async (c) => {
+  const id = rideIdOf(c);
+  if (!id) return c.json({ status: false, message: "Charge type not found." }, 404);
+  const r = await c.get("db").query("delete from app.extra_charge_types where id = $1", [id]);
+  if (!r.rowCount) return c.json({ status: false, message: "Charge type not found." }, 404);
+  await audit(c, "extra_type.delete", `extra_type:${id}`, {});
+  return c.json({ status: true });
 });

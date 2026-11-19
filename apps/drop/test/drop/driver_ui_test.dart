@@ -116,7 +116,8 @@ void extraTests() {
       expect(find.text('₦500'), findsOneWidget);
       expect(find.textContaining('Wallet too low'), findsOneWidget);
       expect(find.text('Decline'), findsOneWidget);
-      expect(dropExtraLabel('parking'), 'Parking');
+      expect(dropExtraLabel({'kind': 'parking'}), 'Parking');
+      expect(dropExtraLabel({'kind': 'fuel_hike', 'label': 'Fuel hike'}), 'Fuel hike');
     });
   }
 }

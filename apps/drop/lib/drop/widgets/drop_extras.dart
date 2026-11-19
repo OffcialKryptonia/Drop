@@ -7,21 +7,28 @@ import '../design/drop_design.dart';
 import 'drop_money.dart';
 import 'drop_ride_ui.dart';
 
-const _kinds = <(String, String, IconData)>[
-  ('toll', 'Toll', Icons.toll),
-  ('parking', 'Parking', Icons.local_parking),
-  ('waiting', 'Waiting', Icons.hourglass_bottom),
-  ('other', 'Other', Icons.more_horiz),
-];
+IconData _iconFor(String name) {
+  final n = name.toLowerCase();
+  if (n.contains('toll')) return Icons.toll;
+  if (n.contains('park')) return Icons.local_parking;
+  if (n.contains('wait')) return Icons.hourglass_bottom;
+  if (n.contains('fuel') || n.contains('petrol')) return Icons.local_gas_station;
+  return Icons.more_horiz;
+}
 
-String dropExtraLabel(dynamic kind) => switch ('$kind') {
-      'toll' => 'Toll',
-      'parking' => 'Parking',
-      'waiting' => 'Waiting time',
-      _ => 'Extra charge',
-    };
+/// The name the admin gave the charge type; older charges fall back to a fixed label.
+String dropExtraLabel(Map e) {
+  final l = (e['label'] ?? '').toString().trim();
+  if (l.isNotEmpty) return l;
+  return switch ('${e['kind']}') {
+    'toll' => 'Toll',
+    'parking' => 'Parking',
+    'waiting' => 'Waiting time',
+    _ => 'Extra charge',
+  };
+}
 
-/// Driver: add a toll, parking or waiting charge after accepting, before you reach the pickup. Returns true when it was sent.
+/// Driver: add a charge (fuel hike, toll, parking... as set by DROP) after accepting, before you reach the pickup. Returns true when it was sent.
 Future<bool> showDropAddExtraSheet(BuildContext context, {required int rideId}) async {
   final sent = await showModalBottomSheet<bool>(
     context: context,
@@ -41,7 +48,8 @@ class _AddExtra extends StatefulWidget {
 }
 
 class _AddExtraState extends State<_AddExtra> {
-  String _kind = 'toll';
+  List<Map<String, dynamic>> _types = [];
+  int? _typeId;
   final _amount = TextEditingController();
   final _note = TextEditingController();
   bool _busy = false;
@@ -70,6 +78,8 @@ class _AddExtraState extends State<_AddExtra> {
       _canAdd = r['can_add'] == true;
       _remaining = (r['remaining'] as num?) ?? 0;
       _window = (r['window_minutes'] as num?)?.toInt() ?? 10;
+      _types = ((r['types'] as List?) ?? const []).whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList();
+      if (_types.isNotEmpty) _typeId = (_types.first['id'] as num).toInt();
     } catch (_) {
       // let the server decide when the driver presses Send
     }
@@ -78,6 +88,10 @@ class _AddExtraState extends State<_AddExtra> {
 
   Future<void> _send() async {
     final amount = double.tryParse(_amount.text.replaceAll(',', '').trim());
+    if (_typeId == null) {
+      setState(() => _error = 'Choose what the charge is for.');
+      return;
+    }
     if (amount == null || amount <= 0) {
       setState(() => _error = 'Enter the amount.');
       return;
@@ -87,7 +101,7 @@ class _AddExtraState extends State<_AddExtra> {
       _error = null;
     });
     try {
-      await RideApi.proposeExtra(widget.rideId, kind: _kind, amount: amount, note: _note.text.trim());
+      await RideApi.proposeExtra(widget.rideId, typeId: _typeId!, amount: amount, note: _note.text.trim());
       if (mounted) Navigator.pop(context, true);
     } on ApiFailure catch (e) {
       if (mounted) setState(() => _error = e.message);
@@ -113,12 +127,12 @@ class _AddExtraState extends State<_AddExtra> {
           )
         else ...[
           Wrap(spacing: 8, runSpacing: 8, children: [
-            for (final k in _kinds)
+            for (final t in _types)
               ChoiceChip(
-                avatar: Icon(k.$3, size: 18),
-                label: Text(k.$2),
-                selected: _kind == k.$1,
-                onSelected: (_) => setState(() => _kind = k.$1),
+                avatar: Icon(_iconFor('${t['name']}'), size: 18),
+                label: Text('${t['name']}'),
+                selected: _typeId == (t['id'] as num).toInt(),
+                onSelected: (_) => setState(() => _typeId = (t['id'] as num).toInt()),
               ),
           ]),
           const SizedBox(height: 14),
@@ -198,7 +212,7 @@ class _ExtraRequestState extends State<_ExtraRequest> {
         const SizedBox(height: 10),
         Center(child: DropMoneyText(amount, symbol: _sym, style: TextStyle(fontSize: 38, fontWeight: FontWeight.w900, color: DropColors.text(context)))),
         const SizedBox(height: 4),
-        Center(child: Text(dropExtraLabel(e['kind']) + (note.isNotEmpty ? ' · $note' : ''), textAlign: TextAlign.center, style: TextStyle(fontSize: 15, color: DropColors.mutedText(context)))),
+        Center(child: Text(dropExtraLabel(e) + (note.isNotEmpty ? ' · $note' : ''), textAlign: TextAlign.center, style: TextStyle(fontSize: 15, color: DropColors.mutedText(context)))),
         const SizedBox(height: 16),
         DropActionButton(
           label: enough ? 'Pay from wallet' : 'Wallet too low (${DropMoney.format(widget.walletBalance, symbol: _sym)})',

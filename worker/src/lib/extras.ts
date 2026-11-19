@@ -1,15 +1,14 @@
 import type { Client } from "pg";
 import { currencyInfo, userCurrency } from "./currency";
+import { computeCommission } from "./commission";
 import { InsufficientFunds, postToWallet, toMoney } from "./wallet";
 
 type Row = Record<string, unknown>;
 
-export const EXTRA_KINDS = ["toll", "parking", "waiting", "other"] as const;
-export type ExtraKind = (typeof EXTRA_KINDS)[number];
 
-export type ExtrasSettings = { enabled: boolean; max_percent: number; commission_percent: number; window_minutes: number };
+export type ExtrasSettings = { enabled: boolean; max_percent: number; window_minutes: number };
 
-/** Defaults: on, an extra can add up to 20% of the fare, DROP takes no commission on extras, the passenger has 10 minutes to answer. */
+/** Defaults: on, an extra can add up to 20% of the fare, the passenger has 10 minutes to answer. Commission is decided per charge type. */
 export async function extrasSettings(db: Client): Promise<ExtrasSettings> {
   const v = ((await db.query("select value from app.settings where key = 'extras'")).rows[0]?.value ?? {}) as Record<string, unknown>;
   const num = (x: unknown, d: number, min: number, max: number) => {
@@ -19,17 +18,29 @@ export async function extrasSettings(db: Client): Promise<ExtrasSettings> {
   return {
     enabled: v.enabled !== false,
     max_percent: num(v.max_percent, 20, 0, 100),
-    commission_percent: num(v.commission_percent, 0, 0, 100),
     window_minutes: Math.round(num(v.window_minutes, 10, 1, 60)),
   };
 }
 
 const cents = (n: number) => Math.round(n * 100) / 100;
 
+export type ExtraType = { id: number; name: string; active: boolean; take_commission: boolean; max_amount: number | null; sort_order: number };
+export const typeView = (t: Row): ExtraType => ({
+  id: Number(t.id), name: String(t.name), active: t.active !== false, take_commission: t.take_commission === true,
+  max_amount: t.max_amount === null || t.max_amount === undefined ? null : Number(t.max_amount), sort_order: Number(t.sort_order ?? 0),
+});
+export async function extraTypes(db: Client, onlyActive: boolean): Promise<ExtraType[]> {
+  return (await db.query(`select * from app.extra_charge_types ${onlyActive ? "where active" : ""} order by sort_order, id`)).rows.map(typeView);
+}
+
+/** What a person reads: the type name saved with the charge, or the old fixed label. */
+export const extraName = (e: Row) => String(e.label ?? "").trim() || kindLabel(e.kind);
+
 export const extraView = (e: Row) => ({
   id: Number(e.id),
   ride_id: Number(e.ride_request_id),
   kind: e.kind,
+  label: extraName(e),
   note: e.note ?? null,
   amount: Number(e.amount),
   currency: currencyInfo(String(e.currency ?? "NGN").trim()),
@@ -45,13 +56,19 @@ type Fail = { ok: false; code: string; message: string; remaining?: number };
 /** Driver adds an extra charge after accepting, while heading to the pickup. Locked once they arrive. Not saved unless every rule passes. */
 export async function proposeExtra(
   db: Client,
-  p: { rideId: number; driverId: number; kind: ExtraKind; amount: number; note?: string },
+  p: { rideId: number; driverId: number; typeId: number; amount: number; note?: string },
 ): Promise<{ ok: true; extra: Row; rider_id: number } | Fail> {
   const s = await extrasSettings(db);
   if (!s.enabled) return { ok: false, code: "disabled", message: "Extra charges are switched off." };
   const ride = (await db.query("select id, rider_id, status, fare, currency from app.ride_requests where id = $1 and driver_id = $2", [p.rideId, p.driverId])).rows[0];
   if (!ride || ride.status !== "accepted") return { ok: false, code: "wrong_stage", message: "An extra charge can be added only after you accept, before you arrive at the pickup." };
 
+  const type = (await db.query("select * from app.extra_charge_types where id = $1", [p.typeId])).rows[0];
+  if (!type || type.active === false) return { ok: false, code: "bad_type", message: "Choose what the charge is for." };
+  if (type.max_amount !== null && p.amount > Number(type.max_amount)) {
+    const sym0 = currencyInfo(String(ride.currency ?? "NGN").trim()).symbol;
+    return { ok: false, code: "over_type_cap", message: `A ${String(type.name).toLowerCase()} charge can be at most ${sym0}${Number(type.max_amount).toLocaleString("en-NG")}.` };
+  }
   const open = (await db.query("select coalesce(sum(amount) filter (where status in ('pending','paid')), 0) as used, count(*) filter (where status = 'pending') as pending from app.ride_extras where ride_request_id = $1", [p.rideId])).rows[0];
   if (Number(open.pending) > 0) return { ok: false, code: "pending_exists", message: "Wait for the passenger to answer your last extra charge." };
   const cap = cents((Number(ride.fare) * s.max_percent) / 100);
@@ -62,9 +79,9 @@ export async function proposeExtra(
   }
   const row = (
     await db.query(
-      `insert into app.ride_extras (ride_request_id, driver_id, rider_id, kind, note, amount, currency, expires_at)
-       values ($1, $2, $3, $4, $5, $6, $7, now() + make_interval(mins => $8::int)) returning *`,
-      [p.rideId, p.driverId, ride.rider_id, p.kind, p.note?.trim() || null, p.amount.toFixed(2), String(ride.currency ?? "NGN").trim(), s.window_minutes],
+      `insert into app.ride_extras (ride_request_id, driver_id, rider_id, kind, type_id, label, commission_applies, note, amount, currency, expires_at)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now() + make_interval(mins => $11::int)) returning *`,
+      [p.rideId, p.driverId, ride.rider_id, String(type.name).toLowerCase().replace(/[^a-z0-9]+/g, "_"), type.id, type.name, type.take_commission === true, p.note?.trim() || null, p.amount.toFixed(2), String(ride.currency ?? "NGN").trim(), s.window_minutes],
     )
   ).rows[0];
   return { ok: true, extra: row, rider_id: Number(ride.rider_id) };
@@ -72,7 +89,6 @@ export async function proposeExtra(
 
 /** The passenger pays an extra from their wallet, or says they will pay cash. One transaction. */
 export async function payExtra(db: Client, extraId: number, riderId: number, method: "wallet" | "cash"): Promise<{ ok: true; extra: Row } | Fail> {
-  const s = await extrasSettings(db);
   await db.query("begin");
   try {
     const e = (await db.query("select * from app.ride_extras where id = $1 and rider_id = $2 for update", [extraId, riderId])).rows[0];
@@ -84,7 +100,12 @@ export async function payExtra(db: Client, extraId: number, riderId: number, met
       return { ok: false, code: "expired", message: "This extra charge has expired." };
     }
     const amount = Number(e.amount);
-    const commission = cents((amount * s.commission_percent) / 100);
+    // DROP's cut of an extra uses the ride type's own commission rule, only for types the admin marked as commissionable.
+    let commission = 0;
+    if (e.commission_applies === true) {
+      const svc = (await db.query("select s.commission_type, s.admin_commission from app.ride_requests r join app.services s on s.id = r.service_id where r.id = $1", [e.ride_request_id])).rows[0];
+      if (svc) commission = Number(computeCommission(svc, amount));
+    }
     if (method === "wallet") {
       if ((await userCurrency(db, riderId)) !== String(e.currency).trim()) { await db.query("rollback"); return { ok: false, code: "currency", message: "Your wallet is in a different currency. Choose cash." }; }
       try {
