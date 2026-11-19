@@ -216,9 +216,10 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     final drop = _ll(a['dropoff']);
     final me = myPos;
     final toPickup = (a['status'] == 'accepted' || a['status'] == 'arrived') && me != null;
+    final nextStop = _nextStop(a);
     final LatLng from = toPickup ? me! : pick;
-    final to = toPickup ? pick : drop;
-    final key = '${a['id']}:${toPickup ? 'toPickup' : 'trip'}';
+    final LatLng to = toPickup ? pick : (nextStop == null ? drop : LatLng(_num(nextStop['lat']), _num(nextStop['lng'])));
+    final key = '${a['id']}:${toPickup ? 'toPickup' : (nextStop == null ? 'dropoff' : 'stop-${nextStop['id']}')}';
     final moved = toPickup && _routeFrom != null && RouteGeometry.meters(_routeFrom!, me!) > 250;
     if (key == _routeKey && !moved) return;
     final changed = key != _routeKey;
@@ -246,6 +247,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     final a = active;
     if (a != null) {
       if (a['status'] != 'in_progress') out.add(DropMarker(id: 'pickup', title: 'Pickup', color: Colors.green, point: _ll(a['pickup'])));
+      for (final stop in _stops(a)) {
+        out.add(DropMarker(id: 'stop-${stop['id']}', title: 'Stop ${stop['sequence']}', color: stop['status'] == 'completed' ? Colors.grey : Colors.orange, point: LatLng(_num(stop['lat']), _num(stop['lng']))));
+      }
       out.add(DropMarker(id: 'drop', title: 'Drop-off', color: Colors.red, point: _ll(a['dropoff'])));
     } else if (online) {
       for (final r in requests) {
@@ -320,6 +324,29 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
   Map<String, dynamic> _asMap(dynamic v) => v is Map ? Map<String, dynamic>.from(v) : <String, dynamic>{};
 
   double _num(dynamic v) => v is num ? v.toDouble() : (double.tryParse(v?.toString() ?? '') ?? 0);
+
+  List<Map<String, dynamic>> _stops(Map<String, dynamic> ride) =>
+      (ride['stops'] is List ? (ride['stops'] as List) : const [])
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList()
+        ..sort((a, b) => _num(a['sequence']).compareTo(_num(b['sequence'])));
+
+  Map<String, dynamic>? _nextStop(Map<String, dynamic> ride) {
+    for (final stop in _stops(ride)) {
+      if (stop['status'] != 'completed') return stop;
+    }
+    return null;
+  }
+
+  Future<void> _arriveStop(Map<String, dynamic> ride, Map<String, dynamic> stop) async {
+    await _rideAction(() => RideApi.arriveAtStop((ride['id'] as num).toInt(), (stop['id'] as num).toInt()));
+  }
+
+  Future<void> _completeStop(Map<String, dynamic> ride, Map<String, dynamic> stop) async {
+    if (!await _confirm('Complete this stop?', 'Confirm that this passenger stop has been completed before continuing.', 'Complete stop')) return;
+    await _rideAction(() => RideApi.completeStop((ride['id'] as num).toInt(), (stop['id'] as num).toInt()));
+  }
 
   String _naira(dynamic v) => DropMoney.format(v);
 
@@ -648,14 +675,15 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     final drop = _asMap(a['dropoff']);
     final rider = _asMap(a['rider']);
     final toDrop = status == 'in_progress';
-    final target = toDrop ? drop : pickup;
+    final nextStop = toDrop ? _nextStop(a) : null;
+    final target = !toDrop ? pickup : (nextStop == null ? drop : {'lat': nextStop['lat'], 'lng': nextStop['lng'], 'address': nextStop['address']});
     final cash = a['payment_method'] != 'wallet';
     final name = (rider['first_name'] ?? '').toString();
     final phone = (rider['contact_number'] ?? '').toString();
     final pillText = status == 'accepted' ? 'Heading to pickup' : (status == 'arrived' ? 'Waiting for passenger' : 'Trip in progress');
     final pillColor = status == 'in_progress' ? DropColors.success : DropColors.primary;
     final pillIcon = status == 'accepted' ? Icons.navigation : (status == 'arrived' ? Icons.hourglass_top : Icons.directions_car);
-    final primaryLabel = status == 'accepted' ? 'I have arrived' : (status == 'arrived' ? 'Start trip' : 'Complete trip');
+    final primaryLabel = status == 'accepted' ? 'I have arrived' : (status == 'arrived' ? 'Start trip' : (nextStop == null ? 'Complete trip' : (nextStop['status'] == 'arrived' ? 'Complete stop' : 'I have arrived at stop')));
     return DropSheet(
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Row(children: [
@@ -688,9 +716,11 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
         ],
         const SizedBox(height: 14),
         DropStopTimeline(pickup: (pickup['address'] ?? '').toString(), dropoff: (drop['address'] ?? '').toString(), activeStop: toDrop ? 1 : 0),
+        for (final stop in _stops(a))
+          Padding(padding: const EdgeInsets.only(top: 8), child: Row(children: [Icon(stop['status'] == 'completed' ? Icons.check_circle : Icons.location_on_outlined, color: stop['status'] == 'completed' ? DropColors.success : DropColors.primary, size: 18), const SizedBox(width: 8), Expanded(child: Text('Stop ${stop['sequence']}: ${stop['address'] ?? 'Additional stop'}', style: TextStyle(fontWeight: FontWeight.w700, color: DropColors.text(context)))), Text(stop['status']?.toString() ?? 'pending', style: TextStyle(fontSize: 12, color: DropColors.mutedText(context))) ])),
         const SizedBox(height: 14),
         Row(children: [
-          Expanded(child: DropActionButton(label: 'Navigate', icon: Icons.navigation_outlined, onPressed: () => _startNavigation(_num(target['lat']), _num(target['lng']), toDrop ? 'Drop-off' : 'Pickup'))),
+          Expanded(child: DropActionButton(label: 'Navigate', icon: Icons.navigation_outlined, onPressed: () => _startNavigation(_num(target['lat']), _num(target['lng']), !toDrop ? 'Pickup' : (nextStop == null ? 'Drop-off' : 'Stop ${nextStop['sequence']}')))),
           const SizedBox(width: 12),
           Expanded(child: DropActionButton(label: 'SOS', icon: Icons.sos, danger: true, onPressed: () => showDropSos(context, rideId: (a['id'] as num?)?.toInt()))),
         ]),
@@ -715,7 +745,11 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
                   final id = (a['id'] as num).toInt();
                   if (status == 'accepted') _rideAction(() => RideApi.arrived(id));
                   if (status == 'arrived') _rideAction(() => RideApi.start(id));
-                  if (status == 'in_progress') _complete(a);
+                  if (status == 'in_progress') {
+                    if (nextStop == null) { _complete(a); }
+                    else if (nextStop['status'] == 'arrived') { _completeStop(a, nextStop); }
+                    else { _arriveStop(a, nextStop); }
+                  }
                 },
         ),
         if (status != 'in_progress')
