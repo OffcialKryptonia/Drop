@@ -1135,6 +1135,8 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
         Text(_money(r['fare'], r['currency']), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
       ]),
       if (sub.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text(sub, style: TextStyle(color: Colors.grey.shade700))),
+      for (final stop in _l(r['stops']).map(_m))
+        Padding(padding: const EdgeInsets.only(top: 6), child: Row(children: [Icon(stop['status'] == 'completed' ? Icons.check_circle : Icons.location_on_outlined, size: 17, color: stop['status'] == 'completed' ? Colors.green : primaryColor), const SizedBox(width: 8), Expanded(child: Text('Stop ${stop['sequence']}: ${stop['address'] ?? 'Additional stop'}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13))), Text(stop['status']?.toString() ?? 'pending', style: TextStyle(fontSize: 11, color: Colors.grey.shade600))])),
       if (r['eta'] is Map) ...[
         const SizedBox(height: 10),
         DropEtaStrip(eta: _m(r['eta'])),
