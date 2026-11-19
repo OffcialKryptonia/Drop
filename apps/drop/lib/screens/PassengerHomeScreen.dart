@@ -614,6 +614,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
     final pts = <LatLng>[
       LatLng(_d(_m(r['pickup'])['lat']), _d(_m(r['pickup'])['lng'])),
       LatLng(_d(_m(r['dropoff'])['lat']), _d(_m(r['dropoff'])['lng'])),
+      for (final stop in _l(r['stops']).map(_m)) LatLng(_d(stop['lat']), _d(stop['lng'])),
     ];
     final loc = _m(_m(r['driver'])['location']);
     if (loc.isNotEmpty) pts.add(LatLng(_d(loc['lat']), _d(loc['lng'])));
@@ -692,46 +693,51 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
   /// is coming, then pickup -> drop-off again. A line fetched before is shown at once.
   void _syncRoute() {
     final r = ride;
-    LatLng from, to;
+    final waypoints = <LatLng>[];
     String key;
     var toPickup = false;
     final drv = _driverRaw;
     if (phase == _Phase.choose && pickup != null) {
-      from = pickup!;
-      to = center;
+      waypoints.add(pickup!);
+      waypoints.addAll(additionalStops.map((s) => LatLng(_d(s['lat']), _d(s['lng']))));
+      waypoints.add(center);
       key = 'choose';
     } else if (phase == _Phase.trip && r != null) {
       final pick = LatLng(_d(_m(r['pickup'])['lat']), _d(_m(r['pickup'])['lng']));
       final drop = LatLng(_d(_m(r['dropoff'])['lat']), _d(_m(r['dropoff'])['lng']));
       final status = r['status'];
       toPickup = (status == 'accepted' || status == 'arrived') && drv != null;
-      from = toPickup ? drv! : pick;
-      to = toPickup ? pick : drop;
+      if (toPickup) {
+        waypoints.add(drv!);
+        waypoints.add(pick);
+      } else {
+        waypoints.add(pick);
+        for (final stop in _l(r['stops']).map(_m)) {
+          if (stop['status'] != 'completed') waypoints.add(LatLng(_d(stop['lat']), _d(stop['lng'])));
+        }
+        waypoints.add(drop);
+      }
       key = '${r['id']}:${toPickup ? 'toPickup' : 'trip'}';
     } else {
       if (_routeFull.isNotEmpty || _routeKey != null) setState(() { _routeFull = const []; _routeKey = null; _routeFrom = null; _prevDriver = null; });
       return;
     }
     final moved = toPickup && _routeFrom != null && RouteGeometry.meters(_routeFrom!, drv!) > 250;
-    final target = '$key:${to.latitude.toStringAsFixed(5)},${to.longitude.toStringAsFixed(5)}';
+    final target = '$key:${waypoints.map((p) => '${p.latitude.toStringAsFixed(5)},${p.longitude.toStringAsFixed(5)}').join('|')}';
     if (target == _routeKey && !moved) return;
     _routeKey = target;
-    _routeFrom = from;
-    final known = RouteLineApi.cached(from, to);
-    final ends = '${from.latitude.toStringAsFixed(4)},${from.longitude.toStringAsFixed(4)}>${to.latitude.toStringAsFixed(4)},${to.longitude.toStringAsFixed(4)}';
-    if (known != null) {
-      _shownEnds = ends;
-      setState(() => _routeFull = known);
-      return;
-    }
-    // Keep the line on screen while the same journey is refreshed; clear it only for a different one.
-    if (!moved && _shownEnds != ends) setState(() => _routeFull = const []);
-    RouteLineApi.fetch(from, to).then((pts) {
+    _routeFrom = waypoints.first;
+    if (!moved) setState(() => _routeFull = const []);
+    () async {
+      final all = <LatLng>[];
+      for (var i = 0; i < waypoints.length - 1; i++) {
+        final segment = await RouteLineApi.fetch(waypoints[i], waypoints[i + 1]);
+        if (segment.isNotEmpty) all.addAll(all.isEmpty ? segment : segment.skip(1));
+      }
       if (!mounted || _routeKey != target) return;
-      _shownEnds = ends;
-      setState(() => _routeFull = pts);
-      if (key == 'choose' && pts.length > 1) _map.fitPoints([from, to, ...pts]);
-    });
+      setState(() => _routeFull = all);
+      if (all.length > 1 && key == 'choose') _map.fitPoints([...waypoints, ...all]);
+    }();
   }
 
   List<DropMarker> get _markers {
@@ -740,6 +746,9 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
       final r = ride!;
       out.add(DropMarker(id: 'pickup', title: 'Pickup', color: Colors.green, point: LatLng(_d(_m(r['pickup'])['lat']), _d(_m(r['pickup'])['lng']))));
       out.add(DropMarker(id: 'drop', title: 'Drop-off', color: Colors.red, point: LatLng(_d(_m(r['dropoff'])['lat']), _d(_m(r['dropoff'])['lng']))));
+      for (final stop in _l(r['stops']).map(_m)) {
+        out.add(DropMarker(id: 'stop-${stop['id']}', title: 'Stop ${stop['sequence']}', color: stop['status'] == 'completed' ? Colors.grey : Colors.orange, point: LatLng(_d(stop['lat']), _d(stop['lng']))));
+      }
       final v = _vehiclePoint;
       if (v != null) {
         final key = _m(r['service'])['map_icon']?.toString() ?? 'car';
@@ -748,6 +757,12 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
     } else if (pickup != null) {
       out.add(DropMarker(id: 'pickup', title: 'Pickup', color: Colors.green, point: pickup!));
       if (phase == _Phase.choose) out.add(DropMarker(id: 'drop', title: 'Drop-off', color: Colors.red, point: center));
+      if (phase == _Phase.choose) {
+        for (var i = 0; i < additionalStops.length; i++) {
+          final stop = additionalStops[i];
+          out.add(DropMarker(id: 'stop-${i + 1}', title: 'Stop ${i + 1}', color: Colors.orange, point: LatLng(_d(stop['lat']), _d(stop['lng']))));
+        }
+      }
     }
     // The passenger: an arrow that moves with the phone and turns as it turns.
     final me = _live.point;
