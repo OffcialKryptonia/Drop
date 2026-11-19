@@ -10,6 +10,7 @@ import { getSetting } from "../lib/driver-application";
 import { voidExtrasForRide } from "../lib/extras";
 import { extraTypes, extrasSettings } from "../lib/extras";
 import { readBody } from "../lib/legacy";
+import { chatUnread } from "../lib/chat";
 import { driverPickupFlags, issuePickupCode, pickupSettings, startAllowedSql, verifyPickup } from "../lib/pickup";
 import { completeRide } from "../lib/ride-settlement";
 import { pushLater, pushRideEvent } from "../lib/push";
@@ -172,6 +173,7 @@ driverRideRoutes.post("/driver/requests/:id/decline", ...mw, async (c) => {
 const shapeActive = async (c: C, active: Row) => ({
   ...request(active, await ruleOf(c, active.service_id)),
   ...(await driverPickupFlags(c.get("db"), Number(active.id))),
+  chat_unread: await chatUnread(c.get("db"), Number(active.id), c.get("user").id, c.get("user").id),
 });
 const notYours = (c: C) => c.json({ status: false, code: "wrong_state", message: "This ride is not in the right state for that." }, 409);
 const idOf = (c: C) => Number(c.req.param("id"));
