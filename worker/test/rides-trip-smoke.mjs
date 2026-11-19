@@ -51,6 +51,7 @@ try {
   const book = async (method = "cash", pax = P) => { const r = await call("POST", "/ride/request", pax.api_token, { ...trip, payment_method: method }); return r.json.data; };
 
   // --- ordered multi-stop trip ---
+  let r;
   const stops = [
     { lat: 9.0700, lng: 7.4200, address: "First intermediate stop" },
     { lat: 9.0600, lng: 7.4500, address: "Second intermediate stop" },
@@ -80,7 +81,7 @@ try {
   ok("driver receipt preserves ordered stops", driverReceipt.status === 200 && driverReceipt.json.data?.stops?.[0]?.sequence === 1 && driverReceipt.json.data?.stops?.[1]?.sequence === 2);
 
   // --- cash trip ---
-  let r = await book("cash");
+  r = await book("cash");
   ok("other driver cannot move a ride that is not theirs", (await call("POST", `/driver/rides/${r.id}/arrived`, d.T)).status === 409);
   await call("POST", `/driver/requests/${r.id}/accept`, d.T);
   ok("cannot start before arriving", (await call("POST", `/driver/rides/${r.id}/start`, d.T)).status === 409);
