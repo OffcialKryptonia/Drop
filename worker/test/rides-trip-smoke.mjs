@@ -50,6 +50,35 @@ try {
   for (const x of [d, d2]) await db.query("insert into app.wallets (user_id, kind, balance, allow_negative) values ($1,'driver',5000,true) on conflict (user_id, kind) do update set balance = 5000", [x.id]);
   const book = async (method = "cash", pax = P) => { const r = await call("POST", "/ride/request", pax.api_token, { ...trip, payment_method: method }); return r.json.data; };
 
+  // --- ordered multi-stop trip ---
+  const stops = [
+    { lat: 9.0700, lng: 7.4200, address: "First intermediate stop" },
+    { lat: 9.0600, lng: 7.4500, address: "Second intermediate stop" },
+  ];
+  const estimate = await call("POST", "/ride/estimate", P.api_token, { ...trip, stops });
+  ok("estimate includes every ordered stop", estimate.status === 200 && estimate.json.stops?.length === 2 && estimate.json.stops[0].address === stops[0].address);
+  const multi = await call("POST", "/ride/request", P.api_token, { ...trip, stops, payment_method: "cash" });
+  r = multi.json.data;
+  ok("booking persists stops in submitted order", multi.status === 201 && r?.stops?.length === 2 && r.stops[0].sequence === 1 && r.stops[1].sequence === 2);
+  await call("POST", `/driver/requests/${r.id}/accept`, d.T);
+  await call("POST", `/driver/rides/${r.id}/arrived`, d.T);
+  await verifyPickup(r.id, d, P);
+  await call("POST", `/driver/rides/${r.id}/start`, d.T);
+  const [first, second] = r.stops;
+  ok("cannot arrive at a later stop out of order", (await call("POST", `/driver/rides/${r.id}/stops/${second.id}/arrived`, d.T)).status === 409);
+  ok("first stop arrival accepted", (await call("POST", `/driver/rides/${r.id}/stops/${first.id}/arrived`, d.T)).status === 200);
+  ok("cannot end trip while stops remain", (await call("POST", `/driver/rides/${r.id}/complete`, d.T)).status === 409);
+  ok("first stop completion accepted", (await call("POST", `/driver/rides/${r.id}/stops/${first.id}/complete`, d.T)).status === 200);
+  ok("cannot complete the same stop twice", (await call("POST", `/driver/rides/${r.id}/stops/${first.id}/complete`, d.T)).status === 409);
+  ok("second stop arrival accepted after first completion", (await call("POST", `/driver/rides/${r.id}/stops/${second.id}/arrived`, d.T)).status === 200);
+  ok("second stop completion accepted", (await call("POST", `/driver/rides/${r.id}/stops/${second.id}/complete`, d.T)).status === 200);
+  const multiDone = await call("POST", `/driver/rides/${r.id}/complete`, d.T);
+  ok("trip completes after all stops are completed", multiDone.status === 200 && multiDone.json.data?.stops?.every((s) => s.status === "completed"));
+  const passengerReceipt = await call("GET", `/ride/${r.id}/receipt`, P.api_token);
+  const driverReceipt = await call("GET", `/driver/rides/${r.id}/receipt`, d.T);
+  ok("passenger receipt preserves ordered stops", passengerReceipt.status === 200 && passengerReceipt.json.data?.stops?.[0]?.sequence === 1 && passengerReceipt.json.data?.stops?.[1]?.sequence === 2);
+  ok("driver receipt preserves ordered stops", driverReceipt.status === 200 && driverReceipt.json.data?.stops?.[0]?.sequence === 1 && driverReceipt.json.data?.stops?.[1]?.sequence === 2);
+
   // --- cash trip ---
   let r = await book("cash");
   ok("other driver cannot move a ride that is not theirs", (await call("POST", `/driver/rides/${r.id}/arrived`, d.T)).status === 409);
