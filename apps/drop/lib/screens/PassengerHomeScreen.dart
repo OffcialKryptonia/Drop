@@ -73,6 +73,8 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
   String pickupAddress = 'Your location';
   LatLng center = const LatLng(9.0765, 7.3986); // Abuja until we know where the person is
   String dropAddress = '';
+  final List<Map<String, dynamic>> additionalStops = [];
+  int maxAdditionalStops = 0;
   List<Map<String, dynamic>> homeTypes = [];
   int? homeType;
   List<Map<String, dynamic>> recents = [];
@@ -178,6 +180,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
 
   Future<void> _start() async {
     mapConfig = await MapConfig.load();
+    try { maxAdditionalStops = await RideApi.stopLimit(); } catch (_) { maxAdditionalStops = 0; }
     if (mapConfig.mapboxRegionBorderingEnabled) {
       try { regionBoundaries = await RegionApi.boundaries(); } catch (_) { regionBoundaries = const []; }
     }
@@ -319,13 +322,15 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
   }
 
   /// "Enter your route": search, Suggested and Saved places. Choosing a place goes straight to prices.
-  Future<void> _openRouteScreen() async {
+  Future<void> _openRouteScreen({bool addingStop = false}) async {
     if (pickup == null) {
       await _locate();
       if (pickup == null) return;
     }
+    final routeOrigin = addingStop && additionalStops.isNotEmpty ? LatLng(_d(additionalStops.last['lat']), _d(additionalStops.last['lng'])) : pickup!;
+    final routeOriginAddress = addingStop && additionalStops.isNotEmpty ? additionalStops.last['address']?.toString() ?? pickupAddress : pickupAddress;
     final r = await Navigator.of(context).push<DropRouteResult>(
-      MaterialPageRoute(fullscreenDialog: true, builder: (_) => DropRouteScreen(pickup: pickup!, pickupAddress: pickupAddress, recents: recents)),
+      MaterialPageRoute(fullscreenDialog: true, builder: (_) => DropRouteScreen(pickup: routeOrigin, pickupAddress: routeOriginAddress, recents: recents, selectionLabel: addingStop ? 'Stop' : 'To')),
     );
     if (r == null || !mounted) return;
     if (r.pickup != null) {
@@ -349,6 +354,10 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
     }
     if (r.kind == 'mapDrop') {
       setState(() { pinForPickup = false; pinMode = true; });
+      return;
+    }
+    if (r.kind == 'stop' && r.point != null) {
+      setState(() => additionalStops.add({'lat': r.point!.latitude, 'lng': r.point!.longitude, 'address': r.address}));
       return;
     }
     if (r.point != null) {
@@ -416,6 +425,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
         dropLat: center.latitude,
         dropLng: center.longitude,
         dropAddress: drop,
+        stops: List<Map<String, dynamic>>.from(additionalStops),
       );
       dropAddress = drop;
       final types = _l(quote['ride_types']);
@@ -467,6 +477,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
         serviceId: selectedType!,
         paymentMethod: payment,
         optionIds: extras.toList(),
+        stops: List<Map<String, dynamic>>.from(additionalStops),
       );
       _setRide(_m(res['data']));
     } on ApiFailure catch (e) {
@@ -630,6 +641,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
       finished = null;
       ride = null;
       quote = {};
+      additionalStops.clear();
       phase = _Phase.plan;
     });
     _locate();
@@ -946,6 +958,23 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
           const SizedBox(width: 8),
           Expanded(child: Text(dropAddress.isEmpty ? 'Move the map to choose your drop-off' : dropAddress, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700))),
         ]),
+        if (maxAdditionalStops > 0) ...[
+          const SizedBox(height: 10),
+          for (var i = 0; i < additionalStops.length; i++)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(children: [
+                Icon(Icons.more_vert, color: primaryColor, size: 18),
+                const SizedBox(width: 8),
+                Expanded(child: Text('Stop ${i + 1}: ${additionalStops[i]['address']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600))),
+                IconButton(tooltip: 'Move stop up', onPressed: i == 0 ? null : () => setState(() { final x = additionalStops.removeAt(i); additionalStops.insert(i - 1, x); }), icon: const Icon(Icons.arrow_upward, size: 18)),
+                IconButton(tooltip: 'Move stop down', onPressed: i == additionalStops.length - 1 ? null : () => setState(() { final x = additionalStops.removeAt(i); additionalStops.insert(i + 1, x); }), icon: const Icon(Icons.arrow_downward, size: 18)),
+                IconButton(tooltip: 'Remove stop', onPressed: () => setState(() => additionalStops.removeAt(i)), icon: const Icon(Icons.close, size: 18)),
+              ]),
+            ),
+          if (additionalStops.length < maxAdditionalStops)
+            Align(alignment: Alignment.centerLeft, child: TextButton.icon(onPressed: () => _openRouteScreen(addingStop: true), icon: const Icon(Icons.add_location_alt_outlined), label: Text('Add stop (${additionalStops.length}/$maxAdditionalStops)'))),
+        ],
         const SizedBox(height: 14),
         SizedBox(
           width: double.infinity,
