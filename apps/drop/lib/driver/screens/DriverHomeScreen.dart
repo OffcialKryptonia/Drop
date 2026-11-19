@@ -583,6 +583,12 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
                 DropReceiptRow(label: 'Your earning', amount: DropMoneyText(res['earning']), bold: true),
               ]),
             ),
+            if (res['stops'] is List && (res['stops'] as List).isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text('Completed stops', style: TextStyle(fontWeight: FontWeight.w800, color: DropColors.text(c))),
+              for (final stop in (res['stops'] as List).whereType<Map>())
+                Padding(padding: const EdgeInsets.only(top: 4), child: Row(children: [const Icon(Icons.check_circle, size: 16, color: Colors.green), const SizedBox(width: 8), Expanded(child: Text('Stop ${stop['sequence']}: ${stop['address'] ?? 'Additional stop'}', style: TextStyle(fontSize: 13, color: DropColors.text(c))))])),
+            ],
             const SizedBox(height: 12),
             if (cash)
               Container(
