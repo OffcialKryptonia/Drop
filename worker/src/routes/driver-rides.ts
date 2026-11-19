@@ -9,6 +9,8 @@ import { driverOnlineBlock, requireApprovedDriver } from "../lib/roles";
 import { getSetting } from "../lib/driver-application";
 import { voidExtrasForRide } from "../lib/extras";
 import { extraTypes, extrasSettings } from "../lib/extras";
+import { readBody } from "../lib/legacy";
+import { driverPickupFlags, issuePickupCode, pickupSettings, startAllowedSql, verifyPickup } from "../lib/pickup";
 import { completeRide } from "../lib/ride-settlement";
 import { pushLater, pushRideEvent } from "../lib/push";
 
@@ -82,7 +84,7 @@ driverRideRoutes.get("/driver/requests", ...mw, async (c) => {
   if (active) {
     // The "Add extra charge" button only shows while the feature is on and the admin has at least one active charge type.
     const extrasOn = (await extrasSettings(db)).enabled && (await extraTypes(db, true)).length > 0;
-    return c.json({ status: true, active: { ...hideEta(request(active, await ruleOf(c, active.service_id))), extras_enabled: extrasOn }, requests: [] });
+    return c.json({ status: true, active: { ...hideEta(await shapeActive(c, active)), extras_enabled: extrasOn }, requests: [] });
   }
 
   const st = (await db.query("select is_online from app.users where id = $1", [me.id])).rows[0];
@@ -135,6 +137,14 @@ driverRideRoutes.post("/driver/requests/:id/accept", ...mw, async (c) => {
       return c.json({ status: false, code: "request_gone", message: "This request is no longer available." }, 409);
     }
     await db.query("update app.users set is_available = false where id = $1", [me.id]);
+    try {
+      await db.query("savepoint pickup");
+      await issuePickupCode(db, c.env.SETTINGS_ENCRYPTION_KEY, id);
+    } catch (err) {
+      // A problem making the code must not stop the ride; the start rule only applies when a code exists.
+      await db.query("rollback to savepoint pickup");
+      console.error("pickup code not issued", (err as Error).message);
+    }
     await db.query("commit");
     pushLater(c, pushRideEvent(db, c.env, Number(r.rows[0].rider_id), "accepted", id));
   } catch (e) {
@@ -143,7 +153,7 @@ driverRideRoutes.post("/driver/requests/:id/accept", ...mw, async (c) => {
     throw e;
   }
   const active = await activeOf(c);
-  return c.json({ status: true, data: active ? request(active, await ruleOf(c, active.service_id)) : null });
+  return c.json({ status: true, data: active ? await shapeActive(c, active) : null });
 });
 
 /** Not interested: the request is hidden from this driver only. */
@@ -158,20 +168,44 @@ driverRideRoutes.post("/driver/requests/:id/decline", ...mw, async (c) => {
   return c.json({ status: true });
 });
 
+/** The driver's open ride plus whether the pickup code is still needed. */
+const shapeActive = async (c: C, active: Row) => ({
+  ...request(active, await ruleOf(c, active.service_id)),
+  ...(await driverPickupFlags(c.get("db"), Number(active.id))),
+});
 const notYours = (c: C) => c.json({ status: false, code: "wrong_state", message: "This ride is not in the right state for that." }, 409);
 const idOf = (c: C) => Number(c.req.param("id"));
 
 /** Move a ride one step forward, only if it is this driver's and in the expected state. */
 async function step(c: C, from: string, to: string, stamp: string) {
-  const r = await c.get("db").query(
-    `update app.ride_requests set status = $3, ${stamp} = now() where id = $1 and driver_id = $2 and status = $4 returning id, rider_id`,
-    [idOf(c), c.get("user").id, to, from],
+  const db = c.get("db");
+  // Starting the trip needs the passenger's pickup code to have been verified (or an admin override). Enforced in the same UPDATE, so no other request can skip it.
+  const guarded = to === "in_progress";
+  const r = await db.query(
+    `update app.ride_requests set status = $3, ${stamp} = now() where id = $1 and driver_id = $2 and status = $4${guarded ? ` and ${startAllowedSql(5)}` : ""} returning id, rider_id`,
+    guarded ? [idOf(c), c.get("user").id, to, from, (await pickupSettings(db)).enabled] : [idOf(c), c.get("user").id, to, from],
   );
-  if (!r.rowCount) return notYours(c);
+  if (!r.rowCount) {
+    if (guarded) {
+      const flags = await driverPickupFlags(db, idOf(c));
+      if (flags.pickup_required) return c.json({ status: false, code: "pickup_not_verified", message: "Enter the passenger’s pickup code before starting the trip." }, 409);
+    }
+    return notYours(c);
+  }
   if (to === "arrived" || to === "in_progress") pushLater(c, pushRideEvent(c.get("db"), c.env, Number(r.rows[0].rider_id), to === "arrived" ? "arrived" : "started", idOf(c)));
   const active = await activeOf(c);
-  return c.json({ status: true, data: active ? request(active, await ruleOf(c, active.service_id)) : null });
+  return c.json({ status: true, data: active ? await shapeActive(c, active) : null });
 }
+
+/** Driver types the passenger's 4-digit pickup code. The server checks it; the app never sees the right code. */
+driverRideRoutes.post("/driver/rides/:id/verify-pickup", ...mw, async (c) => {
+  const code = String((await readBody(c)).code ?? "").trim();
+  if (!/^\d{4}$/.test(code)) return c.json({ status: false, code: "bad_format", message: "Enter the four-digit code." }, 422);
+  const r = await verifyPickup(c.get("db"), idOf(c), c.get("user").id, code);
+  if (!r.ok) return c.json({ status: false, code: r.code, message: r.message, attempts_left: r.attempts_left ?? null, retry_after_seconds: r.retry_after_seconds ?? null }, r.code === "wrong_state" ? 409 : 422);
+  const active = await activeOf(c);
+  return c.json({ status: true, data: active ? await shapeActive(c, active) : null });
+});
 
 /** Driver is at the pickup point. */
 driverRideRoutes.post("/driver/rides/:id/arrived", ...mw, (c) => step(c, "accepted", "arrived", "arrived_at"));
@@ -193,7 +227,7 @@ driverRideRoutes.post("/driver/rides/:id/stops/:stopId/arrived", ...mw, async (c
   );
   if (!result.rowCount) return c.json({ status:false, code:"stop_out_of_order", message:"Complete the previous stop before arriving at this one." },409);
   const active = await activeOf(c);
-  return c.json({ status:true, data: active ? request(active, await ruleOf(c, active.service_id)) : null });
+  return c.json({ status:true, data: active ? await shapeActive(c, active) : null });
 });
 driverRideRoutes.post("/driver/rides/:id/stops/:stopId/complete", ...mw, async (c) => {
   const rideId = idOf(c), stopId = Number(c.req.param("stopId")), db = c.get("db"), driverId = c.get("user").id;
@@ -209,7 +243,7 @@ driverRideRoutes.post("/driver/rides/:id/stops/:stopId/complete", ...mw, async (
   );
   if (!result.rowCount) return c.json({ status:false, code:"stop_out_of_order", message:"Arrive at the current stop after completing the previous stop." },409);
   const active = await activeOf(c);
-  return c.json({ status:true, data: active ? request(active, await ruleOf(c, active.service_id)) : null });
+  return c.json({ status:true, data: active ? await shapeActive(c, active) : null });
 });
 
 /** Trip finished: pays the driver / takes commission and frees the driver for the next request. */

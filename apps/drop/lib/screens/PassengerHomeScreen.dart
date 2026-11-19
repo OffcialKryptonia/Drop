@@ -21,6 +21,7 @@ import '../drop/widgets/drop_sos_sheet.dart';
 import '../service/DriverApplicationApi.dart' show ApiFailure, DriverApplicationApi;
 import '../service/RouteLineApi.dart';
 import '../drop/widgets/drop_extras.dart';
+import '../drop/widgets/drop_pickup.dart';
 import '../service/MapConfig.dart';
 import '../service/RegionApi.dart';
 import '../service/RideApi.dart';
@@ -1072,6 +1073,10 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
       if (r['eta'] is Map) ...[
         const SizedBox(height: 10),
         DropEtaStrip(eta: _m(r['eta'])),
+      ],
+      if (r['pickup_code'] is Map && (r['pickup_code'] as Map)['code'] != null) ...[
+        const SizedBox(height: 12),
+        DropPickupCodeCard(code: '${(r['pickup_code'] as Map)['code']}'),
       ],
       if (driver.isNotEmpty) ...[
         const SizedBox(height: 12),

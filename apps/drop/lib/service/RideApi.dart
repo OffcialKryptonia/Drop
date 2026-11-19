@@ -140,6 +140,9 @@ class RideApi {
 
   static Future<Map<String, dynamic>> arrived(int id) => _post('driver/rides/$id/arrived');
 
+  /// The server checks the passenger's four-digit code; the trip cannot start until it is accepted.
+  static Future<Map<String, dynamic>> verifyPickup(int id, String code) => _post('driver/rides/$id/verify-pickup', {'code': code});
+
   static Future<Map<String, dynamic>> start(int id) => _post('driver/rides/$id/start');
 
   static Future<Map<String, dynamic>> complete(int id) => _post('driver/rides/$id/complete');
