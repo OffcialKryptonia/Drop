@@ -334,7 +334,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
       MaterialPageRoute(fullscreenDialog: true, builder: (_) => DropRouteScreen(pickup: routeOrigin, pickupAddress: routeOriginAddress, recents: recents, selectionLabel: addingStop ? 'Stop' : 'To')),
     );
     if (r == null || !mounted) return;
-    if (r.pickup != null) {
+    if (r.pickup != null && !addingStop) {
       _pickupAuto = false;
       setState(() {
         pickup = r.pickup;
