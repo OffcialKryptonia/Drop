@@ -681,9 +681,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
           DropFactChip(icon: Icons.route, text: 'Trip ${_num(r['distance']).toStringAsFixed(1)} $unit · $tripMin min'),
         ]),
         const SizedBox(height: 14),
-        DropStopTimeline(pickup: (pickup['address'] ?? '').toString(), dropoff: (drop['address'] ?? '').toString()),
-        for (final stop in _stops(r))
-          Padding(padding: const EdgeInsets.only(top: 6), child: Row(children: [const Icon(Icons.location_on_outlined, size: 16, color: Colors.orange), const SizedBox(width: 8), Expanded(child: Text('Stop ${stop['sequence']}: ${stop['address'] ?? 'Additional stop'}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)))])),
+        DropStopTimeline(pickup: (pickup['address'] ?? '').toString(), dropoff: (drop['address'] ?? '').toString(), stops: _stops(r)),
         const SizedBox(height: 10),
         Center(child: Text('Swipe down to accept \u00B7 up to decline', style: TextStyle(fontSize: 12, color: DropColors.mutedText(context)))),
         const SizedBox(height: 10),
@@ -743,9 +741,12 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
           ]),
         ],
         const SizedBox(height: 14),
-        DropStopTimeline(pickup: (pickup['address'] ?? '').toString(), dropoff: (drop['address'] ?? '').toString(), activeStop: toDrop ? 1 : 0),
-        for (final stop in _stops(a))
-          Padding(padding: const EdgeInsets.only(top: 8), child: Row(children: [Icon(stop['status'] == 'completed' ? Icons.check_circle : Icons.location_on_outlined, color: stop['status'] == 'completed' ? DropColors.success : DropColors.primary, size: 18), const SizedBox(width: 8), Expanded(child: Text('Stop ${stop['sequence']}: ${stop['address'] ?? 'Additional stop'}', style: TextStyle(fontWeight: FontWeight.w700, color: DropColors.text(context)))), Text(stop['status']?.toString() ?? 'pending', style: TextStyle(fontSize: 12, color: DropColors.mutedText(context))) ])),
+        DropStopTimeline(
+          pickup: (pickup['address'] ?? '').toString(),
+          dropoff: (drop['address'] ?? '').toString(),
+          stops: _stops(a),
+          activeStop: !toDrop ? 0 : (nextStop == null ? _stops(a).length + 1 : _stops(a).indexWhere((s) => s['id'] == nextStop['id']) + 1),
+        ),
         const SizedBox(height: 14),
         Row(children: [
           Expanded(child: DropActionButton(label: 'Navigate', icon: Icons.navigation_outlined, onPressed: () => _startNavigation(_num(target['lat']), _num(target['lng']), !toDrop ? 'Pickup' : (nextStop == null ? 'Drop-off' : 'Stop ${nextStop['sequence']}')))),
