@@ -54,6 +54,12 @@ jobs:
         working-directory: worker
         run: npm ci
 
+      - name: Prepare Supabase-compatible extensions schema
+        run: |
+          set -euo pipefail
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE SCHEMA IF NOT EXISTS extensions"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "ALTER EXTENSION postgis SET SCHEMA extensions"
+
       - name: Apply every database migration to disposable PostGIS
         shell: bash
         run: |
