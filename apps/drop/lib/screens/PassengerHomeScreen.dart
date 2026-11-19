@@ -15,6 +15,7 @@ import '../components/drawer_component.dart';
 import '../drop/services/drop_money.dart';
 import '../drop/widgets/drop_email_prompt.dart';
 import '../drop/widgets/drop_eta.dart';
+import '../drop/widgets/drop_pickup.dart';
 import '../drop/screens/drop_route_screen.dart';
 import '../drop/widgets/drop_ride_type_strip.dart';
 import '../drop/widgets/drop_sos_sheet.dart';
