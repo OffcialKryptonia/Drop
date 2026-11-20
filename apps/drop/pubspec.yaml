@@ -40,7 +40,8 @@ dependencies:
   permission_handler: ^11.3.1
   record: ^6.0.0
   # In-app voice calling: both providers sit behind one interface (lib/service/call), an admin picks which is used
-  livekit_client: ^2.14.0
+  livekit_client:
+    path: third_party/livekit_client
   agora_rtc_engine: ^6.5.0
   pinput: ^5.0.0
   # MAP
@@ -131,8 +132,6 @@ dev_dependencies:
 dependency_overrides:
   # LiveKit's token library needs pointycastle 4; mighty_core's encrypt asks for 3.x. Only LiveKit uses the 4.x API.
   pointycastle: ^4.0.0
-  # LiveKit 2.14 needs connectivity_plus 7 (same API as 6 for what the app and mighty_core use)
-  connectivity_plus: ^7.0.0
   package_info_plus: ^4.1.0
   meta: ^1.15.0
   intl: ^0.18.0
