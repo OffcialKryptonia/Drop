@@ -40,7 +40,7 @@ dependencies:
   permission_handler: ^11.3.1
   record: ^6.0.0
   # In-app voice calling: both providers sit behind one interface (lib/service/call), an admin picks which is used
-  livekit_client: ^2.14.0
+  livekit_client: ">=2.5.4 <2.14.0"
   agora_rtc_engine: ^6.5.0
   pinput: ^5.0.0
   # MAP
@@ -61,7 +61,7 @@ dependencies:
   http: ^1.2.2
   # On-device spoken turn-by-turn guidance for Driver Navigation.
   flutter_tts: ^4.2.3
-  connectivity_plus: ^7.0.0
+  connectivity_plus: ^6.0.5
   url_launcher: ^6.3.0
   internet_file: ^1.2.0
   #FIREBASE
