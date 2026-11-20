@@ -8,6 +8,7 @@ import '../manage_imports.dart';
 import '../screens/DriverApplicationScreen.dart';
 import '../service/PushService.dart';
 import '../service/DriverApplicationApi.dart' show DriverApplicationApi;
+import '../service/call/call_controller.dart';
 
 Widget dotIndicator(list, i) {
   return SizedBox(
@@ -529,6 +530,11 @@ oneSignalSettings() async {
     if (data['type'] == 'chat_message') {
       final rideId = int.tryParse('${data['ride_id']}');
       if (rideId != null) launchScreen(getContext, DropChatScreen(rideId: rideId));
+      return;
+    }
+    // An incoming call: look for it right away so the call screen opens without waiting for the next check.
+    if (data['type'] == 'call_incoming') {
+      CallController.instance.checkIncoming();
       return;
     }
     // A document request or application decision opens the driver application page.

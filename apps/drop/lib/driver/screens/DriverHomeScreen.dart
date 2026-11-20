@@ -7,6 +7,7 @@ import 'package:drop/drop/widgets/drop_eta.dart';
 import 'package:drop/drop/widgets/drop_extras.dart';
 import 'package:drop/drop/widgets/drop_pickup.dart';
 import 'package:drop/drop/screens/drop_chat_screen.dart';
+import 'package:drop/drop/widgets/drop_call_button.dart';
 import 'package:drop/drop/widgets/drop_money.dart';
 import 'package:drop/drop/widgets/drop_ride_ui.dart';
 import 'package:drop/driver/screens/DriverNavigationScreen.dart';
@@ -527,15 +528,6 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     }
   }
 
-  Future<void> _callRider(String? n) async {
-    if (n == null || n.isEmpty) return;
-    try {
-      await launchUrl(Uri.parse('tel:$n'));
-    } catch (_) {
-      _say('Could not open the phone app.');
-    }
-  }
-
   int _secondsLeft(Map<String, dynamic> r) {
     final e = DateTime.tryParse(r['expires_at']?.toString() ?? '');
     if (e == null) return 0;
@@ -705,7 +697,6 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     final target = !toDrop ? pickup : (nextStop == null ? drop : {'lat': nextStop['lat'], 'lng': nextStop['lng'], 'address': nextStop['address']});
     final cash = a['payment_method'] != 'wallet';
     final name = (rider['first_name'] ?? '').toString();
-    final phone = (rider['contact_number'] ?? '').toString();
     final pillText = status == 'accepted' ? 'Heading to pickup' : (status == 'arrived' ? 'Waiting for passenger' : 'Trip in progress');
     final pillColor = status == 'in_progress' ? DropColors.success : DropColors.primary;
     final pillIcon = status == 'accepted' ? Icons.navigation : (status == 'arrived' ? Icons.hourglass_top : Icons.directions_car);
@@ -738,7 +729,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
                 Text('Passenger', style: TextStyle(fontSize: 13, color: DropColors.mutedText(context))),
               ]),
             ),
-            if (phone.isNotEmpty) DropRoundAction(icon: Icons.call, label: 'Call passenger', onPressed: () => _callRider(phone)),
+            if (['accepted', 'arrived', 'in_progress'].contains(status))
+              DropCallButton(rideId: (a['id'] as num).toInt(), peerName: name.isEmpty ? 'passenger' : name, compact: true),
           ]),
         ],
         const SizedBox(height: 14),

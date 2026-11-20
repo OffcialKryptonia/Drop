@@ -48,7 +48,8 @@ const request = (r: Row, rule: CommissionRule) => {
     pickup_eta_minutes: Math.max(1, Math.round(km * 1.3 * 2)),
     eta: rideEta(r),
     options: r.options,
-    rider: { first_name: r.rider_first_name ?? null, contact_number: r.status === "searching" ? null : (r.rider_contact_number ?? null) },
+    // No phone number: the passenger is reached through in-app chat and calls, which keep both numbers private.
+    rider: { first_name: r.rider_first_name ?? null },
     expires_at: r.expires_at,
     seconds_left: r.expires_at ? Math.max(0, Math.round((new Date(r.expires_at as string).getTime() - Date.now()) / 1000)) : null,
   };

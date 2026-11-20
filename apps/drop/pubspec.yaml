@@ -39,6 +39,10 @@ dependencies:
   flutter_vector_icons: ^2.0.0
   permission_handler: ^11.3.1
   record: ^6.0.0
+  # In-app voice calling: both providers sit behind one interface (lib/service/call), an admin picks which is used
+  livekit_client:
+    path: third_party/livekit_client
+  agora_rtc_engine: ^6.5.0
   pinput: ^5.0.0
   # MAP
   geolocator: ^12.0.0
@@ -126,6 +130,8 @@ dev_dependencies:
   #flutter packages pub run build_runner build --delete-conflicting-outputs
 
 dependency_overrides:
+  # LiveKit's token library needs pointycastle 4; mighty_core's encrypt asks for 3.x. Only LiveKit uses the 4.x API.
+  pointycastle: ^4.0.0
   package_info_plus: ^4.1.0
   meta: ^1.15.0
   intl: ^0.18.0

@@ -34,6 +34,8 @@ import { rideRoutes } from "./routes/rides";
 import { driverRideRoutes } from "./routes/driver-rides";
 import { rideExtraRoutes } from "./routes/ride-extras";
 import { rideChatRoutes } from "./routes/ride-chat";
+import { rideCallRoutes } from "./routes/ride-calls";
+import { sweepCalls } from "./lib/calls";
 import { purgeOldChat } from "./lib/chat";
 import { sweepRides } from "./lib/ride-sweep";
 import { driverApplicationRoutes } from "./routes/driver-application";
@@ -94,6 +96,7 @@ app.route("/api", rideRoutes);
 app.route("/api", driverRideRoutes);
 app.route("/api", rideExtraRoutes);
 app.route("/api", rideChatRoutes);
+app.route("/api", rideCallRoutes);
 app.route("/api", driverApplicationRoutes);
 app.route("/api", adminDriverApplicationRoutes);
 app.route("/api", legacyRoutes);
@@ -136,7 +139,7 @@ export default {
       (async () => {
         const db = await connectDb(env.HYPERDRIVE.connectionString);
         try {
-          console.log("ride sweep", JSON.stringify(await sweepRides(db)), "chat purged", await purgeOldChat(db, env));
+          console.log("ride sweep", JSON.stringify(await sweepRides(db)), "chat purged", await purgeOldChat(db, env), "calls closed", await sweepCalls(db, env));
         } finally {
           await db.end();
         }
