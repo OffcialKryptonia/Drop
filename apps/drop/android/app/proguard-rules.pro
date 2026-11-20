@@ -20,3 +20,9 @@
 -dontwarn com.stripe.android.pushProvisioning.PushProvisioningEphemeralKeyProvider
 -dontwarn proguard.annotation.Keep
 -dontwarn proguard.annotation.KeepClassMembers
+# In-app calling (Agora and LiveKit/WebRTC use reflection and JNI)
+-keep class io.agora.** { *; }
+-dontwarn io.agora.**
+-keep class org.webrtc.** { *; }
+-keep class io.livekit.** { *; }
+-dontwarn org.webrtc.**

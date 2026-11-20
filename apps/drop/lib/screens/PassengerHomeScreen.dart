@@ -5,7 +5,6 @@ import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart' show LatLng;
 import 'package:share_plus/share_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../components/DropMap.dart';
 import '../components/LiveLocation.dart';
@@ -17,6 +16,7 @@ import '../drop/widgets/drop_email_prompt.dart';
 import '../drop/widgets/drop_eta.dart';
 import '../drop/widgets/drop_pickup.dart';
 import '../drop/screens/drop_chat_screen.dart';
+import '../drop/widgets/drop_call_button.dart';
 import '../drop/screens/drop_route_screen.dart';
 import '../drop/widgets/drop_ride_type_strip.dart';
 import '../drop/widgets/drop_sos_sheet.dart';
@@ -620,15 +620,6 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
     }
   }
 
-  Future<void> _call(String? number) async {
-    if (number == null || number.isEmpty) return;
-    try {
-      await launchUrl(Uri.parse('tel:$number'));
-    } catch (_) {
-      _say('Could not open the phone app.');
-    }
-  }
-
   void _fitTrip() {
     final r = ride;
     if (r == null) return;
@@ -1161,7 +1152,8 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
               Text('$vehicle${v['plate'] != null ? '  ·  ${v['plate']}' : ''}', style: TextStyle(color: Colors.grey.shade700)),
             ]),
           ),
-          IconButton(onPressed: () => _call(driver['contact_number']?.toString()), icon: Icon(Icons.call, color: primaryColor)),
+          if (['accepted', 'arrived', 'in_progress'].contains(status))
+            DropCallButton(rideId: (r['id'] as num).toInt(), peerName: driver['name']?.toString() ?? 'your driver', compact: true),
         ]),
       ],
       if (driver.isNotEmpty && ['accepted', 'arrived', 'in_progress'].contains(status))

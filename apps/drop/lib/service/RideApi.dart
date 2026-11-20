@@ -54,6 +54,19 @@ class RideApi {
   static Future<Map<String, dynamic>> _post(String path, [Map<String, dynamic>? body]) async =>
       _send(() async => http.post(_uri(path), headers: await _headers(), body: jsonEncode(body ?? {})));
 
+  // ---- In-app voice calls (the server decides who may call whom; it only hands out per-person join tokens) ----
+
+  static Future<Map<String, dynamic>> callStatus(int rideId) => _get('ride/$rideId/call/status');
+  static Future<Map<String, dynamic>> startCall(int rideId) => _post('ride/$rideId/call');
+  static Future<Map<String, dynamic>> incomingCall() => _get('calls/incoming');
+  static Future<Map<String, dynamic>> getCall(int callId) => _get('call/$callId');
+  static Future<Map<String, dynamic>> acceptCall(int callId) => _post('call/$callId/accept');
+  static Future<Map<String, dynamic>> declineCall(int callId) => _post('call/$callId/decline');
+  static Future<Map<String, dynamic>> cancelCall(int callId) => _post('call/$callId/cancel');
+  static Future<Map<String, dynamic>> endCall(int callId) => _post('call/$callId/end');
+  static Future<Map<String, dynamic>> callToken(int callId) => _post('call/$callId/token');
+  static Future<Map<String, dynamic>> callFailed(int callId) => _post('call/$callId/failed');
+
   static Map<String, dynamic> _point(double lat, double lng, String address) => {'lat': lat, 'lng': lng, 'address': address};
 
   // ---- Chat (passenger and driver share these; the server checks the person is part of the ride) ----

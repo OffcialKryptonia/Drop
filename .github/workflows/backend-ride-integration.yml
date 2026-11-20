@@ -2,7 +2,7 @@ name: Backend ride-flow integration
 
 on:
   push:
-    branches: [feat/flutter-multi-stop-routes, feat/ride-chat]
+    branches: [feat/flutter-multi-stop-routes, feat/ride-chat, feat/ride-calls]
   pull_request:
     branches: [main]
     paths:

@@ -107,6 +107,7 @@
     { id: "paymyride", label: "PayMyRide", group: "Financial", perm: "paymyride list", render: pagePayMyRide },
     { id: "payouts", label: "Driver payouts", group: "Financial", perm: "payout list", render: pagePayouts },
     { id: "chat", label: "Ride chat", group: "Operations", perm: "ride_chat list", render: pageChat },
+    { id: "calls", label: "Voice calls", group: "Operations", perm: "ride_call list", render: pageCalls },
     { id: "pickup", label: "Pickup codes", group: "Operations", perm: "pickup_code list", render: pagePickup },
     { id: "extras", label: "Extra charges", group: "Operations", perm: "ride_extra list", render: pageExtras },
     { id: "sos", label: "SOS alerts", group: "Safety", perm: "sos list", render: pageSos },
@@ -1144,6 +1145,62 @@
         card.appendChild(save);
       } else { on.disabled = true; vo.disabled = true; mx.disabled = true; rt.disabled = true; }
       card.appendChild(out);
+    });
+  }
+
+  function pageCalls(root) {
+    loading(root);
+    root.textContent = "";
+    root.appendChild(head("Voice calls", "Passengers and their assigned driver can call each other inside the app while a trip is open. Phone numbers are never shown. Calls are not recorded. Keys are saved encrypted and are never shown again."));
+    var card = h("div", { class: "card" }, h("div", { class: "t", text: "Settings" }));
+    root.appendChild(card);
+    api("GET", "/admin/call-settings").then(function (r) {
+      var s = (r.body || {}).data || {};
+      var on = select([["1", "On"], ["0", "Off"]], s.enabled ? "1" : "0");
+      var pref = select([["livekit", "LiveKit"], ["agora", "Agora"]], s.provider || "livekit");
+      var ring = num(String(s.ring_seconds || 30), "30"), mx = num(String(s.max_minutes || 60), "60"), out = h("p", { class: "msg" });
+      card.appendChild(field("In-app calling", on, "Off hides the call button everywhere. Nothing rings until a provider below is switched on and fully set up."));
+      card.appendChild(h("div", { class: "grid2" }, field("Ring for (seconds)", ring, "10 to 60. Then it counts as a missed call."), field("Longest call (minutes)", mx, "5 to 240. Longer calls are ended.")));
+      card.appendChild(field("Preferred provider", pref, "If it is off or not set up, the other one is used."));
+      var ready = (s.ready || []);
+      var lkOn = select([["1", "On"], ["0", "Off"]], s.livekit_enabled ? "1" : "0");
+      var lkUrl = text(s.livekit_url || "", "wss://your-project.livekit.cloud"), lkKey = text(s.livekit_api_key || "", "API key");
+      var lkSecret = h("input", { type: "password", autocomplete: "off", placeholder: s.livekit_secret_saved ? "Saved. Paste a new secret only to replace it." : "API secret" });
+      card.appendChild(h("div", { class: "t", style: "margin-top:14px", text: "LiveKit" + (ready.indexOf("livekit") >= 0 ? "  \u00B7 ready" : "  \u00B7 not ready") }));
+      card.appendChild(field("LiveKit", lkOn));
+      card.appendChild(field("Server address", lkUrl, "Starts with wss://"));
+      card.appendChild(h("div", { class: "grid2" }, field("API key", lkKey), field("API secret", lkSecret)));
+      var agOn = select([["1", "On"], ["0", "Off"]], s.agora_enabled ? "1" : "0");
+      var agId = text(s.agora_app_id || "", "App ID");
+      var agCert = h("input", { type: "password", autocomplete: "off", placeholder: s.agora_certificate_saved ? "Saved. Paste a new certificate only to replace it." : "App certificate" });
+      card.appendChild(h("div", { class: "t", style: "margin-top:14px", text: "Agora" + (ready.indexOf("agora") >= 0 ? "  \u00B7 ready" : "  \u00B7 not ready") }));
+      card.appendChild(field("Agora", agOn));
+      card.appendChild(h("div", { class: "grid2" }, field("App ID", agId), field("App certificate", agCert)));
+      if (can("ride_call edit")) {
+        var save = h("button", { text: "Save", class: "small", style: "margin-top:10px" });
+        save.addEventListener("click", function () {
+          save.disabled = true;
+          api("PUT", "/admin/call-settings", {
+            enabled: on.value === "1", provider: pref.value, livekit_enabled: lkOn.value === "1", agora_enabled: agOn.value === "1",
+            ring_seconds: nn(ring), max_minutes: nn(mx), livekit_url: lkUrl.value.trim(), livekit_api_key: lkKey.value.trim(), agora_app_id: agId.value.trim(),
+            livekit_api_secret: lkSecret.value.trim(), agora_app_certificate: agCert.value.trim()
+          }).then(function (x) { save.disabled = false; if (x.ok) { toast("Saved"); pageCalls(root); } else msg(out, errText(x)); });
+        });
+        card.appendChild(save);
+      } else { [on, pref, ring, mx, lkOn, lkUrl, lkKey, lkSecret, agOn, agId, agCert].forEach(function (e) { e.disabled = true; }); }
+      card.appendChild(out);
+    });
+    var hist = h("div", { class: "card" }, h("div", { class: "t", text: "Recent calls" }));
+    root.appendChild(hist);
+    api("GET", "/admin/calls").then(function (r) {
+      var list = (r.body || {}).data || [];
+      if (!list.length) hist.appendChild(h("div", { class: "empty", text: "No calls yet." }));
+      list.forEach(function (x) {
+        var dur = x.duration_seconds != null ? " \u00B7 " + Math.floor(x.duration_seconds / 60) + "m " + (x.duration_seconds % 60) + "s" : "";
+        hist.appendChild(h("div", { class: "row", style: "padding:10px 0;border-top:1px solid var(--line,#eee)" },
+          h("div", { class: "t", text: (x.caller || "") + " \u2192 " + (x.callee || "") + " \u00B7 " + x.status + dur }),
+          h("div", { class: "s", text: "Trip #" + x.ride_request_id + " \u00B7 " + x.provider + " \u00B7 " + new Date(x.created_at).toLocaleString() + (x.end_reason ? " \u00B7 " + x.end_reason : "") })));
+      });
     });
   }
 

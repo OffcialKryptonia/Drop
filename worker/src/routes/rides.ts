@@ -70,7 +70,6 @@ const ride = (r: Row) => ({
     ? {
         id: Number(r.driver_id),
         name: [r.driver_first_name, r.driver_last_name].filter(Boolean).join(" "),
-        contact_number: r.driver_contact_number ?? null,
         vehicle: { make: r.vehicle_make, model: r.vehicle_model, colour: r.vehicle_colour, plate: r.vehicle_plate },
         location: r.driver_lat == null ? null : { lat: r.driver_lat, lng: r.driver_lng, updated_at: r.driver_location_at },
       }
