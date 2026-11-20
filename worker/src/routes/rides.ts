@@ -1,3 +1,6 @@
+import { chatUnread } from "../lib/chat";
+import { riderPickupView } from "../lib/pickup";
+import { voidExtrasForRide } from "../lib/extras";
 import { etaSettings, rideEta } from "../lib/eta";
 import { riderReceipt } from "../lib/receipt";
 import { iconKeyFor } from "./map-icons";
@@ -67,7 +70,6 @@ const ride = (r: Row) => ({
     ? {
         id: Number(r.driver_id),
         name: [r.driver_first_name, r.driver_last_name].filter(Boolean).join(" "),
-        contact_number: r.driver_contact_number ?? null,
         vehicle: { make: r.vehicle_make, model: r.vehicle_model, colour: r.vehicle_colour, plate: r.vehicle_plate },
         location: r.driver_lat == null ? null : { lat: r.driver_lat, lng: r.driver_lng, updated_at: r.driver_location_at },
       }
@@ -202,7 +204,9 @@ rideRoutes.get("/ride/current", ...mw, async (c) => {
   const row = await currentOf(c);
   const data = row ? ride(row) : null;
   if (data && !(await etaSettings(c.get("db"))).rider) data.eta = null;
-  return c.json({ status: true, data });
+  const pickup = data ? await riderPickupView(c.get("db"), c.env.SETTINGS_ENCRYPTION_KEY, data.id, String(data.status)) : null;
+  const unread = data ? await chatUnread(c.get("db"), data.id, data.driver ? Number(data.driver.id) : null, c.get("user").id) : 0;
+  return c.json({ status: true, data: data ? { ...data, pickup_code: pickup, chat_unread: unread } : null });
 });
 
 /** Cancel the open request. After a driver has accepted, a late cancellation can cost the ride type's cancellation fee. */
@@ -223,6 +227,8 @@ rideRoutes.post("/ride/cancel", ...mw, async (c) => {
   );
   if (!r.rowCount) return c.json({ status: false, code: "nothing_to_cancel", message: "That ride just changed. Please check again." }, 409);
   let fee = 0;
+  await db.query("begin");
+  try { await voidExtrasForRide(db, Number(r.rows[0].id)); await db.query("commit"); } catch (e) { await db.query("rollback").catch(() => {}); throw e; }
   if (r.rows[0].driver_id) {
     fee = await chargeCancellationFee(db, { ...before, status_before: before.status }, await getSetting(db, "ride_cancel_grace_seconds", 120));
     // The driver who had accepted is free to take other requests again.
@@ -245,5 +251,6 @@ rideRoutes.get("/ride/:id/receipt", ...mw, async (c) => {
   if (!Number.isInteger(id) || id <= 0) return c.json({ status: false, message: "Trip not found." }, 404);
   const row = (await c.get("db").query(`${RIDE_SELECT} where r.id = $1 and r.rider_id = $2 and r.status = 'completed'`, [id, c.get("user").id])).rows[0];
   if (!row) return c.json({ status: false, message: "No receipt for this trip yet." }, 404);
-  return c.json({ status: true, data: riderReceipt(row) });
+  const extras = (await c.get("db").query("select * from app.ride_extras where ride_request_id = $1 order by id", [id])).rows;
+  return c.json({ status: true, data: riderReceipt(row, extras) });
 });

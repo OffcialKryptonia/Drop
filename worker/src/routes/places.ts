@@ -2,6 +2,8 @@ import { Hono } from "hono";
 import type { AppEnv } from "../env";
 import { withDb } from "../db";
 import { requireAuth } from "../auth/middleware";
+import type { MiddlewareHandler } from "hono";
+import { parseSessionCookie, validateSession } from "../lib/web-session";
 import { readBody, validationFailed } from "../lib/legacy";
 import { haversineKm } from "../lib/routing";
 import { mapSettings } from "../lib/maps";
@@ -9,10 +11,25 @@ import { mapSettings } from "../lib/maps";
 /** Place search and the passenger's saved places (Home, Work, others). */
 export const placeRoutes = new Hono<AppEnv>();
 
+/**
+ * Browser sessions use the HttpOnly drop_session cookie, while mobile clients
+ * use Bearer tokens. Allow either transport for authenticated place search.
+ */
+const requireWebOrBearer: MiddlewareHandler<AppEnv> = async (c, next) => {
+  if (c.req.header("authorization")) return requireAuth(c, next);
+  const parsed = parseSessionCookie(c);
+  if (!parsed) return c.json({ message: "Unauthenticated.", status: 401 }, 401);
+  const session = await validateSession(c.get("db"), parsed);
+  if (!session) return c.json({ message: "Unauthenticated.", status: 401 }, 401);
+  c.set("user", session.user);
+  c.set("tokenId", session.tokenId);
+  await next();
+};
+
 type Hit = { title: string; subtitle: string; lat: number; lng: number; distance_km: number | null };
 
 /** Search for a place near the passenger. Google Places when Google is the active map, otherwise OpenStreetMap (Nominatim). */
-placeRoutes.get("/places/search", withDb, requireAuth, async (c) => {
+placeRoutes.get("/places/search", withDb, requireWebOrBearer, async (c) => {
   const q = String(c.req.query("q") ?? "").trim().slice(0, 120);
   const lat = Number(c.req.query("lat")), lng = Number(c.req.query("lng"));
   const near = Number.isFinite(lat) && Number.isFinite(lng) && (lat !== 0 || lng !== 0) ? { lat, lng } : null;

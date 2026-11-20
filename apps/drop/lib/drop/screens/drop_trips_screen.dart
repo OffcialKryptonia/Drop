@@ -57,6 +57,8 @@ class _DropTripsScreenState extends State<DropTripsScreen> {
     final amount = widget.driver ? t['earning'] : t['fare'];
     final sym = widget.driver ? DropMoney.naira : (((t['currency'] as Map?)?['symbol']) ?? DropMoney.naira).toString();
     final p = splitAddress(_pickup(t)), d = splitAddress(_dropoff(t));
+    final stops = (t['stops'] as List? ?? []).whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList()
+      ..sort((a, b) => ((a['sequence'] as num?)?.toInt() ?? 0).compareTo((b['sequence'] as num?)?.toInt() ?? 0));
     return Semantics(
       button: done,
       child: Material(
@@ -74,6 +76,15 @@ class _DropTripsScreenState extends State<DropTripsScreen> {
                   Text(_when(t), style: TextStyle(fontSize: 12, color: DropColors.mutedText(context))),
                   const SizedBox(height: 6),
                   Text(p.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: DropColors.text(context))),
+                  for (final stop in stops)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 3),
+                      child: Row(children: [
+                        Icon(Icons.more_horiz, size: 14, color: DropColors.primary),
+                        const SizedBox(width: 4),
+                        Expanded(child: Text('Stop ${stop['sequence'] ?? ''}: ${stop['address'] ?? 'Additional stop'}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: DropColors.mutedText(context)))),
+                      ]),
+                    ),
                   Row(children: [
                     Icon(Icons.arrow_downward, size: 14, color: DropColors.mutedText(context)),
                     const SizedBox(width: 4),

@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../service/RideApi.dart';
 import '../design/drop_design.dart';
+import '../widgets/drop_extras.dart';
 import '../widgets/drop_money.dart';
 import '../widgets/drop_ride_ui.dart';
 
@@ -62,8 +63,11 @@ class _DropReceiptScreenState extends State<DropReceiptScreen> {
     final b = StringBuffer()
       ..writeln('DROP receipt ${r['number']}')
       ..writeln(_date(r['issued_at']))
-      ..writeln('From: ${r['pickup'] ?? ''}')
-      ..writeln('To: ${r['dropoff'] ?? ''}');
+      ..writeln('From: ${r['pickup'] ?? ''}');
+    for (final stop in (r['stops'] as List? ?? []).whereType<Map>()) {
+      b.writeln('Stop ${stop['sequence'] ?? ''}: ${stop['address'] ?? 'Additional stop'}');
+    }
+    b.writeln('To: ${r['dropoff'] ?? ''}');
     for (final l in (r['lines'] as List? ?? [])) {
       b.writeln('${l['label']}: ${_m(r, l['amount'])}');
     }
@@ -102,7 +106,7 @@ class _DropReceiptScreenState extends State<DropReceiptScreen> {
           const SizedBox(height: 2),
           Text(_date(r['issued_at']), style: TextStyle(fontSize: 13, color: DropColors.mutedText(context))),
           const SizedBox(height: 14),
-          DropStopTimeline(pickup: (r['pickup'] ?? '').toString(), dropoff: (r['dropoff'] ?? '').toString()),
+          DropStopTimeline(pickup: (r['pickup'] ?? '').toString(), dropoff: (r['dropoff'] ?? '').toString(), stops: (r['stops'] as List? ?? []).whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList()),
           const SizedBox(height: 12),
           Wrap(spacing: 8, runSpacing: 8, children: [
             if (r['service'] != null) DropFactChip(icon: Icons.directions_car_outlined, text: r['service'].toString()),

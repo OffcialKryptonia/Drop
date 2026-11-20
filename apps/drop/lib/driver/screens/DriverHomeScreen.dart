@@ -4,6 +4,10 @@ import 'dart:math' as math;
 import 'package:drop/service/DriverApplicationApi.dart';
 import 'package:drop/drop/design/drop_design.dart';
 import 'package:drop/drop/widgets/drop_eta.dart';
+import 'package:drop/drop/widgets/drop_extras.dart';
+import 'package:drop/drop/widgets/drop_pickup.dart';
+import 'package:drop/drop/screens/drop_chat_screen.dart';
+import 'package:drop/drop/widgets/drop_call_button.dart';
 import 'package:drop/drop/widgets/drop_money.dart';
 import 'package:drop/drop/widgets/drop_ride_ui.dart';
 import 'package:drop/driver/screens/DriverNavigationScreen.dart';
@@ -177,15 +181,20 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
   void _refit() {
     final a = active;
     final me = myPos;
-    final key = a == null ? 'idle' : '${a['id']}:${a['status']}';
+    final key = a == null ? 'idle' : '${a['id']}:${a['status']}:${_stops(a).map((s) => '${s['id']}-${s['status']}').join(',')}';
     if (key == _fitKey) return;
     _fitKey = key;
     if (a == null) {
       if (me != null) _map.animateTo(me, zoom: 17);
       return;
     }
-    final target = a['status'] == 'in_progress' ? _ll(a['dropoff']) : _ll(a['pickup']);
-    _map.fitPoints([if (me != null) me, target]);
+    final points = <LatLng>[if (me != null) me];
+    if (a['status'] != 'in_progress') points.add(_ll(a['pickup']));
+    for (final stop in _stops(a)) {
+      if (stop['status'] != 'completed') points.add(LatLng(_num(stop['lat']), _num(stop['lng'])));
+    }
+    points.add(_ll(a['dropoff']));
+    _map.fitPoints(points);
   }
 
   RouteSnap? get _mySnap {
@@ -215,18 +224,30 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     final drop = _ll(a['dropoff']);
     final me = myPos;
     final toPickup = (a['status'] == 'accepted' || a['status'] == 'arrived') && me != null;
-    final LatLng from = toPickup ? me! : pick;
-    final to = toPickup ? pick : drop;
-    final key = '${a['id']}:${toPickup ? 'toPickup' : 'trip'}';
+    final waypoints = <LatLng>[toPickup ? me! : pick];
+    if (toPickup) {
+      waypoints.add(pick);
+    } else {
+      for (final stop in _stops(a)) {
+        if (stop['status'] != 'completed') waypoints.add(LatLng(_num(stop['lat']), _num(stop['lng'])));
+      }
+      waypoints.add(drop);
+    }
+    final key = '${a['id']}:${toPickup ? 'toPickup' : 'trip'}:${waypoints.map((p) => '${p.latitude.toStringAsFixed(5)},${p.longitude.toStringAsFixed(5)}').join('|')}';
     final moved = toPickup && _routeFrom != null && RouteGeometry.meters(_routeFrom!, me!) > 250;
     if (key == _routeKey && !moved) return;
     final changed = key != _routeKey;
     _routeKey = key;
-    _routeFrom = from;
+    _routeFrom = waypoints.first;
     if (changed) setState(() => _routeFull = const []);
-    RouteLineApi.fetch(from, to).then((pts) {
-      if (mounted && _routeKey == key) setState(() => _routeFull = pts);
-    });
+    () async {
+      final all = <LatLng>[];
+      for (var i = 0; i < waypoints.length - 1; i++) {
+        final segment = await RouteLineApi.fetch(waypoints[i], waypoints[i + 1]);
+        if (segment.isNotEmpty) all.addAll(all.isEmpty ? segment : segment.skip(1));
+      }
+      if (mounted && _routeKey == key) setState(() => _routeFull = all);
+    }();
   }
 
   /// Which way the vehicle faces: the phone's heading when moving, else the direction of the last movement.
@@ -245,6 +266,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     final a = active;
     if (a != null) {
       if (a['status'] != 'in_progress') out.add(DropMarker(id: 'pickup', title: 'Pickup', color: Colors.green, point: _ll(a['pickup'])));
+      for (final stop in _stops(a)) {
+        out.add(DropMarker(id: 'stop-${stop['id']}', title: 'Stop ${stop['sequence']}', color: stop['status'] == 'completed' ? Colors.grey : Colors.orange, point: LatLng(_num(stop['lat']), _num(stop['lng']))));
+      }
       out.add(DropMarker(id: 'drop', title: 'Drop-off', color: Colors.red, point: _ll(a['dropoff'])));
     } else if (online) {
       for (final r in requests) {
@@ -320,11 +344,34 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
 
   double _num(dynamic v) => v is num ? v.toDouble() : (double.tryParse(v?.toString() ?? '') ?? 0);
 
+  List<Map<String, dynamic>> _stops(Map<String, dynamic> ride) =>
+      (ride['stops'] is List ? (ride['stops'] as List) : const [])
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList()
+        ..sort((a, b) => _num(a['sequence']).compareTo(_num(b['sequence'])));
+
+  Map<String, dynamic>? _nextStop(Map<String, dynamic> ride) {
+    for (final stop in _stops(ride)) {
+      if (stop['status'] != 'completed') return stop;
+    }
+    return null;
+  }
+
+  Future<void> _arriveStop(Map<String, dynamic> ride, Map<String, dynamic> stop) async {
+    await _rideAction(() => RideApi.arriveAtStop((ride['id'] as num).toInt(), (stop['id'] as num).toInt()));
+  }
+
+  Future<void> _completeStop(Map<String, dynamic> ride, Map<String, dynamic> stop) async {
+    if (!await _confirm('Complete this stop?', 'Confirm that this passenger stop has been completed before continuing.', 'Complete stop')) return;
+    await _rideAction(() => RideApi.completeStop((ride['id'] as num).toInt(), (stop['id'] as num).toInt()));
+  }
+
   String _naira(dynamic v) => DropMoney.format(v);
 
   final Set<int> _heardRequests = {};
   bool _requestsPrimed = false;
-  int? _arrivedFor;
+  final Set<String> _arrivalToneKeys = {};
 
   /// Rings once for each ride request that appears for the first time.
   void _toneForRequests(List<Map<String, dynamic>> list) {
@@ -340,10 +387,12 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     final a = active;
     if (a == null || a['status'] != 'in_progress') return;
     final id = (a['id'] as num?)?.toInt();
-    final drop = _ll(a['dropoff']);
-    if (id == null || _arrivedFor == id) return;
-    if (Geolocator.distanceBetween(here.latitude, here.longitude, drop.latitude, drop.longitude) <= 80) {
-      _arrivedFor = id;
+    final nextStop = _nextStop(a);
+    final target = nextStop == null ? _ll(a['dropoff']) : LatLng(_num(nextStop['lat']), _num(nextStop['lng']));
+    final toneKey = '$id:${nextStop?['id'] ?? 'dropoff'}';
+    if (id == null || _arrivalToneKeys.contains(toneKey)) return;
+    if (Geolocator.distanceBetween(here.latitude, here.longitude, target.latitude, target.longitude) <= 80) {
+      _arrivalToneKeys.add(toneKey);
       ToneService.play(ToneEvent.driverArrived);
     }
   }
@@ -429,7 +478,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
       final res = _asMap((await RideApi.complete(id))['data']);
       ToneService.play(ToneEvent.driverPayment);
       _load(); // the wallet chip behind the receipt updates at once
-      if (mounted) await _showReceipt(res);
+      if (mounted) await _showReceipt(res, id);
     } on ApiFailure catch (e) {
       _say(e.message);
     }
@@ -479,15 +528,6 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     }
   }
 
-  Future<void> _callRider(String? n) async {
-    if (n == null || n.isEmpty) return;
-    try {
-      await launchUrl(Uri.parse('tel:$n'));
-    } catch (_) {
-      _say('Could not open the phone app.');
-    }
-  }
-
   int _secondsLeft(Map<String, dynamic> r) {
     final e = DateTime.tryParse(r['expires_at']?.toString() ?? '');
     if (e == null) return 0;
@@ -496,7 +536,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
   }
 
   /// What the driver sees when a trip ends: the earning first, then the breakdown and what to do about the money.
-  Future<void> _showReceipt(Map<String, dynamic> res) {
+  Future<void> _showReceipt(Map<String, dynamic> res, int rideId) {
     final cash = res['collect_cash'] == true;
     final commission = DropMoney.toNum(res['commission']);
     return showModalBottomSheet<void>(
@@ -537,6 +577,12 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
                 DropReceiptRow(label: 'Your earning', amount: DropMoneyText(res['earning']), bold: true),
               ]),
             ),
+            if (res['stops'] is List && (res['stops'] as List).isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text('Completed stops', style: TextStyle(fontWeight: FontWeight.w800, color: DropColors.text(c))),
+              for (final stop in (res['stops'] as List).whereType<Map>())
+                Padding(padding: const EdgeInsets.only(top: 4), child: Row(children: [const Icon(Icons.check_circle, size: 16, color: Colors.green), const SizedBox(width: 8), Expanded(child: Text('Stop ${stop['sequence']}: ${stop['address'] ?? 'Additional stop'}', style: TextStyle(fontSize: 13, color: DropColors.text(c))))])),
+            ],
             const SizedBox(height: 12),
             if (cash)
               Container(
@@ -628,7 +674,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
           DropFactChip(icon: Icons.route, text: 'Trip ${_num(r['distance']).toStringAsFixed(1)} $unit · $tripMin min'),
         ]),
         const SizedBox(height: 14),
-        DropStopTimeline(pickup: (pickup['address'] ?? '').toString(), dropoff: (drop['address'] ?? '').toString()),
+        DropStopTimeline(pickup: (pickup['address'] ?? '').toString(), dropoff: (drop['address'] ?? '').toString(), stops: _stops(r)),
         const SizedBox(height: 10),
         Center(child: Text('Swipe down to accept \u00B7 up to decline', style: TextStyle(fontSize: 12, color: DropColors.mutedText(context)))),
         const SizedBox(height: 10),
@@ -647,14 +693,15 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     final drop = _asMap(a['dropoff']);
     final rider = _asMap(a['rider']);
     final toDrop = status == 'in_progress';
-    final target = toDrop ? drop : pickup;
+    final nextStop = toDrop ? _nextStop(a) : null;
+    final target = !toDrop ? pickup : (nextStop == null ? drop : {'lat': nextStop['lat'], 'lng': nextStop['lng'], 'address': nextStop['address']});
     final cash = a['payment_method'] != 'wallet';
     final name = (rider['first_name'] ?? '').toString();
-    final phone = (rider['contact_number'] ?? '').toString();
     final pillText = status == 'accepted' ? 'Heading to pickup' : (status == 'arrived' ? 'Waiting for passenger' : 'Trip in progress');
     final pillColor = status == 'in_progress' ? DropColors.success : DropColors.primary;
     final pillIcon = status == 'accepted' ? Icons.navigation : (status == 'arrived' ? Icons.hourglass_top : Icons.directions_car);
-    final primaryLabel = status == 'accepted' ? 'I have arrived' : (status == 'arrived' ? 'Start trip' : 'Complete trip');
+    final needsCode = status == 'arrived' && a['pickup_required'] == true;
+    final primaryLabel = status == 'accepted' ? 'I have arrived' : (status == 'arrived' ? (needsCode ? 'Verify pickup code' : 'Start trip') : (nextStop == null ? 'Complete trip' : (nextStop['status'] == 'arrived' ? 'Complete stop' : 'I have arrived at stop')));
     return DropSheet(
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Row(children: [
@@ -682,17 +729,45 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
                 Text('Passenger', style: TextStyle(fontSize: 13, color: DropColors.mutedText(context))),
               ]),
             ),
-            if (phone.isNotEmpty) DropRoundAction(icon: Icons.call, label: 'Call passenger', onPressed: () => _callRider(phone)),
+            if (['accepted', 'arrived', 'in_progress'].contains(status))
+              DropCallButton(rideId: (a['id'] as num).toInt(), peerName: name.isEmpty ? 'passenger' : name, compact: true),
           ]),
         ],
         const SizedBox(height: 14),
-        DropStopTimeline(pickup: (pickup['address'] ?? '').toString(), dropoff: (drop['address'] ?? '').toString(), activeStop: toDrop ? 1 : 0),
+        DropStopTimeline(
+          pickup: (pickup['address'] ?? '').toString(),
+          dropoff: (drop['address'] ?? '').toString(),
+          stops: _stops(a),
+          activeStop: !toDrop ? 0 : (nextStop == null ? _stops(a).length + 1 : _stops(a).indexWhere((s) => s['id'] == nextStop['id']) + 1),
+        ),
         const SizedBox(height: 14),
         Row(children: [
-          Expanded(child: DropActionButton(label: 'Navigate', icon: Icons.navigation_outlined, onPressed: () => _startNavigation(_num(target['lat']), _num(target['lng']), toDrop ? 'Drop-off' : 'Pickup'))),
+          Expanded(child: DropActionButton(label: 'Navigate', icon: Icons.navigation_outlined, onPressed: () => _startNavigation(_num(target['lat']), _num(target['lng']), !toDrop ? 'Pickup' : (nextStop == null ? 'Drop-off' : 'Stop ${nextStop['sequence']}')))),
           const SizedBox(width: 12),
           Expanded(child: DropActionButton(label: 'SOS', icon: Icons.sos, danger: true, onPressed: () => showDropSos(context, rideId: (a['id'] as num?)?.toInt()))),
         ]),
+        const SizedBox(height: 10),
+        Badge(
+          isLabelVisible: ((a['chat_unread'] as num?) ?? 0) > 0,
+          label: Text('${a['chat_unread']}'),
+          child: DropActionButton(
+            label: 'Message passenger',
+            icon: Icons.chat_bubble_outline,
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => DropChatScreen(rideId: (a['id'] as num).toInt(), peerNameHint: (a['rider'] is Map ? (a['rider'] as Map)['first_name'] : null)?.toString()),
+            )),
+          ),
+        ),
+        if (status == 'accepted' && a['extras_enabled'] != false) ...[
+          const SizedBox(height: 10),
+          DropActionButton(
+            label: 'Add extra charge',
+            icon: Icons.add_card,
+            onPressed: () => showDropAddExtraSheet(context, rideId: (a['id'] as num).toInt()).then((sent) {
+              if (sent) _say('Extra charge sent to the passenger.');
+            }),
+          ),
+        ],
         const SizedBox(height: 10),
         DropActionButton(
           label: primaryLabel,
@@ -703,8 +778,18 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
               : () {
                   final id = (a['id'] as num).toInt();
                   if (status == 'accepted') _rideAction(() => RideApi.arrived(id));
-                  if (status == 'arrived') _rideAction(() => RideApi.start(id));
-                  if (status == 'in_progress') _complete(a);
+                  if (status == 'arrived' && needsCode) {
+                    showDropVerifyPickupSheet(context, rideId: id).then((ok) {
+                      if (ok) _rideAction(() => RideApi.start(id), thenSay: 'Pickup verified. Trip started.');
+                    });
+                  } else if (status == 'arrived') {
+                    _rideAction(() => RideApi.start(id));
+                  }
+                  if (status == 'in_progress') {
+                    if (nextStop == null) { _complete(a); }
+                    else if (nextStop['status'] == 'arrived') { _completeStop(a, nextStop); }
+                    else { _arriveStop(a, nextStop); }
+                  }
                 },
         ),
         if (status != 'in_progress')

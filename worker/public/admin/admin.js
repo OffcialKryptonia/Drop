@@ -106,6 +106,10 @@
     { id: "transfers", label: "Wallet transfers", group: "Financial", perm: "wallet_transfer list", render: pageTransfers },
     { id: "paymyride", label: "PayMyRide", group: "Financial", perm: "paymyride list", render: pagePayMyRide },
     { id: "payouts", label: "Driver payouts", group: "Financial", perm: "payout list", render: pagePayouts },
+    { id: "chat", label: "Ride chat", group: "Operations", perm: "ride_chat list", render: pageChat },
+    { id: "calls", label: "Voice calls", group: "Operations", perm: "ride_call list", render: pageCalls },
+    { id: "pickup", label: "Pickup codes", group: "Operations", perm: "pickup_code list", render: pagePickup },
+    { id: "extras", label: "Extra charges", group: "Operations", perm: "ride_extra list", render: pageExtras },
     { id: "sos", label: "SOS alerts", group: "Safety", perm: "sos list", render: pageSos },
     { id: "complaints", label: "Complaints", group: "Safety", perm: "complaint list", render: pageComplaints },
     { id: "banks", label: "Banks", group: "Financial", perm: "bank list", render: pageBanks },
@@ -570,6 +574,69 @@
   }
 
   // ---------- Ride options ----------
+  // ---------- Extra charges: master switch, limits and the list of charge types (Extra charges page) ----------
+  function extrasCard(root) {
+    var card = h("div", { class: "card" }, h("div", { class: "t", text: "Extra charges in the app" }), h("p", { class: "muted", text: "A driver can add a charge (fuel hike, toll, parking...) after accepting a ride, before arriving at the pickup. The passenger approves it and pays from the wallet or in cash. Switch it off and drivers no longer see the button." }));
+    root.appendChild(card);
+    api("GET", "/admin/extras-settings").then(function (r) {
+      var s = (r.body || {}).data || { enabled: true, max_percent: 20, window_minutes: 10 };
+      var on = select([["1", "On"], ["0", "Off"]], s.enabled === false ? "0" : "1");
+      var max = num(String(s.max_percent), "20"), win = num(String(s.window_minutes), "10");
+      var out = h("p", { class: "msg" });
+      card.appendChild(field("Extra charges feature", on));
+      card.appendChild(h("div", { class: "grid2" }, field("Maximum (% of the fare)", max, "Total extras on one trip cannot pass this."), field("Minutes for the passenger to answer", win, "1 to 60.")));
+      if (can("ride_extra edit")) {
+        var save = h("button", { text: "Save", class: "small", style: "margin-top:10px" });
+        save.addEventListener("click", function () {
+          save.disabled = true;
+          api("PUT", "/admin/extras-settings", { enabled: on.value === "1", max_percent: nn(max), window_minutes: nn(win) }).then(function (x) { save.disabled = false; if (x.ok) toast("Saved"); else msg(out, errText(x)); });
+        });
+        card.appendChild(save);
+      } else { on.disabled = true; max.disabled = true; win.disabled = true; }
+      card.appendChild(out);
+    });
+  }
+
+  function extraTypesCard(root) {
+    var card = h("div", { class: "card" }, h("div", { class: "t", text: "Charge types" }), h("p", { class: "muted", text: "What a driver can choose from. For each one: turn it on or off, choose whether DROP takes its commission on it, and optionally set the most a driver can charge. When commission is on, it uses the ride type's own commission rate and is added to the trip's commission." }));
+    root.appendChild(card);
+    api("GET", "/admin/extra-types").then(function (r) {
+      var list = (r.body || {}).data || [];
+      list.forEach(function (t) {
+        var row = h("div", { class: "row", style: "display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line,#eee);flex-wrap:wrap" });
+        row.appendChild(h("div", { style: "flex:1;min-width:150px" }, h("div", { class: "t", text: t.name }),
+          h("div", { class: "s", text: (t.active ? "On" : "Hidden") + " \u00B7 " + (t.take_commission ? "DROP takes commission" : "No commission") + " \u00B7 " + (t.max_amount ? "Max " + Number(t.max_amount).toLocaleString() : "No limit") })));
+        if (can("ride_extra edit")) {
+          var tog = h("button", { text: t.active ? "Hide" : "Show", class: "small secondary" });
+          tog.addEventListener("click", function () { api("PUT", "/admin/extra-types/" + t.id, { active: !t.active }).then(function (x) { if (x.ok) pageExtras(root.parentNode || root); else toast(errText(x), true); }); });
+          var com = h("button", { text: t.take_commission ? "Stop commission" : "Take commission", class: "small secondary" });
+          com.addEventListener("click", function () { api("PUT", "/admin/extra-types/" + t.id, { take_commission: !t.take_commission }).then(function (x) { if (x.ok) { toast("Saved"); pageExtras(root.parentNode || root); } else toast(errText(x), true); }); });
+          var ed = h("button", { text: "Edit", class: "small secondary" });
+          ed.addEventListener("click", function () {
+            var n = window.prompt("Name", t.name); if (n === null) return;
+            var m = window.prompt("Most a driver can charge for this (empty = no limit)", t.max_amount || ""); if (m === null) return;
+            api("PUT", "/admin/extra-types/" + t.id, { name: n, max_amount: m }).then(function (x) { if (x.ok) { toast("Saved"); pageExtras(root.parentNode || root); } else toast(errText(x), true); });
+          });
+          var del = h("button", { text: "Delete", class: "small danger" });
+          del.addEventListener("click", function () { confirmDo("Delete " + t.name + "? Past charges keep their name.", function () { api("DELETE", "/admin/extra-types/" + t.id).then(function (x) { if (x.ok) pageExtras(root.parentNode || root); else toast(errText(x), true); }); }); });
+          row.appendChild(tog); row.appendChild(com); row.appendChild(ed); row.appendChild(del);
+        }
+        card.appendChild(row);
+      });
+      if (!list.length) card.appendChild(h("div", { class: "empty", text: "No charge types yet. Drivers cannot add extra charges until you add one." }));
+      if (can("ride_extra edit")) {
+        var n = text("", "e.g. Airport fee"), mx = num("", "Limit (optional)"), cm = select([["0", "No commission"], ["1", "DROP takes commission"]], "0"), out = h("p", { class: "msg" });
+        var add = h("button", { text: "Add charge type", class: "small", style: "margin-top:10px" });
+        add.addEventListener("click", function () {
+          if (!n.value.trim()) return msg(out, "Enter a name.");
+          add.disabled = true;
+          api("POST", "/admin/extra-types", { name: n.value.trim(), take_commission: cm.value === "1", max_amount: mx.value }).then(function (x) { add.disabled = false; if (x.ok) { toast("Added"); pageExtras(root.parentNode || root); } else msg(out, errText(x)); });
+        });
+        card.appendChild(h("div", { style: "border-top:1px solid var(--line,#eee);margin-top:10px;padding-top:10px" }, h("div", { class: "t", text: "Add a charge type" }), field("Name", n), h("div", { class: "grid2" }, field("Commission", cm), field("Limit", mx)), add, out));
+      }
+    });
+  }
+
   function pageOptions(root) {
     loading(root);
     api("GET", "/admin/service-options").then(function (r) {
@@ -1055,6 +1122,182 @@
   }
 
   // ---------- SOS alerts and complaints ----------
+  function pageChat(root) {
+    loading(root);
+    root.textContent = "";
+    root.appendChild(head("Ride chat", "Passengers and their assigned driver can message each other, and send voice notes, while a trip is open. Admins cannot read conversations. Voice files are kept in private storage and deleted after the retention period."));
+    var card = h("div", { class: "card" }, h("div", { class: "t", text: "Settings" }));
+    root.appendChild(card);
+    api("GET", "/admin/chat-settings").then(function (r) {
+      var s = (r.body || {}).data || { enabled: true, voice_enabled: true, max_voice_seconds: 60, retention_days: 30 };
+      var on = select([["1", "On"], ["0", "Off"]], s.enabled === false ? "0" : "1");
+      var vo = select([["1", "On"], ["0", "Off"]], s.voice_enabled === false ? "0" : "1");
+      var mx = num(String(s.max_voice_seconds), "60"), rt = num(String(s.retention_days), "30"), out = h("p", { class: "msg" });
+      card.appendChild(field("Chat", on, "Off hides the Message button and stops new messages."));
+      card.appendChild(field("Voice messages", vo));
+      card.appendChild(h("div", { class: "grid2" }, field("Longest voice message (seconds)", mx, "10 to 180."), field("Keep messages for (days)", rt, "1 to 365. Older messages and voice files are deleted.")));
+      if (can("ride_chat edit")) {
+        var save = h("button", { text: "Save", class: "small", style: "margin-top:10px" });
+        save.addEventListener("click", function () {
+          save.disabled = true;
+          api("PUT", "/admin/chat-settings", { enabled: on.value === "1", voice_enabled: vo.value === "1", max_voice_seconds: nn(mx), retention_days: nn(rt) }).then(function (x) { save.disabled = false; if (x.ok) toast("Saved"); else msg(out, errText(x)); });
+        });
+        card.appendChild(save);
+      } else { on.disabled = true; vo.disabled = true; mx.disabled = true; rt.disabled = true; }
+      card.appendChild(out);
+    });
+  }
+
+  function pageCalls(root) {
+    loading(root);
+    root.textContent = "";
+    root.appendChild(head("Voice calls", "Passengers and their assigned driver can call each other inside the app while a trip is open. Phone numbers are never shown. Calls are not recorded. Keys are saved encrypted and are never shown again."));
+    var card = h("div", { class: "card" }, h("div", { class: "t", text: "Settings" }));
+    root.appendChild(card);
+    api("GET", "/admin/call-settings").then(function (r) {
+      var s = (r.body || {}).data || {};
+      var on = select([["1", "On"], ["0", "Off"]], s.enabled ? "1" : "0");
+      var pref = select([["livekit", "LiveKit"], ["agora", "Agora"]], s.provider || "livekit");
+      var ring = num(String(s.ring_seconds || 30), "30"), mx = num(String(s.max_minutes || 60), "60"), out = h("p", { class: "msg" });
+      card.appendChild(field("In-app calling", on, "Off hides the call button everywhere. Nothing rings until a provider below is switched on and fully set up."));
+      card.appendChild(h("div", { class: "grid2" }, field("Ring for (seconds)", ring, "10 to 60. Then it counts as a missed call."), field("Longest call (minutes)", mx, "5 to 240. Longer calls are ended.")));
+      card.appendChild(field("Preferred provider", pref, "If it is off or not set up, the other one is used."));
+      var ready = (s.ready || []);
+      var lkOn = select([["1", "On"], ["0", "Off"]], s.livekit_enabled ? "1" : "0");
+      var lkUrl = text(s.livekit_url || "", "wss://your-project.livekit.cloud"), lkKey = text(s.livekit_api_key || "", "API key");
+      var lkSecret = h("input", { type: "password", autocomplete: "off", placeholder: s.livekit_secret_saved ? "Saved. Paste a new secret only to replace it." : "API secret" });
+      card.appendChild(h("div", { class: "t", style: "margin-top:14px", text: "LiveKit" + (ready.indexOf("livekit") >= 0 ? "  \u00B7 ready" : "  \u00B7 not ready") }));
+      card.appendChild(field("LiveKit", lkOn));
+      card.appendChild(field("Server address", lkUrl, "Starts with wss://"));
+      card.appendChild(h("div", { class: "grid2" }, field("API key", lkKey), field("API secret", lkSecret)));
+      var agOn = select([["1", "On"], ["0", "Off"]], s.agora_enabled ? "1" : "0");
+      var agId = text(s.agora_app_id || "", "App ID");
+      var agCert = h("input", { type: "password", autocomplete: "off", placeholder: s.agora_certificate_saved ? "Saved. Paste a new certificate only to replace it." : "App certificate" });
+      card.appendChild(h("div", { class: "t", style: "margin-top:14px", text: "Agora" + (ready.indexOf("agora") >= 0 ? "  \u00B7 ready" : "  \u00B7 not ready") }));
+      card.appendChild(field("Agora", agOn));
+      card.appendChild(h("div", { class: "grid2" }, field("App ID", agId), field("App certificate", agCert)));
+      if (can("ride_call edit")) {
+        var save = h("button", { text: "Save", class: "small", style: "margin-top:10px" });
+        save.addEventListener("click", function () {
+          save.disabled = true;
+          api("PUT", "/admin/call-settings", {
+            enabled: on.value === "1", provider: pref.value, livekit_enabled: lkOn.value === "1", agora_enabled: agOn.value === "1",
+            ring_seconds: nn(ring), max_minutes: nn(mx), livekit_url: lkUrl.value.trim(), livekit_api_key: lkKey.value.trim(), agora_app_id: agId.value.trim(),
+            livekit_api_secret: lkSecret.value.trim(), agora_app_certificate: agCert.value.trim()
+          }).then(function (x) { save.disabled = false; if (x.ok) { toast("Saved"); pageCalls(root); } else msg(out, errText(x)); });
+        });
+        card.appendChild(save);
+      } else { [on, pref, ring, mx, lkOn, lkUrl, lkKey, lkSecret, agOn, agId, agCert].forEach(function (e) { e.disabled = true; }); }
+      card.appendChild(out);
+    });
+    var hist = h("div", { class: "card" }, h("div", { class: "t", text: "Recent calls" }));
+    root.appendChild(hist);
+    api("GET", "/admin/calls").then(function (r) {
+      var list = (r.body || {}).data || [];
+      if (!list.length) hist.appendChild(h("div", { class: "empty", text: "No calls yet." }));
+      list.forEach(function (x) {
+        var dur = x.duration_seconds != null ? " \u00B7 " + Math.floor(x.duration_seconds / 60) + "m " + (x.duration_seconds % 60) + "s" : "";
+        hist.appendChild(h("div", { class: "row", style: "padding:10px 0;border-top:1px solid var(--line,#eee)" },
+          h("div", { class: "t", text: (x.caller || "") + " \u2192 " + (x.callee || "") + " \u00B7 " + x.status + dur }),
+          h("div", { class: "s", text: "Trip #" + x.ride_request_id + " \u00B7 " + x.provider + " \u00B7 " + new Date(x.created_at).toLocaleString() + (x.end_reason ? " \u00B7 " + x.end_reason : "") })));
+      });
+    });
+  }
+
+  function pagePickup(root) {
+    loading(root);
+    root.textContent = "";
+    root.appendChild(head("Pickup codes", "The passenger sees a 4-digit code once a driver accepts. The driver must type it before the trip can start, so the right person gets in the right car. Codes are never shown to admins or drivers."));
+    var card = h("div", { class: "card" }, h("div", { class: "t", text: "Settings" }));
+    root.appendChild(card);
+    api("GET", "/admin/pickup-settings").then(function (r) {
+      var s = (r.body || {}).data || { enabled: true, expiry_minutes: 180, max_attempts: 5, lock_minutes: 10 };
+      var on = select([["1", "On"], ["0", "Off"]], s.enabled === false ? "0" : "1");
+      var ex = num(String(s.expiry_minutes), "180"), at = num(String(s.max_attempts), "5"), lk = num(String(s.lock_minutes), "10"), out = h("p", { class: "msg" });
+      card.appendChild(field("Require the pickup code", on, "When off, drivers start trips without a code."));
+      card.appendChild(h("div", { class: "grid2" }, field("Code valid for (minutes)", ex, "10 to 720."), field("Wrong tries before lock", at, "3 to 10.")));
+      card.appendChild(field("Lock time after too many wrong tries (minutes)", lk, "1 to 120. After three locks only an admin can authorise the trip."));
+      if (can("pickup_code edit")) {
+        var save = h("button", { text: "Save", class: "small", style: "margin-top:10px" });
+        save.addEventListener("click", function () {
+          save.disabled = true;
+          api("PUT", "/admin/pickup-settings", { enabled: on.value === "1", expiry_minutes: nn(ex), max_attempts: nn(at), lock_minutes: nn(lk) }).then(function (x) { save.disabled = false; if (x.ok) toast("Saved"); else msg(out, errText(x)); });
+        });
+        card.appendChild(save);
+      } else { on.disabled = true; ex.disabled = true; at.disabled = true; lk.disabled = true; }
+      card.appendChild(out);
+    });
+    var live = h("div", { class: "card" }, h("div", { class: "t", text: "Rides waiting for pickup" }));
+    root.appendChild(live);
+    api("GET", "/admin/pickup-rides").then(function (r) {
+      var list = (r.body || {}).data || [];
+      if (!list.length) live.appendChild(h("div", { class: "empty", text: "No rides are waiting for pickup." }));
+      list.forEach(function (x) {
+        var state = x.overridden ? "Authorised by admin" : x.verified ? "Code verified" : !x.has_code ? "No code (older ride)" : x.locked ? "Locked after wrong tries" : "Waiting for code" + (x.failed ? " \u00B7 " + x.failed + " wrong" : "");
+        var row = h("div", { class: "row", style: "padding:10px 0;border-top:1px solid var(--line,#eee)" },
+          h("div", { class: "t", text: "Trip #" + x.id + " \u00B7 " + x.status + " \u00B7 " + state }),
+          h("div", { class: "s", text: "Driver: " + (x.driver || "") + " \u00B7 Passenger: " + (x.passenger || "") + (x.booking_source === "admin" ? " \u00B7 booked by admin" : "") }),
+          h("div", { class: "s", text: x.pickup || "" }));
+        if (x.has_code && !x.verified && !x.overridden && can("pickup_code edit")) {
+          var bt = h("button", { text: "Authorise start without code", class: "small secondary", style: "margin-top:8px" });
+          bt.addEventListener("click", function () {
+            confirmDo("Let the driver start trip #" + x.id + " without the pickup code? Use this only if you have confirmed the passenger by other means. This is recorded.", function () {
+              api("POST", "/admin/pickup-rides/" + x.id + "/override", {}).then(function (z) { toast(z.ok ? z.body.message : errText(z), !z.ok); if (z.ok) pagePickup(root); });
+            });
+          });
+          row.appendChild(bt);
+        }
+        live.appendChild(row);
+      });
+    });
+  }
+
+  var ex = { status: "paid", page: 1 };
+  function pageExtras(root) {
+    loading(root);
+    api("GET", "/admin/extras?status=" + ex.status + "&page=" + ex.page).then(function (r) {
+      var b = r.body || {}, list = b.data || [], pg = b.pagination || { page: 1, total_pages: 1, total: 0 };
+      root.textContent = "";
+      root.appendChild(head("Extra charges", "Tolls, parking and waiting charges that drivers add after accepting a ride. Refund a paid one if there is a dispute: wallet money goes back to the passenger and is taken from the driver."));
+      var top = h("div"); root.appendChild(top); extrasCard(top); extraTypesCard(top);
+      var tabs = h("div", { style: "display:flex;gap:8px;margin:12px 0;flex-wrap:wrap" });
+      [["paid", "Paid"], ["pending", "Waiting"], ["declined", "Declined"], ["expired", "Expired"], ["cancelled", "Cancelled / refunded"]].forEach(function (t) {
+        var bt = h("button", { text: t[1], class: "small" + (ex.status === t[0] ? "" : " secondary") });
+        bt.addEventListener("click", function () { ex.status = t[0]; ex.page = 1; pageExtras(root); });
+        tabs.appendChild(bt);
+      });
+      root.appendChild(tabs);
+      var card = h("div", { class: "card" }, h("div", { class: "t", text: pg.total + " extra charge" + (pg.total === 1 ? "" : "s") }));
+      if (!list.length) card.appendChild(h("div", { class: "empty", text: "Nothing here." }));
+      list.forEach(function (x) {
+        var sym = (x.currency && x.currency.symbol) || "\u20A6";
+        var row = h("div", { class: "row", style: "padding:10px 0;border-top:1px solid var(--line,#eee)" },
+          h("div", { class: "t", text: "#" + x.id + " \u00B7 " + x.kind + " \u00B7 " + sym + Number(x.amount).toLocaleString() + (x.paid_with ? " \u00B7 " + x.paid_with : "") }),
+          h("div", { class: "s", text: "Trip #" + x.ride_id + " \u00B7 Driver: " + (x.driver_name || "") + " \u00B7 Passenger: " + (x.passenger_name || "") }),
+          h("div", { class: "s", text: String(x.created_at).slice(0, 16).replace("T", " ") + " UTC" + (x.note ? " \u00B7 " + x.note : "") }));
+        if ((x.status === "paid" || x.status === "pending") && can("ride_extra edit")) {
+          var bt = h("button", { text: x.status === "paid" ? "Refund" : "Cancel", class: "small secondary", style: "margin-top:8px" });
+          bt.addEventListener("click", function () {
+            confirmDo((x.status === "paid" ? "Refund this extra charge? " + (x.paid_with === "wallet" ? "The passenger's wallet is credited and the driver's wallet is debited." : "It was a cash extra, so no wallet money moves.") : "Cancel this extra charge?"), function () {
+              api("POST", "/admin/extras/" + x.id + "/refund", {}).then(function (z) { toast(z.ok ? z.body.message : errText(z), !z.ok); if (z.ok) pageExtras(root); });
+            });
+          });
+          row.appendChild(bt);
+        }
+        card.appendChild(row);
+      });
+      root.appendChild(card);
+      if (pg.total_pages > 1) {
+        var nav = h("div", { style: "display:flex;gap:8px;margin-top:12px" });
+        var prev = h("button", { text: "Previous", class: "small secondary" }), next = h("button", { text: "Next", class: "small secondary" });
+        prev.disabled = pg.page <= 1; next.disabled = pg.page >= pg.total_pages;
+        prev.addEventListener("click", function () { ex.page--; pageExtras(root); });
+        next.addEventListener("click", function () { ex.page++; pageExtras(root); });
+        nav.appendChild(prev); nav.appendChild(next); root.appendChild(nav);
+      }
+    });
+  }
+
   var so = { status: "open", page: 1 };
   function pageSos(root) {
     loading(root);

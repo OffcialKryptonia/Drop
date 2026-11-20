@@ -8,6 +8,7 @@ import { computeFare } from "../lib/fare";
 import { userCurrency } from "../lib/currency";
 import { getSetting } from "../lib/driver-application";
 import { chargeCancellationFee } from "../lib/ride-settlement";
+import { overridePickup, pickupSettings } from "../lib/pickup";
 import { pushLater, pushNearbyDrivers, sendPush } from "../lib/push";
 
 export const adminRideRoutes = new Hono<AppEnv>();
@@ -197,4 +198,46 @@ adminRideRoutes.post("/admin/order-rides/:id/cancel", ...guard("ride_order edit"
   await audit(c, "admin_ride_cancelled", String(id), { passenger_id: Number(before.rider_id), reason, cancellation_fee: fee });
   pushLater(c, sendPush(db, c.env, [Number(before.rider_id)], { title: "Ride cancelled by Drop Support", body: "Drop Support cancelled the ride booked on your behalf.", data: { type: "ride", event: "admin_cancelled", ride_id: String(id) } }));
   return c.json({ status: true, id, cancellation_fee: fee });
+});
+
+// ---- Pickup code: settings, and authorising a trip start without the code ----
+
+adminRideRoutes.get("/admin/pickup-settings", ...guard("pickup_code list"), async (c) => c.json({ data: await pickupSettings(c.get("db")) }));
+adminRideRoutes.put("/admin/pickup-settings", ...guard("pickup_code edit"), async (c) => {
+  const p = z.object({
+    enabled: z.boolean(),
+    expiry_minutes: z.coerce.number().int().min(10, "Use 10 to 720 minutes.").max(720, "Use 10 to 720 minutes."),
+    max_attempts: z.coerce.number().int().min(3, "Use 3 to 10 tries.").max(10, "Use 3 to 10 tries."),
+    lock_minutes: z.coerce.number().int().min(1, "Use 1 to 120 minutes.").max(120, "Use 1 to 120 minutes."),
+  }).safeParse(await readBody(c));
+  if (!p.success) return validationFailed(c, { pickup: [p.error.issues[0].message] });
+  await c.get("db").query("insert into app.settings (key, value) values ('pickup_code', $1::jsonb) on conflict (key) do update set value = excluded.value", [JSON.stringify(p.data)]);
+  await audit(c, "pickup_settings.update", "pickup_code", p.data);
+  return c.json({ status: true, data: p.data });
+});
+
+/** Rides waiting for their pickup code (accepted or arrived). The code itself is never shown to admins. */
+adminRideRoutes.get("/admin/pickup-rides", ...guard("pickup_code list"), async (c) => {
+  const rows = (await c.get("db").query(
+    `select r.id, r.status, r.booking_source, r.pickup_address, r.accepted_at, p.display_name as passenger_name, d.display_name as driver_name,
+            c.verified_at, c.overridden_at, c.failed_attempts, c.total_failed, c.locked_until, c.expires_at
+       from app.ride_requests r join app.users p on p.id = r.rider_id left join app.users d on d.id = r.driver_id
+       left join app.ride_pickup_codes c on c.ride_request_id = r.id
+      where r.status in ('accepted', 'arrived') order by r.id desc limit 50`)).rows;
+  return c.json({ data: rows.map((r) => ({
+    id: Number(r.id), status: r.status, booking_source: r.booking_source || "passenger", pickup: r.pickup_address, passenger: r.passenger_name, driver: r.driver_name,
+    has_code: r.expires_at !== null, verified: !!r.verified_at, overridden: !!r.overridden_at,
+    locked: !!(r.locked_until && new Date(r.locked_until as string).getTime() > Date.now()), failed: Number(r.total_failed ?? 0), expires_at: r.expires_at,
+  })) });
+});
+
+adminRideRoutes.post("/admin/pickup-rides/:id/override", ...guard("pickup_code edit"), async (c) => {
+  const id = Number(c.req.param("id"));
+  if (!Number.isInteger(id) || id <= 0) return c.json({ status: false, message: "Ride not found." }, 404);
+  const db = c.get("db");
+  if (!(await overridePickup(db, id, c.get("user").id))) return c.json({ status: false, message: "This ride has no pending pickup code to override." }, 409);
+  await audit(c, "pickup.override", `ride:${id}`, {});
+  const r = (await db.query("select driver_id from app.ride_requests where id = $1", [id])).rows[0];
+  if (r?.driver_id) pushLater(c, sendPush(db, c.env, [Number(r.driver_id)], { title: "Pickup authorised", body: "DROP authorised the trip. You can start it now.", data: { type: "pickup_override", ride_id: String(id) } }));
+  return c.json({ status: true, message: "The driver can now start the trip without the code." });
 });

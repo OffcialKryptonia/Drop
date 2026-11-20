@@ -1,5 +1,6 @@
 import type { Client } from "pg";
 import { getSetting } from "./driver-application";
+import { expireExtras } from "./extras";
 
 /**
  * Runs every minute (cron trigger):
@@ -15,5 +16,6 @@ export async function sweepRides(db: Client) {
         and not exists (select 1 from app.ride_requests r where r.driver_id = u.id and r.status in ('accepted', 'arrived', 'in_progress'))`,
     [staleMinutes],
   );
-  return { expired: expired.rowCount ?? 0, drivers_offline: offline.rowCount ?? 0 };
+  const extras = await expireExtras(db);
+  return { expired: expired.rowCount ?? 0, drivers_offline: offline.rowCount ?? 0, extras_expired: extras };
 }

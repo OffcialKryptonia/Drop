@@ -54,7 +54,49 @@ class RideApi {
   static Future<Map<String, dynamic>> _post(String path, [Map<String, dynamic>? body]) async =>
       _send(() async => http.post(_uri(path), headers: await _headers(), body: jsonEncode(body ?? {})));
 
+  // ---- In-app voice calls (the server decides who may call whom; it only hands out per-person join tokens) ----
+
+  static Future<Map<String, dynamic>> callStatus(int rideId) => _get('ride/$rideId/call/status');
+  static Future<Map<String, dynamic>> startCall(int rideId) => _post('ride/$rideId/call');
+  static Future<Map<String, dynamic>> incomingCall() => _get('calls/incoming');
+  static Future<Map<String, dynamic>> getCall(int callId) => _get('call/$callId');
+  static Future<Map<String, dynamic>> acceptCall(int callId) => _post('call/$callId/accept');
+  static Future<Map<String, dynamic>> declineCall(int callId) => _post('call/$callId/decline');
+  static Future<Map<String, dynamic>> cancelCall(int callId) => _post('call/$callId/cancel');
+  static Future<Map<String, dynamic>> endCall(int callId) => _post('call/$callId/end');
+  static Future<Map<String, dynamic>> callToken(int callId) => _post('call/$callId/token');
+  static Future<Map<String, dynamic>> callFailed(int callId) => _post('call/$callId/failed');
+
   static Map<String, dynamic> _point(double lat, double lng, String address) => {'lat': lat, 'lng': lng, 'address': address};
+
+  // ---- Chat (passenger and driver share these; the server checks the person is part of the ride) ----
+
+  static Future<Map<String, dynamic>> chat(int rideId, {int? after, int? before, int limit = 30}) {
+    final q = [if (after != null) 'after=$after', if (before != null) 'before=$before', 'limit=$limit'].join('&');
+    return _get('ride/$rideId/chat?$q');
+  }
+
+  static Future<Map<String, dynamic>> chatRead(int rideId) => _post('ride/$rideId/chat/read');
+
+  static Future<Map<String, dynamic>> sendChat(int rideId, {required String clientId, required String body}) =>
+      _post('ride/$rideId/chat/messages', {'client_id': clientId, 'body': body});
+
+  static Future<Map<String, dynamic>> sendVoice(int rideId, {required String clientId, required String path, required int seconds, required List<int> waveform}) =>
+      _send(() async {
+        final req = http.MultipartRequest('POST', _uri('ride/$rideId/chat/voice'))
+          ..headers.addAll({...await _headers()}..remove('Content-Type'))
+          ..fields['client_id'] = clientId
+          ..fields['seconds'] = '$seconds'
+          ..fields['waveform'] = waveform.join(',')
+          ..files.add(await http.MultipartFile.fromPath('file', path, filename: 'voice.m4a'));
+        return http.Response.fromStream(await req.send());
+      });
+
+  /// A short-lived link to play one voice message.
+  static Future<String> chatAudioUrl(int rideId, int messageId) async {
+    final r = await _get('ride/$rideId/chat/messages/$messageId/audio-url');
+    return (r['data'] as Map)['url'].toString();
+  }
 
   // ---- Passenger ----
 
@@ -66,8 +108,9 @@ class RideApi {
     required double dropLat,
     required double dropLng,
     required String dropAddress,
+    List<Map<String, dynamic>> stops = const [],
   }) =>
-      _post('ride/estimate', {'pickup': _point(pickupLat, pickupLng, pickupAddress), 'dropoff': _point(dropLat, dropLng, dropAddress)});
+      _post('ride/estimate', {'pickup': _point(pickupLat, pickupLng, pickupAddress), 'dropoff': _point(dropLat, dropLng, dropAddress), 'stops': stops});
 
   static Future<Map<String, dynamic>> request({
     required double pickupLat,
@@ -79,14 +122,25 @@ class RideApi {
     required int serviceId,
     required String paymentMethod,
     List<int> optionIds = const [],
+    List<Map<String, dynamic>> stops = const [],
   }) =>
       _post('ride/request', {
         'pickup': _point(pickupLat, pickupLng, pickupAddress),
         'dropoff': _point(dropLat, dropLng, dropAddress),
+        'stops': stops,
         'service_id': serviceId,
         'payment_method': paymentMethod,
         'option_ids': optionIds,
       });
+
+  /// Server-controlled maximum number of additional passenger stops (zero disables them).
+  static Future<int> stopLimit() async {
+    final response = await _get('ride/stop-settings');
+    final data = response['data'];
+    if (data is! Map) return 0;
+    final value = data['max_additional_stops'];
+    return value is num ? value.toInt().clamp(0, 20).toInt() : 0;
+  }
 
   /// Ride types open at the passenger's location, with drivers nearby (no fares yet).
   static Future<Map<String, dynamic>> rideTypes(double lat, double lng) => _get('ride/types?lat=$lat&lng=$lng');
@@ -140,6 +194,17 @@ class RideApi {
 
   static Future<Map<String, dynamic>> arrived(int id) => _post('driver/rides/$id/arrived');
 
+  /// Verify the passenger's four-digit pickup code before starting a ride.
+  static Future<Map<String, dynamic>> verifyPickup(int id, String code) => _post('driver/rides/$id/verify-pickup', {'code': code});
+
+  /// Driver: arrive at the next server-ordered additional stop.
+  static Future<Map<String, dynamic>> arriveAtStop(int rideId, int stopId) =>
+      _post('driver/rides/$rideId/stops/$stopId/arrived');
+
+  /// Driver: confirm completion of the currently arrived additional stop.
+  static Future<Map<String, dynamic>> completeStop(int rideId, int stopId) =>
+      _post('driver/rides/$rideId/stops/$stopId/complete');
+
   static Future<Map<String, dynamic>> start(int id) => _post('driver/rides/$id/start');
 
   static Future<Map<String, dynamic>> complete(int id) => _post('driver/rides/$id/complete');
@@ -150,4 +215,20 @@ class RideApi {
 
   /// The driver's numbered receipt for a finished trip (fare, commission, earning).
   static Future<Map<String, dynamic>> driverReceipt(int id) => _get('driver/rides/$id/receipt');
+
+  // ---- Extra charges after a trip (toll, parking, waiting) ----
+
+  /// Driver: add an extra charge to a finished trip. The passenger is asked to approve it.
+  static Future<Map<String, dynamic>> proposeExtra(int rideId, {required int typeId, required double amount, String? note}) =>
+      _post('driver/rides/$rideId/extras', {'type_id': typeId, 'amount': amount, if (note != null && note.isNotEmpty) 'note': note});
+
+  /// Driver: extras on a trip, whether one can still be added, and how much more is allowed.
+  static Future<Map<String, dynamic>> driverExtras(int rideId) => _get('driver/rides/$rideId/extras');
+
+  /// Passenger: extra charges waiting for an answer, plus the wallet balance.
+  static Future<Map<String, dynamic>> pendingExtras() => _get('ride/extras/pending');
+
+  static Future<Map<String, dynamic>> payExtra(int id, String method) => _post('ride/extras/$id/pay', {'method': method});
+
+  static Future<Map<String, dynamic>> declineExtra(int id) => _post('ride/extras/$id/decline');
 }

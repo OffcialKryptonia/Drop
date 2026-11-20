@@ -1,6 +1,8 @@
 name: Drop Mapbox integration checks
 
 on:
+  push:
+    branches: [feat/flutter-multi-stop-routes, feat/ride-chat, feat/ride-calls]
   pull_request:
     branches: [main]
     paths:
@@ -80,3 +82,13 @@ jobs:
           cache-dependency-path: worker/package-lock.json
       - run: npm ci
       - run: npm run typecheck
+      - name: Pickup code unit tests
+        run: npx --yes tsx test/pickup.test.ts
+      - name: Receipt unit tests
+        run: npx --yes tsx test/receipt.test.ts
+      - name: Chat unit tests
+        run: npx --yes tsx test/chat.test.ts
+      - name: Call token unit tests
+        run: npx --yes tsx test/calls.test.ts
+      - name: Ride-flow smoke test syntax
+        run: node --check test/rides-trip-smoke.mjs

@@ -113,56 +113,65 @@ class DropFactChip extends StatelessWidget {
 
 /// Pickup and drop-off as one vertical timeline. [activeStop] 0 highlights the pickup, 1 the drop-off.
 class DropStopTimeline extends StatelessWidget {
-  const DropStopTimeline({super.key, required this.pickup, required this.dropoff, this.activeStop});
+  const DropStopTimeline({super.key, required this.pickup, required this.dropoff, this.activeStop, this.stops = const []});
 
   final String pickup;
   final String dropoff;
   final int? activeStop;
+  final List<Map<String, dynamic>> stops;
 
   Widget _stop(BuildContext context, String caption, String address, bool active) {
     final s = splitAddress(address);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(caption, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 0.6, color: active ? DropColors.primary : DropColors.mutedText(context))),
-        const SizedBox(height: 2),
-        Text(s.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: DropColors.text(context))),
-        if (s.rest.isNotEmpty) Text(s.rest, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: DropColors.mutedText(context))),
-      ],
-    );
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(caption, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 0.6, color: active ? DropColors.primary : DropColors.mutedText(context))),
+      const SizedBox(height: 2),
+      Text(s.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: DropColors.text(context))),
+      if (s.rest.isNotEmpty) Text(s.rest, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: DropColors.mutedText(context))),
+    ]);
   }
 
   @override
   Widget build(BuildContext context) {
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SizedBox(
-            width: 22,
-            child: Column(
-              children: [
-                const SizedBox(height: 4),
-                Icon(Icons.circle, size: 14, color: DropColors.success),
-                Expanded(child: Container(width: 2, margin: const EdgeInsets.symmetric(vertical: 4), color: DropColors.mutedText(context).withValues(alpha: 0.4))),
-                Icon(Icons.location_on, size: 20, color: DropColors.primary),
-              ],
-            ),
-          ),
+    if (stops.isEmpty) {
+      return IntrinsicHeight(child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        SizedBox(width: 22, child: Column(children: [
+          const SizedBox(height: 4),
+          Icon(Icons.circle, size: 14, color: DropColors.success),
+          Expanded(child: Container(width: 2, margin: const EdgeInsets.symmetric(vertical: 4), color: DropColors.mutedText(context).withValues(alpha: 0.4))),
+          Icon(Icons.location_on, size: 20, color: DropColors.primary),
+        ])),
+        const SizedBox(width: 10),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          _stop(context, 'PICKUP', pickup, activeStop == 0),
+          const SizedBox(height: 12),
+          _stop(context, 'DROP-OFF', dropoff, activeStop == 1),
+        ])),
+      ]));
+    }
+    final ordered = stops.map((s) => Map<String, dynamic>.from(s)).toList()
+      ..sort((a, b) => ((a['sequence'] as num?)?.toInt() ?? 0).compareTo((b['sequence'] as num?)?.toInt() ?? 0));
+    final entries = <({String caption, String address, bool completed, int index})>[
+      (caption: 'PICKUP', address: pickup, completed: true, index: 0),
+      for (var i = 0; i < ordered.length; i++)
+        (caption: 'STOP ${ordered[i]['sequence'] ?? i + 1}', address: (ordered[i]['address'] ?? 'Additional stop').toString(), completed: ordered[i]['status'] == 'completed', index: i + 1),
+      (caption: 'DROP-OFF', address: dropoff, completed: false, index: ordered.length + 1),
+    ];
+    return Column(children: [
+      for (var i = 0; i < entries.length; i++) ...[
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          SizedBox(width: 22, child: Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Icon(i == 0 ? Icons.circle : (i == entries.length - 1 ? Icons.location_on : (entries[i].completed ? Icons.check_circle : Icons.radio_button_unchecked)),
+              size: i == 0 ? 14 : 19,
+              color: i == 0 ? DropColors.success : (entries[i].completed ? DropColors.success : DropColors.primary)),
+          )),
           const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _stop(context, 'PICKUP', pickup, activeStop == 0),
-                const SizedBox(height: 12),
-                _stop(context, 'DROP-OFF', dropoff, activeStop == 1),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
+          Expanded(child: _stop(context, entries[i].caption, entries[i].address, activeStop == entries[i].index)),
+        ]),
+        if (i < entries.length - 1)
+          Padding(padding: const EdgeInsets.only(left: 10, top: 3, bottom: 3), child: Align(alignment: Alignment.centerLeft, child: Container(width: 2, height: 14, color: DropColors.mutedText(context).withValues(alpha: 0.4)))),
+      ],
+    ]);
   }
 }
 
