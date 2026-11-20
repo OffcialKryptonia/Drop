@@ -88,6 +88,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
   bool locating = true;
 
   Map<String, dynamic> quote = {};
+  bool _stopFromFares = false; // a map-chosen stop was started from the fares sheet, so confirming it re-prices the trip
   int? selectedType;
   String payment = 'cash';
   final Set<int> extras = {};
@@ -357,11 +358,12 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
       return;
     }
     if (r.kind == 'mapDrop') {
-      setState(() { pinForPickup = false; pinForStop = addingStop; pinMode = true; });
+      setState(() { pinForPickup = false; pinForStop = addingStop; pinMode = true; if (addingStop && phase == _Phase.choose) { phase = _Phase.plan; _stopFromFares = true; } });
       return;
     }
     if (r.kind == 'stop' && r.point != null) {
       setState(() => additionalStops.add({'lat': r.point!.latitude, 'lng': r.point!.longitude, 'address': r.address}));
+      if (phase == _Phase.choose) await _confirmDropoff();
       return;
     }
     if (r.point != null) {
@@ -427,6 +429,10 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
       _say('Could not confirm this stop. Please try again.');
     }
     if (mounted) setState(() => busy = false);
+    if (mounted && _stopFromFares) {
+      _stopFromFares = false;
+      await _confirmDropoff();
+    }
   }
 
   Future<void> _confirmDropoff() async {
@@ -453,9 +459,10 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
       if (types.isEmpty) {
         _say('No ride types are available for this trip right now.');
       } else {
+        final keepType = phase == _Phase.choose ? selectedType : null; // re-pricing after a stop change keeps the chosen ride type
         selectedType = null;
         extras.clear();
-        _pickType(_m(types.firstWhere((t) => (_m(t)['id'] as num).toInt() == homeType, orElse: () => types.first)));
+        _pickType(_m(types.firstWhere((t) => (_m(t)['id'] as num).toInt() == (keepType ?? homeType), orElse: () => types.first)));
         phase = _Phase.choose;
       }
     } on ApiFailure catch (e) {
@@ -821,7 +828,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
                 _roundButton(Icons.menu, () => _scaffoldKey.currentState?.openDrawer()),
                 const SizedBox(width: 10),
                 if (pinning) Expanded(child: _searchBar()),
-                if (pinning) ...[const SizedBox(width: 10), _roundButton(Icons.arrow_back, () => setState(() { pinMode = false; pinForPickup = false; pinForStop = false; }))],
+                if (pinning) ...[const SizedBox(width: 10), _roundButton(Icons.arrow_back, () => setState(() { pinMode = false; pinForPickup = false; pinForStop = false; if (_stopFromFares) { _stopFromFares = false; phase = _Phase.choose; } }))],
                 if (phase == _Phase.choose) _roundButton(Icons.arrow_back, () => setState(() => phase = _Phase.plan)),
               ]),
               if (home)
@@ -1031,7 +1038,16 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
           '${t['pickup_eta_minutes'] != null ? ' · arrive about ${dropClock(DateTime.now().add(Duration(minutes: (t['pickup_eta_minutes'] as num).round() + _d(quote['duration_minutes']).round())))}' : ''}',
           style: TextStyle(color: Colors.grey.shade700),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
+        DropStopsEditor(
+          stops: additionalStops,
+          max: maxAdditionalStops,
+          busy: busy,
+          onAdd: () => _openRouteScreen(addingStop: true),
+          onRemove: (i) { setState(() => additionalStops.removeAt(i)); _confirmDropoff(); },
+          onMove: (a, b) { setState(() { final x = additionalStops.removeAt(a); additionalStops.insert(b, x); }); _confirmDropoff(); },
+        ),
+        const SizedBox(height: 4),
         Flexible(
           child: ListView(shrinkWrap: true, children: [
             for (final x in types) _typeTile(x),

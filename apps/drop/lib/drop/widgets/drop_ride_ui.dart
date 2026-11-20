@@ -448,3 +448,41 @@ class _DropSwipeDecisionState extends State<DropSwipeDecision> with SingleTicker
     );
   }
 }
+
+
+/// Extra stops between pickup and drop-off, editable while choosing a ride: reorder, remove, or add one more
+/// up to the admin's limit. Presentation only: the parent owns the list and re-prices the trip on every change.
+class DropStopsEditor extends StatelessWidget {
+  const DropStopsEditor({super.key, required this.stops, required this.max, required this.onAdd, required this.onRemove, required this.onMove, this.busy = false});
+
+  final List<Map<String, dynamic>> stops;
+  final int max;
+  final bool busy;
+  final VoidCallback onAdd;
+  final void Function(int index) onRemove;
+  final void Function(int from, int to) onMove;
+
+  @override
+  Widget build(BuildContext context) {
+    if (max <= 0) return const SizedBox.shrink();
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      for (var i = 0; i < stops.length; i++)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: Row(children: [
+            Icon(Icons.more_vert, color: DropColors.primary, size: 18),
+            const SizedBox(width: 8),
+            Expanded(child: Text('Stop ${i + 1}: ${stops[i]['address']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600))),
+            IconButton(visualDensity: VisualDensity.compact, tooltip: 'Move stop up', onPressed: busy || i == 0 ? null : () => onMove(i, i - 1), icon: const Icon(Icons.arrow_upward, size: 18)),
+            IconButton(visualDensity: VisualDensity.compact, tooltip: 'Move stop down', onPressed: busy || i == stops.length - 1 ? null : () => onMove(i, i + 1), icon: const Icon(Icons.arrow_downward, size: 18)),
+            IconButton(visualDensity: VisualDensity.compact, tooltip: 'Remove stop', onPressed: busy ? null : () => onRemove(i), icon: const Icon(Icons.close, size: 18)),
+          ]),
+        ),
+      if (stops.length < max)
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(onPressed: busy ? null : onAdd, icon: const Icon(Icons.add_location_alt_outlined), label: Text('Add stop (${stops.length}/$max)')),
+        ),
+    ]);
+  }
+}
