@@ -149,6 +149,28 @@ oldMin = (await db.query("select value from app.settings where key = 'driver_min
   await call("PUT", "/admin/chat-settings", A, { enabled: false, voice_enabled: true, max_voice_seconds: 60, retention_days: 30 });
   ok("admin can switch chat off", (await call("POST", `/ride/${r.id}/chat/messages`, P.api_token, { client_id: cid(), body: "nope" })).status === 403);
   await call("PUT", "/admin/chat-settings", A, { enabled: true, voice_enabled: true, max_voice_seconds: 60, retention_days: 30 });
+  // ---- Profile photos: private, link carries a random token, shown to the other person on the ride ----
+  const local = (u) => u.replace(/^https?:\/\/[^/]+/, new URL(API).origin); // the app gets the public address; the test talks to the local worker
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d, 1, 2, 3, 4, 5, 6, 7, 8]);
+  const putPhoto = (token, bytes) => fetch(`${API}/profile/photo`, { method: "PUT", headers: { Authorization: "Bearer " + token, Accept: "application/json", "Content-Type": "image/png" }, body: bytes });
+  ok("a photo upload needs sign-in", (await putPhoto("bad", png)).status === 401);
+  ok("a file that is not an image is refused", (await putPhoto(d.T, new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]))).status === 415);
+  const up = await putPhoto(d.T, png);
+  const upJson = await up.json().catch(() => ({}));
+  ok("the driver uploads a profile photo", up.status === 200 && /\/api\/users\/\d+\/profile-photo\?v=[0-9a-f-]{36}$/.test(upJson.profile_image ?? ""), JSON.stringify(upJson));
+  const photoRes = await fetch(local(upJson.profile_image));
+  ok("the photo link serves the image with safe headers", photoRes.status === 200 && photoRes.headers.get("content-type") === "image/png" && photoRes.headers.get("x-content-type-options") === "nosniff");
+  ok("the same link without its token is refused", (await fetch(local(upJson.profile_image.split("?")[0]))).status === 404);
+  ok("a wrong token is refused", (await fetch(local(upJson.profile_image.replace(/v=./, (m) => "v=" + (m.endsWith("0") ? "1" : "0"))))).status === 404);
+  const seen = await call("GET", "/ride/current", P.api_token);
+  ok("the passenger's ride shows the driver's photo", seen.json.data?.driver?.profile_image === upJson.profile_image, JSON.stringify(seen.json.data?.driver));
+  const relog = await call("POST", "/login", null, { email: (await db.query("select email from app.users where id = $1", [d.id])).rows[0].email, password: "secret123" });
+  ok("the photo survives signing in again", relog.json.data?.profile_image === upJson.profile_image, String(relog.json.data?.profile_image));
+  const up2 = await (await putPhoto(d.T, png)).json();
+  ok("replacing the photo changes the link and the old one stops working", up2.profile_image !== upJson.profile_image && (await fetch(local(upJson.profile_image))).status === 404);
+  const del = await fetch(`${API}/profile/photo`, { method: "DELETE", headers: { Authorization: "Bearer " + d.T, Accept: "application/json" } });
+  ok("the photo can be removed", del.status === 200 && (await fetch(local(up2.profile_image))).status === 404);
+
   // ---- In-app voice calls: only this passenger and this driver, one live call, provider tokens per person ----
   const callsOff = await call("POST", `/ride/${r.id}/call`, P.api_token, {});
   ok("calling is off until an admin sets it up", callsOff.status === 503 && callsOff.json.code === "calls_off", JSON.stringify(callsOff.json));

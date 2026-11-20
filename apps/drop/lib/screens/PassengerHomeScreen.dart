@@ -1144,7 +1144,11 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
       if (driver.isNotEmpty) ...[
         const SizedBox(height: 12),
         Row(children: [
-          CircleAvatar(backgroundColor: primaryColor.withValues(alpha: 0.12), child: Icon(Icons.person, color: primaryColor)),
+          CircleAvatar(
+            backgroundColor: primaryColor.withValues(alpha: 0.12),
+            backgroundImage: (driver['profile_image'] ?? '').toString().isEmpty ? null : NetworkImage(driver['profile_image'].toString()),
+            child: (driver['profile_image'] ?? '').toString().isEmpty ? Icon(Icons.person, color: primaryColor) : null,
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

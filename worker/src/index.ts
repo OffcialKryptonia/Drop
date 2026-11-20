@@ -41,8 +41,11 @@ import { sweepRides } from "./lib/ride-sweep";
 import { driverApplicationRoutes } from "./routes/driver-application";
 import { adminDriverApplicationRoutes } from "./routes/admin-driver-applications";
 import { sessionRoutes } from "./routes/session";
+import { profilePhotoRoutes } from "./routes/profile-photo";
+import { setPublicOrigin } from "./serializers/user";
 
 const app = new Hono<AppEnv>();
+app.use("*", async (c, next) => { setPublicOrigin(new URL(c.req.url).origin); await next(); });
 
 // Liveness check. Used by uptime monitors and the /admin page.
 // (Workers freeze the clock outside a request, so time is read per request.)
@@ -115,6 +118,7 @@ app.route("/api", payoutRoutes);
 app.route("/api", adminPayoutRoutes);
 app.route("/api", adminBankRoutes);
 app.route("/api", sessionRoutes);
+app.route("/api", profilePhotoRoutes);
 
 // Any other /api route that does not exist yet returns JSON, never HTML.
 app.all("/api/*", (c) =>

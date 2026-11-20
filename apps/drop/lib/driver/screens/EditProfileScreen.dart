@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_mobx/flutter_mobx.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:drop/driver/screens/DashboardScreen.dart';
+import 'package:drop/network/RestApis.dart' as rider_api;
 
 import '../main.dart';
 import '../utils/Common.dart';
@@ -148,9 +149,12 @@ class EditProfileScreenState extends State<EditProfileScreen> {
     if (formKey.currentState!.validate()) {
       formKey.currentState!.save();
       appStore.setLoading(true);
+      if (imageProfile != null) {
+        await rider_api.uploadProfilePhoto(File(imageProfile!.path));
+      }
       await updateProfile(
         uid: sharedPref.getString(UID).toString(),
-        file: imageProfile != null ? File(imageProfile!.path.validate()) : null,
+        file: null,
         contactNumber: widget.isGoogle == true ? '${countryCode.validate()}${contactNumberController.text.trim()}' : contactNumberController.text.trim(),
         // address: addressController.text.trim(),
         firstName: firstNameController.text.trim(),

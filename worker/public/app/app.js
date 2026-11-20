@@ -1367,6 +1367,59 @@
     if (screen === "profile") {
       var target = driverMode ? $("driverProfileContent") : $("passengerProfileContent");
       target.innerHTML = "";
+      var photoBox = document.createElement("div");
+      photoBox.className = "profile-photo-editor";
+      photoBox.style.display = "flex";
+      photoBox.style.alignItems = "center";
+      photoBox.style.gap = "14px";
+      photoBox.style.marginBottom = "20px";
+      var avatar = document.createElement("img");
+      avatar.alt = "Profile photo";
+      avatar.width = 88; avatar.height = 88;
+      avatar.style.borderRadius = "50%"; avatar.style.objectFit = "cover";
+      avatar.style.background = "#eee";
+      if (currentUser.profile_image) avatar.src = currentUser.profile_image;
+      else avatar.style.display = "none";
+      var photoActions = document.createElement("div");
+      var photoLabel = el("strong", null, "Profile photo");
+      var photoHint = el("p", "muted small", "JPG, PNG or WebP · maximum 5 MB");
+      var photoInput = document.createElement("input");
+      photoInput.type = "file"; photoInput.accept = "image/jpeg,image/png,image/webp";
+      photoInput.setAttribute("aria-label", "Choose profile photo");
+      var photoMsg = el("p", "msg", "");
+      var removePhoto = document.createElement("button");
+      removePhoto.type = "button"; removePhoto.className = "ghost"; removePhoto.textContent = "Remove photo";
+      removePhoto.hidden = !currentUser.profile_image;
+      photoInput.addEventListener("change", function () {
+        var file = photoInput.files && photoInput.files[0];
+        if (!file) return;
+        if (!/^image\/(jpeg|png|webp)$/.test(file.type) || file.size > 5 * 1024 * 1024) {
+          photoMsg.textContent = "Choose a JPG, PNG or WebP image no larger than 5 MB.";
+          photoInput.value = ""; return;
+        }
+        photoMsg.textContent = "Uploading…";
+        fetch("/api/profile/photo", { method: "PUT", credentials: "same-origin",
+          headers: { "Content-Type": file.type, [CSRF_HEADER]: csrfToken || "" }, body: file
+        }).then(readJson).then(function (body) {
+          if (!body || body.status !== true || !body.profile_image) throw new Error(body && body.message || "Upload failed.");
+          currentUser.profile_image = body.profile_image;
+          avatar.style.display = "block"; avatar.src = body.profile_image;
+          removePhoto.hidden = false; photoMsg.textContent = "Photo saved.";
+        }).catch(function (err) { photoMsg.textContent = err.message || "Could not upload photo."; });
+      });
+      removePhoto.addEventListener("click", function () {
+        if (!window.confirm("Remove your profile photo?")) return;
+        photoMsg.textContent = "Removing…";
+        fetch("/api/profile/photo", { method: "DELETE", credentials: "same-origin",
+          headers: { "Content-Type": "application/json", [CSRF_HEADER]: csrfToken || "" }, body: "{}"
+        }).then(readJson).then(function (body) {
+          if (!body || body.status !== true) throw new Error(body && body.message || "Could not remove photo.");
+          currentUser.profile_image = null; avatar.removeAttribute("src");
+          removePhoto.hidden = true; photoMsg.textContent = "Photo removed.";
+        }).catch(function (err) { photoMsg.textContent = err.message || "Could not remove photo."; });
+      });
+      photoActions.append(photoLabel, photoHint, photoInput, removePhoto, photoMsg);
+      photoBox.append(avatar, photoActions); target.appendChild(photoBox);
       var fields = [["Name", currentUser.display_name || [currentUser.first_name,currentUser.last_name].filter(Boolean).join(" ")],["Email",currentUser.email],["Phone", [currentUser.country_code,currentUser.contact_number].filter(Boolean).join(" ")],["Username",currentUser.username]];
       fields.forEach(function (field) {
         if (!field[1]) return;
