@@ -107,14 +107,10 @@ export const callView = (c: Record<string, unknown>, me: number) => ({
  */
 export async function sweepCalls(db: Client, env: Bindings, onlyRide?: number): Promise<number> {
   const s = await callSettings(db);
-  const scope = onlyRide ? "and c.ride_request_id = $3" : "";
-  const args: unknown[] = [s.ring_seconds, s.max_minutes];
-  if (onlyRide) args.push(onlyRide);
-
   const missed = (await db.query(
     `update app.ride_calls c set status = 'missed', end_reason = 'no_answer', ended_at = now()
-      where c.status = 'ringing' and c.created_at < now() - make_interval(secs => $1::int) ${scope}
-      returning c.id, c.ride_request_id, c.caller_id, c.callee_id`, args)).rows;
+      where c.status = 'ringing' and c.created_at < now() - make_interval(secs => $1::int) ${onlyRide ? "and c.ride_request_id = $2" : ""}
+      returning c.id, c.ride_request_id, c.caller_id, c.callee_id`, onlyRide ? [s.ring_seconds, onlyRide] : [s.ring_seconds])).rows;
   for (const m of missed) {
     const who = (await db.query("select coalesce(nullif(trim(concat_ws(' ', first_name, last_name)), ''), 'Someone') as n from app.users where id = $1", [m.caller_id])).rows[0]?.n ?? "Someone";
     await sendPush(db, env, [Number(m.callee_id)], { title: "Missed call", body: `${who} tried to call you.`, data: { type: "call_missed", ride_id: String(m.ride_request_id), call_id: String(m.id) } });
@@ -128,7 +124,7 @@ export async function sweepCalls(db: Client, env: Bindings, onlyRide?: number): 
        from app.ride_requests r
       where r.id = c.ride_request_id and c.status = 'active'
         and (r.status not in ('accepted','arrived','in_progress') or r.driver_id is distinct from c.driver_id
-             or c.answered_at < now() - make_interval(mins => $2::int)) ${scope}`, args)).rowCount ?? 0;
+             or c.answered_at < now() - make_interval(mins => $1::int)) ${onlyRide ? "and c.ride_request_id = $2" : ""}`, onlyRide ? [s.max_minutes, onlyRide] : [s.max_minutes])).rowCount ?? 0;
   const dropped = (await db.query(
     `update app.ride_calls c set status = 'cancelled', end_reason = 'ride_closed', ended_at = now()
        from app.ride_requests r
