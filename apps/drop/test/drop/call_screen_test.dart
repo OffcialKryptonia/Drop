@@ -64,7 +64,7 @@ void main() {
     expect(find.textContaining('01:0'), findsOneWidget);
     expect(find.text('Mute'), findsOneWidget);
     expect(find.text('Speaker'), findsOneWidget);
-    await tester.tap(find.text('Mute'));
+    await tester.tap(find.byIcon(Icons.mic));
     await tester.pump();
     expect(c.muted, true);
     expect(find.text('Unmute'), findsOneWidget);

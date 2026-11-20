@@ -82,7 +82,7 @@ CallController make(FakeBackend b, FakeEngine e, {bool mic = true}) => CallContr
       microphoneGranted: () async => mic,
       pollInterval: const Duration(milliseconds: 20),
       incomingInterval: const Duration(milliseconds: 20),
-      endedLinger: const Duration(milliseconds: 30),
+      endedLinger: const Duration(milliseconds: 400),
       remoteGoneAfter: const Duration(milliseconds: 40),
     );
 
@@ -108,7 +108,7 @@ void main() {
     expect(b.log, containsAll(['start', 'end']));
     expect(e.left, true);
     expect(c.phase, CallPhase.ended);
-    await settle();
+    await settle(500);
     expect(c.phase, CallPhase.idle);
   });
 

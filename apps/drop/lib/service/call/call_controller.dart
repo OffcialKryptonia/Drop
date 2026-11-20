@@ -170,7 +170,10 @@ class CallController extends ChangeNotifier {
     _set(CallPhase.outgoing);
     presenter?.call();
     try {
-      if (!await _mic()) return _finish('Allow the microphone in Settings to make calls.', tellServer: false);
+      if (!await _mic()) {
+        await _finish('Allow the microphone in Settings to make calls.', tellServer: false);
+        return;
+      }
       final r = await _backend.start(ride);
       final data = Map<String, dynamic>.from(r['data'] as Map);
       callId = ((data['call'] as Map)['id'] as num).toInt();
@@ -196,7 +199,8 @@ class CallController extends ChangeNotifier {
     try {
       if (!await _mic()) {
         await _backend.decline(id).catchError((_) => <String, dynamic>{});
-        return _finish('Allow the microphone in Settings to answer calls.', tellServer: false);
+        await _finish('Allow the microphone in Settings to answer calls.', tellServer: false);
+        return;
       }
       final r = await _backend.accept(id);
       final join = CallJoin.fromJson(Map<String, dynamic>.from((r['data'] as Map)['join'] as Map));
