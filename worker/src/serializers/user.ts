@@ -3,6 +3,20 @@ import { coordText, flag, laravelTime, num } from "../lib/legacy";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = Record<string, any>;
 
+let publicOrigin = "https://drop.officialkryptonia.workers.dev";
+/** Set once per request so photo links point at the address the app is actually using. */
+export function setPublicOrigin(origin: string) {
+  if (/^https:\/\/[a-z0-9.-]+$/i.test(origin)) publicOrigin = origin;
+}
+
+/** The random part of the stored object name; it is the "key" in the photo link, so a link cannot be guessed from a user id. */
+export const photoToken = (key: string | null | undefined) => /-([0-9a-f]{8}-[0-9a-f-]{27})\.[a-z]+$/i.exec(key ?? "")?.[1] ?? null;
+
+export function photoUrl(u: Row): string | null {
+  const t = photoToken(u.profile_image_key);
+  return t && u.id ? `${publicOrigin}/api/users/${u.id}/profile-photo?v=${t}` : null;
+}
+
 /**
  * The signed-in user's own view. Matches the legacy login/register payload, so the
  * apps' UserModel.fromJson keeps working: flags are 0/1, coordinates are strings,
@@ -25,7 +39,7 @@ export function serializeUser(u: Row) {
     country_code: u.country_code,
     contact_number: u.contact_number,
     gender: u.gender,
-    profile_image: u.profile_image_key && u.id ? `https://drop.kryptlab.co/api/users/${u.id}/profile-photo` : null,
+    profile_image: photoUrl(u),
     login_type: u.login_type,
     latitude: coordText(u.latitude),
     longitude: coordText(u.longitude),
@@ -68,7 +82,7 @@ export function serializePublicUser(u: Row) {
     country_code: u.country_code,
     contact_number: u.contact_number,
     gender: u.gender,
-    profile_image: u.profile_image_key && u.id ? `https://drop.kryptlab.co/api/users/${u.id}/profile-photo` : null,
+    profile_image: photoUrl(u),
     login_type: u.login_type,
     latitude: coordText(u.latitude),
     longitude: coordText(u.longitude),

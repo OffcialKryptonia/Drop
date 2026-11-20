@@ -1,3 +1,4 @@
+import { photoUrl } from "../serializers/user";
 import { chatUnread } from "../lib/chat";
 import { riderPickupView } from "../lib/pickup";
 import { voidExtrasForRide } from "../lib/extras";
@@ -70,6 +71,7 @@ const ride = (r: Row) => ({
     ? {
         id: Number(r.driver_id),
         name: [r.driver_first_name, r.driver_last_name].filter(Boolean).join(" "),
+        profile_image: photoUrl({ id: r.driver_id, profile_image_key: r.driver_image_key }),
         vehicle: { make: r.vehicle_make, model: r.vehicle_model, colour: r.vehicle_colour, plate: r.vehicle_plate },
         location: r.driver_lat == null ? null : { lat: r.driver_lat, lng: r.driver_lng, updated_at: r.driver_location_at },
       }
@@ -78,7 +80,7 @@ const ride = (r: Row) => ({
 
 /** One ride with its service name and, once accepted, the driver's details and live position. */
 const RIDE_SELECT = `select r.*, s.name as service_name, s.category as service_category, s.map_icon_key as service_map_icon,
-       du.first_name as driver_first_name, du.last_name as driver_last_name, du.contact_number as driver_contact_number,
+       du.first_name as driver_first_name, du.last_name as driver_last_name, du.profile_image_key as driver_image_key,
        du.latitude as driver_lat, du.longitude as driver_lng, du.last_location_update_at as driver_location_at,
        p.vehicle_make, p.vehicle_model, p.vehicle_colour, p.vehicle_plate,
        coalesce((select jsonb_agg(jsonb_build_object('id', st.id, 'sequence', st.sequence, 'lat', st.lat, 'lng', st.lng,

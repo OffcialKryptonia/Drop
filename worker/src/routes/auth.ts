@@ -88,7 +88,7 @@ authRoutes.post("/login", withDb, async (c) => {
   Object.assign(row, updated.rows[0]);
   delete row.password_hash;
   const api_token = await createToken(db, row.id);
-  return c.json({ status: true, data: { ...serializeUser(row), api_token, profile_image: null } });
+  return c.json({ status: true, data: { ...serializeUser(row), api_token } });
 });
 
 const required = (name: string) => `The ${name} field is required.`;
@@ -185,7 +185,7 @@ authRoutes.post("/register", withDb, async (c) => {
     await db.query("commit");
     return c.json({
       message: d.user_type === "driver" ? MESSAGES.driverSaved : MESSAGES.riderSaved,
-      data: { ...serializeUser(user.rows[0]), api_token, profile_image: null },
+      data: { ...serializeUser(user.rows[0]), api_token },
     });
   } catch (err) {
     await db.query("rollback").catch(() => undefined);

@@ -3,6 +3,7 @@ import type { AppEnv } from "../env";
 import { withDb } from "../db";
 import { requireWebOrBearer } from "../auth/web-or-bearer";
 import { MAX_UPLOAD_BYTES, newKey, sniff } from "../lib/files";
+import { photoToken, photoUrl } from "../serializers/user";
 
 export const profilePhotoRoutes = new Hono<AppEnv>();
 const mw = [withDb, requireWebOrBearer] as const;
@@ -38,16 +39,20 @@ profilePhotoRoutes.on(["PUT", "POST"], "/profile/photo", ...mw, async (c) => {
   }
   if (old) await c.env.DOCS.delete(old).catch(() => undefined);
   c.header("Cache-Control", "no-store");
-  return c.json({ status: true, message: "Profile photo saved.", profile_image: `${new URL(c.req.url).origin}/api/users/${me.id}/profile-photo` });
+  return c.json({ status: true, message: "Profile photo saved.", profile_image: photoUrl({ id: me.id, profile_image_key: key }) });
 });
 
-/** Authenticated profile image delivery; photos are private, never exposed as public R2 objects. */
+/**
+ * Profile image delivery. The link carries the random part of the stored name (?v=), so only people who were
+ * given the link (the rider sees the driver's photo and the reverse) can open it; it is not guessable from an id.
+ * Photos are never public R2 objects.
+ */
 profilePhotoRoutes.get("/users/:userId/profile-photo", withDb, async (c) => {
   if (!c.env.DOCS) return c.json({ message: "Not found", status: 404 }, 404);
   const id = /^\d{1,15}$/.test(c.req.param("userId")) ? Number(c.req.param("userId")) : NaN;
   if (!Number.isSafeInteger(id)) return c.json({ message: "Not found", status: 404 }, 404);
   const key = (await c.get("db").query("select profile_image_key from app.users where id = $1 and deleted_at is null", [id])).rows[0]?.profile_image_key as string | null;
-  if (!key) return c.json({ message: "Not found", status: 404 }, 404);
+  if (!key || photoToken(key) !== c.req.query("v")) return c.json({ message: "Not found", status: 404 }, 404);
   const obj = await c.env.DOCS.get(key);
   if (!obj) return c.json({ message: "Not found", status: 404 }, 404);
   return new Response(obj.body, { headers: {

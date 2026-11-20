@@ -143,7 +143,7 @@ Future<LoginResponse> logInApi(Map request, {bool isSocialLogin = false}) async 
 // }
 
 /// Profile Update
-Future updateProfile({String? firstName, String? lastName, String? userEmail, String? contactNumber, File? file, String? uid, String? carModel, String? carColor, String? carPlateNumber, String? carProduction, String? country_code, int? serviceId}) async {
+// Future updateProfile({String? firstName, String? lastName, String? userEmail, String? contactNumber, File? file, String? uid, String? carModel, String? carColor, String? carPlateNumber, String? carProduction, String? country_code, int? serviceId}) async {
 //   MultipartRequest multiPartRequest = await getMultiPartRequest('update-profile');
 //   if (country_code != null) {
 //     multiPartRequest.fields['country_code'] = country_code.toString();
