@@ -129,6 +129,8 @@ dev_dependencies:
   #flutter packages pub run build_runner build --delete-conflicting-outputs
 
 dependency_overrides:
+  # LiveKit's token library needs pointycastle 4; mighty_core's encrypt asks for 3.x. Only LiveKit uses the 4.x API.
+  pointycastle: ^4.0.0
   package_info_plus: ^4.1.0
   meta: ^1.15.0
   intl: ^0.18.0
