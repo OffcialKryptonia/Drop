@@ -106,6 +106,7 @@
     { id: "transfers", label: "Wallet transfers", group: "Financial", perm: "wallet_transfer list", render: pageTransfers },
     { id: "paymyride", label: "PayMyRide", group: "Financial", perm: "paymyride list", render: pagePayMyRide },
     { id: "payouts", label: "Driver payouts", group: "Financial", perm: "payout list", render: pagePayouts },
+    { id: "chat", label: "Ride chat", group: "Operations", perm: "ride_chat list", render: pageChat },
     { id: "pickup", label: "Pickup codes", group: "Operations", perm: "pickup_code list", render: pagePickup },
     { id: "extras", label: "Extra charges", group: "Operations", perm: "ride_extra list", render: pageExtras },
     { id: "sos", label: "SOS alerts", group: "Safety", perm: "sos list", render: pageSos },
@@ -1120,6 +1121,32 @@
   }
 
   // ---------- SOS alerts and complaints ----------
+  function pageChat(root) {
+    loading(root);
+    root.textContent = "";
+    root.appendChild(head("Ride chat", "Passengers and their assigned driver can message each other, and send voice notes, while a trip is open. Admins cannot read conversations. Voice files are kept in private storage and deleted after the retention period."));
+    var card = h("div", { class: "card" }, h("div", { class: "t", text: "Settings" }));
+    root.appendChild(card);
+    api("GET", "/admin/chat-settings").then(function (r) {
+      var s = (r.body || {}).data || { enabled: true, voice_enabled: true, max_voice_seconds: 60, retention_days: 30 };
+      var on = select([["1", "On"], ["0", "Off"]], s.enabled === false ? "0" : "1");
+      var vo = select([["1", "On"], ["0", "Off"]], s.voice_enabled === false ? "0" : "1");
+      var mx = num(String(s.max_voice_seconds), "60"), rt = num(String(s.retention_days), "30"), out = h("p", { class: "msg" });
+      card.appendChild(field("Chat", on, "Off hides the Message button and stops new messages."));
+      card.appendChild(field("Voice messages", vo));
+      card.appendChild(h("div", { class: "grid2" }, field("Longest voice message (seconds)", mx, "10 to 180."), field("Keep messages for (days)", rt, "1 to 365. Older messages and voice files are deleted.")));
+      if (can("ride_chat edit")) {
+        var save = h("button", { text: "Save", class: "small", style: "margin-top:10px" });
+        save.addEventListener("click", function () {
+          save.disabled = true;
+          api("PUT", "/admin/chat-settings", { enabled: on.value === "1", voice_enabled: vo.value === "1", max_voice_seconds: nn(mx), retention_days: nn(rt) }).then(function (x) { save.disabled = false; if (x.ok) toast("Saved"); else msg(out, errText(x)); });
+        });
+        card.appendChild(save);
+      } else { on.disabled = true; vo.disabled = true; mx.disabled = true; rt.disabled = true; }
+      card.appendChild(out);
+    });
+  }
+
   function pagePickup(root) {
     loading(root);
     root.textContent = "";

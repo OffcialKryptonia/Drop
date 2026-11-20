@@ -16,6 +16,7 @@ import '../drop/services/drop_money.dart';
 import '../drop/widgets/drop_email_prompt.dart';
 import '../drop/widgets/drop_eta.dart';
 import '../drop/widgets/drop_pickup.dart';
+import '../drop/screens/drop_chat_screen.dart';
 import '../drop/screens/drop_route_screen.dart';
 import '../drop/widgets/drop_ride_type_strip.dart';
 import '../drop/widgets/drop_sos_sheet.dart';
@@ -1163,6 +1164,20 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
           IconButton(onPressed: () => _call(driver['contact_number']?.toString()), icon: Icon(Icons.call, color: primaryColor)),
         ]),
       ],
+      if (driver.isNotEmpty && ['accepted', 'arrived', 'in_progress'].contains(status))
+        Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: Badge(
+            isLabelVisible: ((r['chat_unread'] as num?) ?? 0) > 0,
+            label: Text('${r['chat_unread']}'),
+            child: OutlinedButton.icon(
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => DropChatScreen(rideId: (r['id'] as num).toInt(), peerNameHint: driver['name']?.toString()))),
+              icon: const Icon(Icons.chat_bubble_outline, size: 18),
+              label: const Text('Message your driver'),
+              style: OutlinedButton.styleFrom(foregroundColor: primaryColor, side: BorderSide(color: primaryColor), minimumSize: const Size.fromHeight(44)),
+            ),
+          ),
+        ),
       if (driver.isNotEmpty)
         Padding(
           padding: const EdgeInsets.only(top: 10),

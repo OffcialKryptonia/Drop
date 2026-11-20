@@ -9,6 +9,7 @@ import { driverOnlineBlock, requireApprovedDriver } from "../lib/roles";
 import { getSetting } from "../lib/driver-application";
 import { voidExtrasForRide } from "../lib/extras";
 import { extraTypes, extrasSettings } from "../lib/extras";
+import { chatUnread } from "../lib/chat";
 import { driverPickupFlags, issuePickupCode, pickupSettings, startAllowedSql, verifyPickup } from "../lib/pickup";
 import { completeRide } from "../lib/ride-settlement";
 import { pushLater, pushRideEvent } from "../lib/push";
@@ -73,6 +74,7 @@ async function activeOf(c: C) {
 const shapeActive = async (c: C, active: Row) => ({
   ...request(active, await ruleOf(c, active.service_id)),
   ...(await driverPickupFlags(c.get("db"), Number(active.id))),
+  chat_unread: await chatUnread(c.get("db"), Number(active.id), c.get("user").id, c.get("user").id),
 });
 
 const ruleOf = async (c: C, serviceId: unknown) =>

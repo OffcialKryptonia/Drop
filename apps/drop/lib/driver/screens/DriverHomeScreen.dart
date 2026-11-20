@@ -6,6 +6,7 @@ import 'package:drop/drop/design/drop_design.dart';
 import 'package:drop/drop/widgets/drop_eta.dart';
 import 'package:drop/drop/widgets/drop_extras.dart';
 import 'package:drop/drop/widgets/drop_pickup.dart';
+import 'package:drop/drop/screens/drop_chat_screen.dart';
 import 'package:drop/drop/widgets/drop_money.dart';
 import 'package:drop/drop/widgets/drop_ride_ui.dart';
 import 'package:drop/driver/screens/DriverNavigationScreen.dart';
@@ -753,6 +754,18 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
           const SizedBox(width: 12),
           Expanded(child: DropActionButton(label: 'SOS', icon: Icons.sos, danger: true, onPressed: () => showDropSos(context, rideId: (a['id'] as num?)?.toInt()))),
         ]),
+        const SizedBox(height: 10),
+        Badge(
+          isLabelVisible: ((a['chat_unread'] as num?) ?? 0) > 0,
+          label: Text('${a['chat_unread']}'),
+          child: DropActionButton(
+            label: 'Message passenger',
+            icon: Icons.chat_bubble_outline,
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => DropChatScreen(rideId: (a['id'] as num).toInt(), peerNameHint: (a['rider'] is Map ? (a['rider'] as Map)['first_name'] : null)?.toString()),
+            )),
+          ),
+        ),
         if (status == 'accepted' && a['extras_enabled'] != false) ...[
           const SizedBox(height: 10),
           DropActionButton(

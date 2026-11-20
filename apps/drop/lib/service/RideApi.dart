@@ -56,6 +56,35 @@ class RideApi {
 
   static Map<String, dynamic> _point(double lat, double lng, String address) => {'lat': lat, 'lng': lng, 'address': address};
 
+  // ---- Chat (passenger and driver share these; the server checks the person is part of the ride) ----
+
+  static Future<Map<String, dynamic>> chat(int rideId, {int? after, int? before, int limit = 30}) {
+    final q = [if (after != null) 'after=$after', if (before != null) 'before=$before', 'limit=$limit'].join('&');
+    return _get('ride/$rideId/chat?$q');
+  }
+
+  static Future<Map<String, dynamic>> chatRead(int rideId) => _post('ride/$rideId/chat/read');
+
+  static Future<Map<String, dynamic>> sendChat(int rideId, {required String clientId, required String body}) =>
+      _post('ride/$rideId/chat/messages', {'client_id': clientId, 'body': body});
+
+  static Future<Map<String, dynamic>> sendVoice(int rideId, {required String clientId, required String path, required int seconds, required List<int> waveform}) =>
+      _send(() async {
+        final req = http.MultipartRequest('POST', _uri('ride/$rideId/chat/voice'))
+          ..headers.addAll({...await _headers()}..remove('Content-Type'))
+          ..fields['client_id'] = clientId
+          ..fields['seconds'] = '$seconds'
+          ..fields['waveform'] = waveform.join(',')
+          ..files.add(await http.MultipartFile.fromPath('file', path, filename: 'voice.m4a'));
+        return http.Response.fromStream(await req.send());
+      });
+
+  /// A short-lived link to play one voice message.
+  static Future<String> chatAudioUrl(int rideId, int messageId) async {
+    final r = await _get('ride/$rideId/chat/messages/$messageId/audio-url');
+    return (r['data'] as Map)['url'].toString();
+  }
+
   // ---- Passenger ----
 
   /// Ride types with fares, nearby drivers and pickup times for a trip. Nothing is saved.

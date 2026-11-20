@@ -1,3 +1,4 @@
+import { chatUnread } from "../lib/chat";
 import { riderPickupView } from "../lib/pickup";
 import { voidExtrasForRide } from "../lib/extras";
 import { etaSettings, rideEta } from "../lib/eta";
@@ -205,7 +206,8 @@ rideRoutes.get("/ride/current", ...mw, async (c) => {
   const data = row ? ride(row) : null;
   if (data && !(await etaSettings(c.get("db"))).rider) data.eta = null;
   const pickup = data ? await riderPickupView(c.get("db"), c.env.SETTINGS_ENCRYPTION_KEY, data.id, String(data.status)) : null;
-  return c.json({ status: true, data: data ? { ...data, pickup_code: pickup } : null });
+  const unread = data ? await chatUnread(c.get("db"), data.id, data.driver ? Number(data.driver.id) : null, c.get("user").id) : 0;
+  return c.json({ status: true, data: data ? { ...data, pickup_code: pickup, chat_unread: unread } : null });
 });
 
 /** Cancel the open request. After a driver has accepted, a late cancellation can cost the ride type's cancellation fee. */
