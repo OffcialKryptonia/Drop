@@ -142,7 +142,7 @@ oldMin = (await db.query("select value from app.settings where key = 'driver_min
   ok("driver gets a signed link for the voice note", link.status === 200 && /sig=/.test(link.json.data?.url ?? ""), JSON.stringify(link.json));
   const audio = await fetch(link.json.data.url);
   ok("signed link serves the stored audio", audio.status === 200 && (await audio.arrayBuffer()).byteLength === m4a.length);
-  ok("a tampered link is refused", (await fetch(link.json.data.url.replace(/sig=./, "sig=0"))).status === 403);
+  ok("a tampered link is refused", (await fetch(link.json.data.url.replace(/sig=(.)/, (_, ch) => "sig=" + (ch === "0" ? "1" : "0")))).status === 403);
   ok("another driver cannot get a link", (await call("GET", `/ride/${r.id}/chat/messages/${vm.json.data.id}/audio-url`, d2.T)).status === 404);
   const hist = await call("GET", `/ride/${r.id}/chat`, P.api_token);
   ok("history keeps text and voice in order", hist.json.data?.messages?.length >= 4 && hist.json.data.messages.some((m) => m.kind === "voice"));
