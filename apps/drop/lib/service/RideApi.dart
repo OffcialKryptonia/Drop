@@ -54,6 +54,54 @@ class RideApi {
   static Future<Map<String, dynamic>> _post(String path, [Map<String, dynamic>? body]) async =>
       _send(() async => http.post(_uri(path), headers: await _headers(), body: jsonEncode(body ?? {})));
 
+  static Future<Map<String, dynamic>> _put(String path, [Map<String, dynamic>? body]) async =>
+      _send(() async => http.put(_uri(path), headers: await _headers(), body: jsonEncode(body ?? {})));
+
+  // ---- Optional fare bidding. The server judges every amount, expiry and who may act; the app only shows and asks. ----
+
+  /// Passenger: propose a fare for the same trip the estimate priced. [clientKey] makes a double tap harmless.
+  static Future<Map<String, dynamic>> createBid({
+    required double pickupLat,
+    required double pickupLng,
+    required String pickupAddress,
+    required double dropLat,
+    required double dropLng,
+    required String dropAddress,
+    required int serviceId,
+    required String paymentMethod,
+    required num offer,
+    required String clientKey,
+    List<int> optionIds = const [],
+    List<Map<String, dynamic>> stops = const [],
+  }) =>
+      _post('ride/bids', {
+        'pickup': _point(pickupLat, pickupLng, pickupAddress),
+        'dropoff': _point(dropLat, dropLng, dropAddress),
+        'stops': stops,
+        'service_id': serviceId,
+        'payment_method': paymentMethod,
+        'option_ids': optionIds,
+        'offer': offer,
+        'client_key': clientKey,
+      });
+  static Future<Map<String, dynamic>> currentBid() => _get('ride/bids/current');
+  static Future<Map<String, dynamic>> getBid(int id) => _get('ride/bids/$id');
+  static Future<Map<String, dynamic>> cancelBid(int id) => _post('ride/bids/$id/cancel');
+  static Future<Map<String, dynamic>> reviseBid(int id, num offer) => _post('ride/bids/$id/revise', {'offer': offer});
+  static Future<Map<String, dynamic>> acceptCounter(int bidId, int responseId) => _post('ride/bids/$bidId/responses/$responseId/accept');
+  static Future<Map<String, dynamic>> rejectResponse(int bidId, int responseId) => _post('ride/bids/$bidId/responses/$responseId/reject');
+  static Future<Map<String, dynamic>> reviseResponse(int bidId, int responseId, num amount) => _post('ride/bids/$bidId/responses/$responseId/revise', {'amount': amount});
+  static Future<Map<String, dynamic>> selectDriver(int bidId, int responseId) => _post('ride/bids/$bidId/select', {'response_id': responseId});
+
+  /// Driver: the two independent switches, and the bids waiting for an answer.
+  static Future<Map<String, dynamic>> driverPreferences() => _get('driver/preferences');
+  static Future<Map<String, dynamic>> setDriverPreferences({bool? acceptsStandard, bool? acceptsBids}) =>
+      _put('driver/preferences', {if (acceptsStandard != null) 'accepts_standard': acceptsStandard, if (acceptsBids != null) 'accepts_bids': acceptsBids});
+  static Future<Map<String, dynamic>> driverBids() => _get('driver/bids');
+  static Future<Map<String, dynamic>> acceptBid(int id) => _post('driver/bids/$id/accept');
+  static Future<Map<String, dynamic>> counterBid(int id, num amount) => _post('driver/bids/$id/counter', {'amount': amount});
+  static Future<Map<String, dynamic>> declineBid(int id) => _post('driver/bids/$id/decline');
+
   // ---- In-app voice calls (the server decides who may call whom; it only hands out per-person join tokens) ----
 
   static Future<Map<String, dynamic>> callStatus(int rideId) => _get('ride/$rideId/call/status');

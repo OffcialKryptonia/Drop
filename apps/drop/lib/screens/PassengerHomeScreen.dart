@@ -15,7 +15,9 @@ import '../drop/services/drop_money.dart';
 import '../drop/widgets/drop_email_prompt.dart';
 import '../drop/widgets/drop_eta.dart';
 import '../drop/widgets/drop_pickup.dart';
+import '../drop/screens/drop_bid_screen.dart';
 import '../drop/screens/drop_chat_screen.dart';
+import '../drop/widgets/drop_bid_ui.dart' show dropAskFare, dropBidSymbol;
 import '../drop/widgets/drop_call_button.dart';
 import '../drop/screens/drop_route_screen.dart';
 import '../drop/widgets/drop_ride_type_strip.dart';
@@ -199,6 +201,13 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
       final r = _m((await RideApi.current())['data']);
       if (r.isNotEmpty) {
         _setRide(r);
+        return;
+      }
+      // A bid the passenger left open (app closed, phone locked) is picked up again where it was.
+      final b = _m((await RideApi.currentBid())['data']);
+      if (b.isNotEmpty && mounted) {
+        setState(() => phase = _Phase.plan);
+        WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted) _openBid(b); });
         return;
       }
     } on ApiFailure catch (e) {
@@ -513,6 +522,90 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
       if (RideApi.lastCode == 'already_has_ride') _start();
     }
     if (mounted) setState(() => busy = false);
+  }
+
+  // ---------- optional bidding: the passenger names a fare, drivers answer, the passenger chooses ----------
+
+  String? _bidKey;
+
+  Map<String, dynamic> get _bidInfo => _m(_m(_m(quote['bidding'])['per_type'])['$selectedType']);
+
+  /// Only when the server says bidding is on for this trip and ride type. Standard booking is always there either way.
+  bool get _bidAllowed => phase == _Phase.choose && _m(quote['bidding'])['enabled'] == true && _bidInfo['enabled'] == true;
+
+  /// The server prices a bid with the chosen extras included, so the shown range is scaled to match. The server still has the last word.
+  double get _bidScale {
+    final fare = _d(_type['fare']);
+    return fare > 0 ? _total / fare : 1;
+  }
+
+  Future<void> _offerFare() async {
+    if (busy || _type.isEmpty || !_bidAllowed) return;
+    final lo = (_d(_bidInfo['min']) * _bidScale).ceilToDouble();
+    final hi = (_d(_bidInfo['max']) * _bidScale).floorToDouble();
+    final amount = await dropAskFare(
+      context,
+      title: 'Offer your fare',
+      hint: 'Nearby drivers can accept, counter or pass. You choose who takes you.',
+      confirmLabel: 'Send offer',
+      initial: _total.clamp(lo, hi).toDouble(),
+      min: lo,
+      max: hi,
+      symbol: dropBidSymbol(quote['currency']),
+      reference: _total,
+    );
+    if (amount == null || !mounted) return;
+    setState(() => busy = true);
+    _bidKey ??= '${DateTime.now().microsecondsSinceEpoch}-$selectedType';
+    try {
+      final res = await RideApi.createBid(
+        pickupLat: pickup!.latitude,
+        pickupLng: pickup!.longitude,
+        pickupAddress: pickupAddress,
+        dropLat: center.latitude,
+        dropLng: center.longitude,
+        dropAddress: dropAddress,
+        serviceId: selectedType!,
+        paymentMethod: payment,
+        optionIds: extras.toList(),
+        stops: List<Map<String, dynamic>>.from(additionalStops),
+        offer: amount,
+        clientKey: _bidKey!,
+      );
+      _bidKey = null;
+      if (mounted) setState(() => busy = false);
+      await _openBid(_m(res['data']));
+      return;
+    } on ApiFailure catch (e) {
+      _say(e.message);
+      final code = RideApi.lastCode;
+      if (code == 'already_has_ride') _start();
+      if (code == 'bid_in_progress') {
+        try {
+          final b = _m((await RideApi.currentBid())['data']);
+          if (b.isNotEmpty && mounted) { setState(() => busy = false); await _openBid(b); return; }
+        } catch (_) {}
+      }
+    }
+    if (mounted) setState(() => busy = false);
+  }
+
+  Future<void> _openBid(Map<String, dynamic> bid) async {
+    final id = (bid['id'] as num?)?.toInt();
+    if (id == null || !mounted) return;
+    final out = await Navigator.push<DropBidOutcome>(context, MaterialPageRoute(builder: (_) => DropBidScreen(bidId: id, initial: bid)));
+    if (!mounted) return;
+    if (out == DropBidOutcome.confirmed) {
+      try {
+        final r = _m((await RideApi.current())['data']);
+        if (r.isNotEmpty) _setRide(r);
+      } on ApiFailure catch (e) {
+        _say(e.message);
+      }
+    } else if (out == DropBidOutcome.retry && phase == _Phase.choose && _type.isNotEmpty) {
+      _offerFare();
+    }
+    // standard / closed: the passenger is back on the fares sheet and can book normally
   }
 
   // ---------- trip ----------
@@ -1080,6 +1173,20 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
                 : Text(t.isEmpty ? 'Choose a ride' : 'Request ${t['name']} · ${_money(_total, quote['currency'])}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
           ),
         ),
+        if (_bidAllowed) ...[
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              key: const Key('offer_my_fare'),
+              style: OutlinedButton.styleFrom(foregroundColor: primaryColor, side: BorderSide(color: primaryColor), padding: const EdgeInsets.symmetric(vertical: 12)),
+              onPressed: busy ? null : _offerFare,
+              icon: const Icon(Icons.price_change_outlined),
+              label: const Text('Offer my fare', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            ),
+          ),
+          Padding(padding: const EdgeInsets.only(top: 4), child: Center(child: Text('Name your own price. Drivers can accept or counter.', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)))),
+        ],
       ]),
     ));
   }
