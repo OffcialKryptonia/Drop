@@ -28,6 +28,7 @@ try {
     `insert into app.services (name, region_id, capacity, base_fare, minimum_fare, minimum_distance, per_distance, per_minute_drive, cancellation_fee, commission_type, admin_commission, status, payment_methods, booking_modes, sort_order)
      values ($1,$2,4,500,800,2,100,10,300,'percentage',10,true,array['cash','wallet'],array['now'],0) returning id`, ["Car" + s, region])).rows[0].id;
   const trip = { pickup: { lat: 9.0765, lng: 7.3986, address: "Wuse" }, dropoff: { lat: 9.0579, lng: 7.4951, address: "Gwarinpa" }, service_id: Number(svc), payment_method: "cash" };
+  const PLAIN = 1800; // inside the allowed range of the plain (no extra stops) Wuse-Gwarinpa trip
   const stops = [{ lat: 9.0700, lng: 7.4200, address: "First stop" }, { lat: 9.0600, lng: 7.4500, address: "Second stop" }];
   const driver = async (tag, bids) => {
     const D = await reg("driver", tag); ids.push(D.id);
@@ -208,7 +209,7 @@ try {
   ok("ride history shows the agreed fare", (await call("GET", "/ride/history", P.api_token)).json.data[0].fare === agreed && (await call("GET", "/driver/rides/history", winner.T)).json.data[0].fare === agreed);
 
   // --- cancelling a bid ---
-  r = await call("POST", "/ride/bids", P.api_token, { ...trip, offer: mid });
+  r = await call("POST", "/ride/bids", P.api_token, { ...trip, offer: PLAIN });
   const b2 = r.json.data;
   ok("a new bid opens after the last one finished", r.status === 201, JSON.stringify(r.json));
   await call("POST", `/driver/bids/${b2.id}/accept`, d1.T);
@@ -219,7 +220,7 @@ try {
   ok("a cancelled bid disappears from the driver's list", (await call("GET", "/driver/bids", d1.T)).json.bids.length === 0);
 
   // --- expiry ---
-  r = await call("POST", "/ride/bids", P.api_token, { ...trip, offer: mid });
+  r = await call("POST", "/ride/bids", P.api_token, { ...trip, offer: PLAIN });
   const b3 = r.json.data;
   await call("POST", `/driver/bids/${b3.id}/accept`, d1.T);
   const th = (await db.query("select id from app.ride_bid_responses where bid_id = $1", [b3.id])).rows[0].id;
@@ -233,8 +234,8 @@ try {
   await call("POST", "/ride/cancel", P.api_token, {});
 
   // --- one driver, two bids, two simultaneous selections ---
-  const q1 = (await call("POST", "/ride/bids", P.api_token, { ...trip, offer: mid })).json.data;
-  const q2 = (await call("POST", "/ride/bids", P2.api_token, { ...trip, offer: mid })).json.data;
+  const q1 = (await call("POST", "/ride/bids", P.api_token, { ...trip, offer: PLAIN })).json.data;
+  const q2 = (await call("POST", "/ride/bids", P2.api_token, { ...trip, offer: PLAIN })).json.data;
   ok("two passengers bid at once", !!q1?.id && !!q2?.id);
   await call("POST", `/driver/bids/${q1.id}/accept`, d1.T); await call("POST", `/driver/bids/${q2.id}/accept`, d1.T);
   const rs1 = (await db.query("select id from app.ride_bid_responses where bid_id = $1", [q1.id])).rows[0].id;
@@ -250,7 +251,7 @@ try {
   await db.query("update app.ride_requests set status = 'cancelled' where rider_id = any($1) and status in ('searching','accepted','arrived','in_progress')", [[P.id, P2.id]]);
 
   // --- turning bids OFF never breaks an agreement already made ---
-  const q3 = (await call("POST", "/ride/bids", P.api_token, { ...trip, offer: mid })).json.data;
+  const q3 = (await call("POST", "/ride/bids", P.api_token, { ...trip, offer: PLAIN })).json.data;
   await call("POST", `/driver/bids/${q3.id}/accept`, d2.T);
   await call("PUT", "/driver/preferences", d2.T, { accepts_bids: false });
   const th3 = (await call("GET", `/ride/bids/${q3.id}`, P.api_token)).json.data.responses[0];
@@ -262,11 +263,11 @@ try {
 
   // --- anti-spam and admin ---
   await setBid({ max_bids_per_hour: 1 });
-  const lim = await call("POST", "/ride/bids", P2.api_token, { ...trip, offer: mid });
+  const lim = await call("POST", "/ride/bids", P2.api_token, { ...trip, offer: PLAIN });
   ok("bids are rate limited per passenger", lim.status === 429 && lim.json.code === "bid_rate_limited", JSON.stringify(lim.json));
   await setBid({});
   await setBid({ overrides: [{ service_id: Number(svc), enabled: false }] });
-  r = await call("POST", "/ride/bids", P2.api_token, { ...trip, offer: mid });
+  r = await call("POST", "/ride/bids", P2.api_token, { ...trip, offer: PLAIN });
   ok("an admin can switch bidding off for one ride type", r.status === 422 && r.json.code === "bidding_unavailable");
   await setBid({});
   const an = await call("GET", "/admin/bids?days=1", A);

@@ -108,7 +108,7 @@ class FakeBackend implements PassengerBidBackend {
 }
 
 /// Opens the bid screen on top of a plain page so its outcome can be read.
-Future<Future<DropBidOutcome?> Function()> launch(WidgetTester tester, FakeBackend be, {Duration poll = const Duration(milliseconds: 200)}) async {
+Future<Future<DropBidOutcome?> Function()> launch(WidgetTester tester, FakeBackend be, {Duration poll = const Duration(seconds: 30)}) async {
   DropBidOutcome? result;
   var done = false;
   await tester.pumpWidget(MaterialApp(
@@ -301,9 +301,10 @@ void main() {
   group('passenger bid screen', () {
     testWidgets('waits for drivers, then lists them as they answer', (t) async {
       final be = FakeBackend(bidMap(declined: 2));
-      await launch(t, be);
+      await launch(t, be, poll: const Duration(milliseconds: 200));
       await t.tap(find.text('open'));
-      await t.pump(const Duration(milliseconds: 50));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 600));
       expect(find.byKey(const Key('bid_offer')), findsOneWidget);
       expect(find.text('₦4,500'), findsOneWidget);
       expect(find.textContaining('Jabi Lake'), findsWidgets);
@@ -322,7 +323,8 @@ void main() {
       final be = FakeBackend(bidMap(responses: [response(id: 11)]));
       final outcome = await launch(t, be);
       await t.tap(find.text('open'));
-      await t.pump(const Duration(milliseconds: 50));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 600));
       await t.tap(find.textContaining('Choose Musa'));
       await t.pumpAndSettle();
       expect(be.calls, contains('select 11'));
@@ -333,7 +335,8 @@ void main() {
       final be = FakeBackend(bidMap(responses: [response(id: 11)]))..selectFailure = ApiFailure('That driver is no longer available. Please choose another driver.');
       await launch(t, be);
       await t.tap(find.text('open'));
-      await t.pump(const Duration(milliseconds: 50));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 600));
       await t.tap(find.textContaining('Choose Musa'));
       await t.pump(const Duration(milliseconds: 100));
       expect(find.byKey(const Key('bid_note')), findsOneWidget);
@@ -346,7 +349,8 @@ void main() {
       final be = FakeBackend(bidMap(status: 'expired'));
       final outcome = await launch(t, be);
       await t.tap(find.text('open'));
-      await t.pump(const Duration(milliseconds: 50));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 600));
       expect(find.byKey(const Key('bid_ended')), findsOneWidget);
       expect(find.text('No driver answered in time'), findsOneWidget);
       await t.tap(find.text('Book a standard ride'));
@@ -356,9 +360,10 @@ void main() {
 
     testWidgets('losing the connection shows a calm banner, and the bid is kept', (t) async {
       final be = FakeBackend(bidMap());
-      await launch(t, be);
+      await launch(t, be, poll: const Duration(milliseconds: 200));
       await t.tap(find.text('open'));
-      await t.pump(const Duration(milliseconds: 50));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 600));
       be.fail = true;
       await t.pump(const Duration(milliseconds: 500));
       expect(find.textContaining('Connection lost'), findsOneWidget);
@@ -372,7 +377,8 @@ void main() {
       final be = FakeBackend(bidMap());
       final outcome = await launch(t, be);
       await t.tap(find.text('open'));
-      await t.pump(const Duration(milliseconds: 50));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 600));
       await t.tap(find.text('Cancel bid'));
       await t.pumpAndSettle();
       expect(find.text('Cancel this bid?'), findsOneWidget);
