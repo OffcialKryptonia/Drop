@@ -176,22 +176,22 @@ try {
   ok("concurrent selections: exactly one succeeds", won.length === 1 && race.filter((x) => x.status === 409).length === 2, JSON.stringify(race.map((x) => [x.status, x.json.code])));
   const ride = (await db.query("select * from app.ride_requests where bid_id = $1", [bid.id])).rows;
   ok("exactly one ride exists for the bid", ride.length === 1 && ride[0].status === "accepted");
-  const winner = ride[0].driver_id === d1.id ? d1 : d2, loser = winner === d1 ? d2 : d1;
+  const winner = Number(ride[0].driver_id) === d1.id ? d1 : d2, loser = winner === d1 ? d2 : d1;
   const agreed = Number(ride[0].fare);
   ok("the ride fare is the agreed fare", agreed === (winner === d1 ? mid : c3), `${agreed}`);
   ok("the fare is marked negotiated", ride[0].fare_breakdown.negotiated === true && ride[0].fare_breakdown.estimate === fare && ride[0].fare_breakdown.total === agreed);
   const rows = (await db.query("select driver_id, status from app.ride_bid_responses where bid_id = $1", [bid.id])).rows;
-  ok("the winning thread is selected and the other is closed", rows.find((x) => x.driver_id === winner.id).status === "selected" && rows.find((x) => x.driver_id === loser.id).status === "lost");
-  ok("the bid is confirmed with the agreed fare", (await db.query("select status, agreed_fare, selected_driver_id, ride_request_id from app.ride_bids where id = $1", [bid.id])).rows.every((x) => x.status === "confirmed" && Number(x.agreed_fare) === agreed && x.selected_driver_id === winner.id && x.ride_request_id === ride[0].id));
+  ok("the winning thread is selected and the other is closed", rows.find((x) => Number(x.driver_id) === winner.id).status === "selected" && rows.find((x) => Number(x.driver_id) === loser.id).status === "lost");
+  ok("the bid is confirmed with the agreed fare", (await db.query("select status, agreed_fare, selected_driver_id, ride_request_id from app.ride_bids where id = $1", [bid.id])).rows.every((x) => x.status === "confirmed" && Number(x.agreed_fare) === agreed && Number(x.selected_driver_id) === winner.id && Number(x.ride_request_id) === Number(ride[0].id)));
   ok("the winner is busy, the loser is still free", (await db.query("select is_available from app.users where id = $1", [winner.id])).rows[0].is_available === false && (await db.query("select is_available from app.users where id = $1", [loser.id])).rows[0].is_available === true);
   const stopsRows = (await db.query("select sequence, address from app.ride_request_stops where ride_request_id = $1 order by sequence", [ride[0].id])).rows;
   ok("the multi-stop route came across in order", stopsRows.length === 2 && stopsRows[0].address === "First stop" && stopsRows[1].address === "Second stop");
   ok("a pickup code was issued", !!(await call("GET", "/ride/current", P.api_token)).json.data?.pickup_code?.code);
   ok("stale answers after confirmation are refused", (await call("POST", `/driver/bids/${bid.id}/accept`, loser.T)).status === 409 && (await call("POST", `/ride/bids/${bid.id}/revise`, P.api_token, { offer: mid })).status === 409 && (await call("POST", `/ride/bids/${bid.id}/cancel`, P.api_token, {})).status === 409);
-  ok("the passenger now has an ordinary ride", (await call("GET", "/ride/current", P.api_token)).json.data?.id === ride[0].id && (await call("GET", "/ride/current", P.api_token)).json.data?.fare === agreed);
+  ok("the passenger now has an ordinary ride", (await call("GET", "/ride/current", P.api_token)).json.data?.id === Number(ride[0].id) && (await call("GET", "/ride/current", P.api_token)).json.data?.fare === agreed);
 
   // --- the normal ride lifecycle, unchanged ---
-  const rid = ride[0].id;
+  const rid = Number(ride[0].id);
   ok("start is blocked until the pickup code is verified", (await call("POST", `/driver/rides/${rid}/arrived`, winner.T)).status === 200 && (await call("POST", `/driver/rides/${rid}/start`, winner.T)).status === 409);
   await verifyPickup(rid, winner, P);
   ok("the trip starts after the code", (await call("POST", `/driver/rides/${rid}/start`, winner.T)).status === 200);
@@ -243,7 +243,7 @@ try {
   ok("a driver can only be assigned one ride", two.filter((x) => x.status === 200).length === 1 && two.filter((x) => x.status === 409).length === 1, JSON.stringify(two.map((x) => [x.status, x.json.code])));
   ok("only one open ride exists for that driver", (await db.query("select count(*)::int as n from app.ride_requests where driver_id = $1 and status in ('accepted','arrived','in_progress')", [d1.id])).rows[0].n === 1);
   // a driver who cancels a bid ride must not push the negotiated fare back into the open pool
-  const live = (await db.query("select id from app.ride_requests where driver_id = $1 and status = 'accepted'", [d1.id])).rows[0].id;
+  const live = Number((await db.query("select id from app.ride_requests where driver_id = $1 and status = 'accepted'", [d1.id])).rows[0].id);
   ok("driver cancels the agreed ride", (await call("POST", `/driver/rides/${live}/cancel`, d1.T)).status === 200);
   ok("a cancelled bid ride is not re-opened to other drivers", (await db.query("select status, cancelled_by from app.ride_requests where id = $1", [live])).rows[0].status === "cancelled" && (await call("GET", "/driver/requests", d2.T)).json.requests.length === 0);
   await db.query("update app.ride_bids set status = 'cancelled', closed_at = now() where status = 'open' and rider_id = any($1)", [[P.id, P2.id]]);
