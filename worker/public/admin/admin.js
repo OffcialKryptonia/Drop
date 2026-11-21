@@ -108,6 +108,7 @@
     { id: "payouts", label: "Driver payouts", group: "Financial", perm: "payout list", render: pagePayouts },
     { id: "chat", label: "Ride chat", group: "Operations", perm: "ride_chat list", render: pageChat },
     { id: "calls", label: "Voice calls", group: "Operations", perm: "ride_call list", render: pageCalls },
+    { id: "bidding", label: "Fare bidding", group: "Operations", perm: "ride_bid list", render: pageBidding },
     { id: "pickup", label: "Pickup codes", group: "Operations", perm: "pickup_code list", render: pagePickup },
     { id: "extras", label: "Extra charges", group: "Operations", perm: "ride_extra list", render: pageExtras },
     { id: "sos", label: "SOS alerts", group: "Safety", perm: "sos list", render: pageSos },
@@ -1200,6 +1201,115 @@
         hist.appendChild(h("div", { class: "row", style: "padding:10px 0;border-top:1px solid var(--line,#eee)" },
           h("div", { class: "t", text: (x.caller || "") + " \u2192 " + (x.callee || "") + " \u00B7 " + x.status + dur }),
           h("div", { class: "s", text: "Trip #" + x.ride_request_id + " \u00B7 " + x.provider + " \u00B7 " + new Date(x.created_at).toLocaleString() + (x.end_reason ? " \u00B7 " + x.end_reason : "") })));
+      });
+    });
+  }
+
+  function pageBidding(root) {
+    loading(root);
+    root.textContent = "";
+    root.appendChild(head("Fare bidding", "Optional. Passengers can offer their own fare and drivers can accept, counter or pass. Standard booking is never affected. The server checks every offer against the limits below."));
+    var card = h("div", { class: "card" }, h("div", { class: "t", text: "Settings" }));
+    root.appendChild(card);
+    api("GET", "/admin/bid-settings").then(function (r) {
+      var body = r.body || {};
+      var s = body.data || {};
+      var regions = body.regions || [], services = body.services || [];
+      var on = select([["0", "Off"], ["1", "On"]], s.enabled ? "1" : "0");
+      var mn = num(String(s.min_percent || 70), "70"), mxp = num(String(s.max_percent || 150), "150");
+      var amin = num(String(s.absolute_min || 0), "0"), amax = num(String(s.absolute_max || 0), "0");
+      var rounds = num(String(s.max_rounds || 3), "3"), bexp = num(String(s.bid_expiry_seconds || 180), "180"), oexp = num(String(s.offer_expiry_seconds || 90), "90");
+      var act = num(String(s.max_active_bids || 1), "1"), perh = num(String(s.max_bids_per_hour || 10), "10"), perd = num(String(s.max_cancelled_per_day || 6), "6");
+      var out = h("p", { class: "msg" });
+      card.appendChild(field("Fare bidding", on, "Off hides \"Offer my fare\" for passengers and stops new bids. Bids already agreed continue normally."));
+      card.appendChild(h("div", { class: "grid2" }, field("Lowest offer (% of estimate)", mn, "10 to 100."), field("Highest offer (% of estimate)", mxp, "100 to 500.")));
+      card.appendChild(h("div", { class: "grid2" }, field("Absolute minimum fare", amin, "0 means no floor."), field("Absolute maximum fare", amax, "0 means no ceiling.")));
+      card.appendChild(h("div", { class: "grid2" }, field("Counteroffer rounds", rounds, "1 to 10 per driver."), field("Bid stays open (seconds)", bexp, "30 to 900.")));
+      card.appendChild(h("div", { class: "grid2" }, field("Each answer valid for (seconds)", oexp, "20 to 600."), field("Open bids per passenger", act, "1 to 5.")));
+      card.appendChild(h("div", { class: "grid2" }, field("Bids per passenger per hour", perh, "1 to 100."), field("Cancelled bids per day", perd, "1 to 100.")));
+
+      var overrides = (s.overrides || []).map(function (o) { return Object.assign({}, o); });
+      var list = h("div", {});
+      var opt = function (v) { return v === null || v === undefined ? "" : String(v); };
+      var optNum = function (el) { var t = el.value.trim(); return t === "" ? null : Number(t); };
+      function drawOverrides() {
+        list.textContent = "";
+        if (!overrides.length) list.appendChild(h("div", { class: "empty", text: "No overrides. The settings above apply everywhere." }));
+        overrides.forEach(function (o, i) {
+          var reg = select([["", "Any region"]].concat(regions.map(function (x) { return [String(x.id), x.name]; })), o.region_id == null ? "" : String(o.region_id));
+          var svc = select([["", "Any ride type"]].concat(services.map(function (x) { return [String(x.id), x.name]; })), o.service_id == null ? "" : String(o.service_id));
+          var en = select([["", "Same as above"], ["1", "Allow bidding"], ["0", "Block bidding"]], o.enabled === true ? "1" : o.enabled === false ? "0" : "");
+          var omn = text(opt(o.min_percent), "Lowest %"), omx = text(opt(o.max_percent), "Highest %"), oam = text(opt(o.absolute_min), "Min fare"), oax = text(opt(o.absolute_max), "Max fare");
+          var rm = h("button", { text: "Remove", class: "small secondary", style: "margin-top:8px" });
+          function sync() {
+            o.region_id = reg.value === "" ? null : Number(reg.value);
+            o.service_id = svc.value === "" ? null : Number(svc.value);
+            o.enabled = en.value === "" ? null : en.value === "1";
+            o.min_percent = optNum(omn); o.max_percent = optNum(omx); o.absolute_min = optNum(oam); o.absolute_max = optNum(oax);
+          }
+          [reg, svc, en, omn, omx, oam, oax].forEach(function (e) { e.addEventListener("change", sync); e.addEventListener("input", sync); });
+          rm.addEventListener("click", function () { overrides.splice(i, 1); drawOverrides(); });
+          if (!can("ride_bid edit")) { [reg, svc, en, omn, omx, oam, oax, rm].forEach(function (e) { e.disabled = true; }); }
+          list.appendChild(h("div", { style: "padding:12px 0;border-top:1px solid var(--line,#eee)" },
+            h("div", { class: "grid2" }, field("Region", reg), field("Ride type", svc)),
+            field("Bidding here", en),
+            h("div", { class: "grid2" }, field("Lowest offer %", omn), field("Highest offer %", omx)),
+            h("div", { class: "grid2" }, field("Min fare", oam), field("Max fare", oax)),
+            rm));
+        });
+      }
+      card.appendChild(h("div", { class: "t", style: "margin-top:14px", text: "Overrides" }));
+      card.appendChild(h("div", { class: "hint", text: "Use these for a region or ride type that needs different limits. The most specific match wins. An override cannot switch bidding on while the main switch is off. Leave a box empty to use the main value." }));
+      card.appendChild(list);
+      drawOverrides();
+      if (can("ride_bid edit")) {
+        var add = h("button", { text: "Add override", class: "small secondary", style: "margin-top:8px" });
+        add.addEventListener("click", function () { overrides.push({ region_id: null, service_id: null, enabled: null, min_percent: null, max_percent: null, absolute_min: null, absolute_max: null }); drawOverrides(); });
+        card.appendChild(add);
+        var save = h("button", { text: "Save", class: "small", style: "margin-top:14px;display:block" });
+        save.addEventListener("click", function () {
+          save.disabled = true;
+          api("PUT", "/admin/bid-settings", {
+            enabled: on.value === "1", min_percent: nn(mn), max_percent: nn(mxp), absolute_min: nn(amin), absolute_max: nn(amax),
+            max_rounds: nn(rounds), bid_expiry_seconds: nn(bexp), offer_expiry_seconds: nn(oexp),
+            max_active_bids: nn(act), max_bids_per_hour: nn(perh), max_cancelled_per_day: nn(perd), overrides: overrides
+          }).then(function (x) { save.disabled = false; if (x.ok) { toast("Saved"); pageBidding(root); } else msg(out, errText(x)); });
+        });
+        card.appendChild(save);
+      } else { [on, mn, mxp, amin, amax, rounds, bexp, oexp, act, perh, perd].forEach(function (e) { e.disabled = true; }); }
+      card.appendChild(out);
+    });
+
+    var stats = h("div", { class: "card" }, h("div", { class: "t", text: "Last 30 days" }));
+    root.appendChild(stats);
+    var hist = h("div", { class: "card" }, h("div", { class: "t", text: "Recent bids" }));
+    root.appendChild(hist);
+    api("GET", "/admin/bids?days=30").then(function (r) {
+      var d = (r.body || {});
+      var s = d.summary || {}, cmp = d.comparison || {};
+      var money = function (v) { return v == null ? "–" : Number(v).toLocaleString(); };
+      var secs = function (v) { return v == null ? "–" : Math.floor(v / 60) + "m " + (v % 60) + "s"; };
+      if (!s.total) stats.appendChild(h("div", { class: "empty", text: "No bids yet." }));
+      else {
+        var line = function (a, b) { stats.appendChild(h("div", { class: "row", style: "padding:6px 0" }, h("div", { class: "t", text: a }), h("div", { class: "s", text: b }))); };
+        line("Bids started", String(s.total));
+        line("Got at least one driver answer", s.with_responses + " (" + s.response_rate + "%)");
+        line("Agreed and booked", s.confirmed + " (" + s.conversion_rate + "%)");
+        line("Expired / cancelled", s.expired + " / " + s.cancelled);
+        line("Average agreed fare", money(s.avg_agreed) + "  · estimate " + money(s.avg_estimate) + "  · difference " + money(s.avg_difference));
+        line("Average time to agree", secs(s.avg_seconds_to_agree));
+        line("Driver answers", s.driver_responses + " from " + s.responding_drivers + " drivers, " + s.driver_declines + " declined");
+        var st = cmp.standard || {}, bd = cmp.bidding || {};
+        line("Standard rides", st.booked + " booked, " + st.completed + " completed, avg fare " + money(st.avg_fare) + ", cancelled by driver " + st.driver_cancelled + ", by passenger " + st.rider_cancelled);
+        line("Bidding rides", bd.booked + " booked, " + bd.completed + " completed, avg fare " + money(bd.avg_fare) + ", cancelled by driver " + bd.driver_cancelled + ", by passenger " + bd.rider_cancelled);
+        (d.popular_pickups || []).slice(0, 5).forEach(function (p, i) { line(i === 0 ? "Busiest pickup areas" : "", p.lat + ", " + p.lng + " · " + p.bids + " bids"); });
+      }
+      var list = d.recent || [];
+      if (!list.length) hist.appendChild(h("div", { class: "empty", text: "No bids yet." }));
+      list.forEach(function (x) {
+        hist.appendChild(h("div", { class: "row", style: "padding:10px 0;border-top:1px solid var(--line,#eee)" },
+          h("div", { class: "t", text: "#" + x.id + " · " + x.status + " · offered " + money(x.offer_fare) + " (estimate " + money(x.estimate_fare) + ")" + (x.agreed_fare != null ? " · agreed " + money(x.agreed_fare) : "") }),
+          h("div", { class: "s", text: (x.pickup_address || "") + " → " + (x.dropoff_address || "") + " · " + x.responses + " answers · " + x.rounds_used + " rounds · " + new Date(x.created_at).toLocaleString() })));
       });
     });
   }
