@@ -111,6 +111,9 @@ class FakeBackend implements PassengerBidBackend {
 Future<Future<DropBidOutcome?> Function()> launch(WidgetTester tester, FakeBackend be, {Duration poll = const Duration(seconds: 30)}) async {
   DropBidOutcome? result;
   var done = false;
+  tester.view.physicalSize = const Size(800, 3200);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
   await tester.pumpWidget(MaterialApp(
     home: Builder(
       builder: (context) => Scaffold(
@@ -127,6 +130,7 @@ Future<Future<DropBidOutcome?> Function()> launch(WidgetTester tester, FakeBacke
     ),
   ));
   return () async {
+    await tester.pump();
     expect(done, isTrue);
     return result;
   };
