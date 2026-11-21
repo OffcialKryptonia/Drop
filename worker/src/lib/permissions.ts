@@ -18,6 +18,7 @@ export const MODULES: { key: string; label: string; actions: string[] }[] = [
   { key: "user_account", label: "User accounts (password reset)", actions: ["list", "edit"] },
   { key: "ride_chat", label: "Ride chat", actions: ["list", "edit"] },
   { key: "ride_call", label: "Ride calls", actions: ["list", "edit"] },
+  { key: "ride_bid", label: "Fare bidding", actions: ["list", "edit"] },
   { key: "pickup_code", label: "Pickup codes", actions: ["list", "edit"] },
   { key: "ride_extra", label: "Extra charges", actions: ["list", "edit"] },
   { key: "sos", label: "SOS alerts", actions: ["list", "edit"] },

@@ -2,7 +2,7 @@ name: Backend ride-flow integration
 
 on:
   push:
-    branches: [feat/flutter-multi-stop-routes, feat/ride-chat, feat/ride-calls]
+    branches: [feat/flutter-multi-stop-routes, feat/ride-chat, feat/ride-calls, feat/optional-fare-bidding]
   pull_request:
     branches: [main]
     paths:
@@ -106,6 +106,10 @@ jobs:
       - name: Run full ride-flow integration test
         working-directory: worker
         run: node test/rides-trip-smoke.mjs
+
+      - name: Run optional fare-bidding integration test
+        working-directory: worker
+        run: node test/rides-bidding-smoke.mjs
 
       - name: Worker logs on failure
         if: failure()

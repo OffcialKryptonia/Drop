@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:drop/service/DriverApplicationApi.dart';
 import 'package:drop/drop/design/drop_design.dart';
+import 'package:drop/drop/widgets/drop_bid_ui.dart';
 import 'package:drop/drop/widgets/drop_eta.dart';
 import 'package:drop/drop/widgets/drop_extras.dart';
 import 'package:drop/drop/widgets/drop_pickup.dart';
@@ -55,6 +56,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
   int _secs = 0;
   bool _polling = false;
   List<Map<String, dynamic>> requests = [];
+  // Optional passenger bids: kept apart from standard requests, which behave exactly as before.
+  List<Map<String, dynamic>> bids = [];
+  Map<String, dynamic> prefs = {};
   Map<String, dynamic>? active;
   bool rideBusy = false;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
@@ -125,6 +129,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
   Future<void> _load({bool resume = false}) async {
     try {
       status = await DriverApplicationApi.driverStatus();
+      final pf = status['preferences'];
+      if (pf is Map) prefs = Map<String, dynamic>.from(pf);
       loadError = null;
       if (resume && online) {
         _startSharing();
@@ -404,17 +410,21 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
       final r = await RideApi.driverRequests();
       final a = r['active'];
       final list = r['requests'];
+      final bl = r['bids'];
+      final pf = r['preferences'];
       if (mounted) {
         final newRequests = list is List ? list.map(_asMap).toList() : <Map<String, dynamic>>[];
         setState(() {
           active = a is Map ? Map<String, dynamic>.from(a) : null;
           requests = newRequests;
+          bids = bl is List ? bl.map(_asMap).toList() : <Map<String, dynamic>>[];
+          if (pf is Map) prefs = Map<String, dynamic>.from(pf);
         });
         _toneForRequests(newRequests);
       }
     } on ApiFailure {
       if (RideApi.lastCode == 'not_online') {
-        if (mounted) setState(() => requests = []);
+        if (mounted) setState(() { requests = []; bids = []; });
         _load();
       }
       // any other refusal or a missed poll is fine: the next poll catches up
@@ -433,6 +443,114 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     }
     await _pollRides();
     if (mounted) setState(() => rideBusy = false);
+  }
+
+  // ---- optional passenger bids ----
+
+  Future<void> _bidAction(Future<Map<String, dynamic>> Function() call, {String? thenSay}) async {
+    if (rideBusy) return;
+    setState(() => rideBusy = true);
+    try {
+      final r = await call();
+      final l = r['bids'];
+      if (l is List && mounted) setState(() => bids = l.map(_asMap).toList());
+      if (thenSay != null) _say(thenSay);
+    } on ApiFailure catch (e) {
+      _say(e.message);
+    }
+    await _pollRides();
+    if (mounted) setState(() => rideBusy = false);
+  }
+
+  Future<void> _counterBid(Map<String, dynamic> b) async {
+    final lim = _asMap(b['limits']);
+    final thread = b['thread'] == null ? null : _asMap(b['thread']);
+    final current = _num(thread != null ? thread['amount'] : b['offer_fare']);
+    final min = _num(lim['min']), max = _num(lim['max']);
+    final step = dropFareStep(_num(b['estimate_fare']));
+    final quick = [for (var i = 1; i <= 3; i++) current + step * i].where((x) => x <= max).toList();
+    final v = await dropAskFare(
+      context,
+      title: 'Your counteroffer',
+      hint: 'The passenger offered ${DropMoney.format(current, symbol: dropBidSymbol(b['currency']))}. Ask for a fair fare. They decide.',
+      confirmLabel: 'Send counteroffer',
+      initial: (current + step).clamp(min, max).toDouble(),
+      min: min,
+      max: max,
+      symbol: dropBidSymbol(b['currency']),
+      reference: _num(b['estimate_fare']),
+      quick: quick,
+    );
+    if (v != null) await _bidAction(() => RideApi.counterBid((b['id'] as num).toInt(), v), thenSay: 'Counteroffer sent.');
+  }
+
+  Widget _bidCard(Map<String, dynamic> b, {required int index, required int total}) {
+    final id = (b['id'] as num).toInt();
+    return DropIncomingBidCard(
+      bid: b,
+      index: index,
+      total: total,
+      busy: rideBusy,
+      onAccept: () => _bidAction(() => RideApi.acceptBid(id), thenSay: 'Offer accepted. The passenger will choose a driver.'),
+      onCounter: () => _counterBid(b),
+      onDecline: () => _bidAction(() => RideApi.declineBid(id)),
+    );
+  }
+
+  Future<void> _setPref({bool? standard, bool? bidsOn}) async {
+    try {
+      final r = await RideApi.setDriverPreferences(acceptsStandard: standard, acceptsBids: bidsOn);
+      final d = r['data'];
+      if (d is Map && mounted) setState(() => prefs = Map<String, dynamic>.from(d));
+      if (standard == false && prefs['accepts_bids'] != true) {
+        _say('Standard requests are off, and so are bids. You will not receive ride requests.');
+      } else if (bidsOn == true) {
+        _say('Passenger bids are on. You will see offers near you.');
+      } else if (bidsOn == false) {
+        _say('Passenger bids are off. Agreements you already made still stand.');
+      }
+      _pollRides();
+    } on ApiFailure catch (e) {
+      _say(e.message);
+    }
+  }
+
+  /// Two independent switches. Hidden when bidding is not available and standard requests are on (nothing to choose).
+  Widget _prefsRow() {
+    final std = prefs['accepts_standard'] != false;
+    final bidsOn = prefs['accepts_bids'] == true;
+    final avail = prefs['bidding_available'] == true;
+    if (!avail && std) return const SizedBox.shrink();
+    Widget chip(Key k, String label, bool on, VoidCallback tap) => Semantics(
+          button: true,
+          toggled: on,
+          label: '$label ${on ? 'on' : 'off'}',
+          child: Material(
+            key: k,
+            color: on ? primaryColor : Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            elevation: 2,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(20),
+              onTap: tap,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(on ? Icons.check_circle : Icons.circle_outlined, size: 16, color: on ? Colors.white : Colors.black54),
+                  const SizedBox(width: 6),
+                  Text(label, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: on ? Colors.white : Colors.black87)),
+                ]),
+              ),
+            ),
+          ),
+        );
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(children: [
+        chip(const Key('pref_standard'), 'Standard rides', std, () => _setPref(standard: !std)),
+        if (avail) ...[const SizedBox(width: 8), chip(const Key('pref_bids'), 'Passenger bids', bidsOn, () => _setPref(bidsOn: !bidsOn))],
+      ]),
+    );
   }
 
   Future<void> _accept(Map<String, dynamic> r) async {
@@ -943,6 +1061,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
           ),
         ),
       ]),
+      _prefsRow(),
       if (b != null && !online) Padding(padding: const EdgeInsets.only(top: 10), child: _blockCard(b)),
     ]);
   }
@@ -953,8 +1072,15 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     if (a != null) return _activeTrip(a);
     if (!online) return Padding(padding: const EdgeInsets.fromLTRB(12, 0, 12, 12), child: _offlineCard());
     final open = requests.where((r) => _secondsLeft(r) > 0).toList();
-    if (open.isEmpty) return Padding(padding: const EdgeInsets.fromLTRB(12, 0, 12, 20), child: _lookingPill());
-    return _requestCard(open.first, index: 0, total: open.length);
+    if (open.isNotEmpty) return _requestCard(open.first, index: 0, total: open.length);
+    // No standard request: show a passenger bid, the ones that need an answer from this driver first.
+    final liveBids = bids.where((b) => _num(b['seconds_left']) > 0).toList()
+      ..sort((x, y) {
+        bool needs(Map<String, dynamic> b) => b['thread'] == null || _asMap(b['thread'])['my_turn'] == true;
+        return (needs(y) ? 1 : 0) - (needs(x) ? 1 : 0);
+      });
+    if (liveBids.isNotEmpty) return _bidCard(liveBids.first, index: 0, total: liveBids.length);
+    return Padding(padding: const EdgeInsets.fromLTRB(12, 0, 12, 20), child: _lookingPill());
   }
 
   Widget _offlineCard() {

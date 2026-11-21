@@ -6,6 +6,7 @@ import { requireWebOrBearer } from "../auth/web-or-bearer";
 import { readBody, validationFailed } from "../lib/legacy";
 import { driverEligibility } from "../lib/commission";
 import { driverOnlineBlock, requireApprovedDriver } from "../lib/roles";
+import { driverPreferences } from "./ride-bids";
 
 export const driverOnlineRoutes = new Hono<AppEnv>();
 const mw = [withDb, requireWebOrBearer, requireApprovedDriver] as const;
@@ -26,6 +27,7 @@ driverOnlineRoutes.get("/driver/status", ...mw, async (c) => {
     is_online: row?.is_online === true,
     wallet: { balance: e.balance, minimum: e.minimum, eligible: e.eligible },
     online_block: block,
+    preferences: await driverPreferences(db, me.id),
   });
 });
 

@@ -76,7 +76,7 @@ export async function pushNearbyDrivers(db: Client, env: Bindings, rideId: numbe
     const rows = (await db.query(
       `select du.id, r.fare, r.currency, r.pickup_address
          from app.ride_requests r
-         join app.driver_profiles p on p.service_id = r.service_id
+         join app.driver_profiles p on p.service_id = r.service_id and p.accepts_standard
          join app.users du on du.id = p.user_id
         where r.id = $1 and r.status = 'searching' and du.id <> r.rider_id and du.is_online and du.is_available
           and du.player_id is not null and du.location is not null
