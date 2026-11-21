@@ -29,6 +29,8 @@ function fareLines(r: Row) {
   const b = (r.fare_breakdown ?? {}) as Record<string, unknown>;
   const lines: { label: string; amount: number }[] = [];
   const options = money(b.options_total);
+  // A negotiated trip has one price both sides agreed on; it is shown as such, never split into a made-up base fare.
+  if (b.negotiated) return [{ label: "Agreed fare", amount: money(r.fare) }];
   if (b.minimum_fare_applied) {
     lines.push({ label: "Minimum fare", amount: money(Number(r.fare) - options) });
   } else {

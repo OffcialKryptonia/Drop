@@ -5,6 +5,7 @@ import { voidExtrasForRide } from "../lib/extras";
 import { etaSettings, rideEta } from "../lib/eta";
 import { riderReceipt } from "../lib/receipt";
 import { iconKeyFor } from "./map-icons";
+import { biddingForEstimate } from "./ride-bids";
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
@@ -138,6 +139,8 @@ rideRoutes.post("/ride/estimate", ...mw, async (c) => {
     max_additional_stops: maxStops,
     options: q.options,
     ride_types: (await etaSettings(c.get("db"))).rider ? q.ride_types : q.ride_types.map((t) => ({ ...t, pickup_eta_minutes: null })),
+    // Optional "Bid for a ride": the allowed offer range per ride type. Standard booking above is unchanged.
+    bidding: await biddingForEstimate(c.get("db"), q.region.id, q.ride_types.map((t) => ({ id: t.id, fare: t.fare }))),
   });
 });
 
@@ -149,6 +152,9 @@ rideRoutes.post("/ride/request", ...mw, async (c) => {
   const me = c.get("user");
   await expireStale(c);
   if (await currentOf(c)) return c.json({ status: false, code: "already_has_ride", message: "You already have a ride in progress." }, 409);
+  // One way of booking at a time: a live bid must be finished or cancelled before a standard request.
+  if ((await db.query("select 1 from app.ride_bids where rider_id = $1 and status = 'open' and expires_at > now() limit 1", [me.id])).rowCount)
+    return c.json({ status: false, code: "bid_in_progress", message: "You have a bid open. Cancel it first to book a standard ride." }, 409);
 
   const maxStops = Math.max(0, Math.min(20, await getSetting(db, "ride_max_additional_stops", 3)));
   if (p.data.stops.length > maxStops) return validationFailed(c, { stops: [`You can add up to ${maxStops} additional stop(s) to this trip.`] });

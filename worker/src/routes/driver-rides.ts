@@ -13,6 +13,7 @@ import { chatUnread } from "../lib/chat";
 import { driverPickupFlags, issuePickupCode, pickupSettings, startAllowedSql, verifyPickup } from "../lib/pickup";
 import { completeRide } from "../lib/ride-settlement";
 import { pushLater, pushRideEvent } from "../lib/push";
+import { driverBidList, driverPreferences } from "./ride-bids";
 
 export const driverRideRoutes = new Hono<AppEnv>();
 type C = Context<AppEnv>;
@@ -91,7 +92,7 @@ driverRideRoutes.get("/driver/requests", ...mw, async (c) => {
   if (active) {
     // The "Add extra charge" button only shows while the feature is on and the admin has at least one active charge type.
     const extrasOn = (await extrasSettings(db)).enabled && (await extraTypes(db, true)).length > 0;
-    return c.json({ status: true, active: { ...hideEta(await shapeActive(c, active)), extras_enabled: extrasOn }, requests: [] });
+    return c.json({ status: true, active: { ...hideEta(await shapeActive(c, active)), extras_enabled: extrasOn }, requests: [], bids: [], preferences: await driverPreferences(db, me.id) });
   }
 
   const st = (await db.query("select is_online from app.users where id = $1", [me.id])).rows[0];
@@ -117,7 +118,13 @@ driverRideRoutes.get("/driver/requests", ...mw, async (c) => {
   ).rows;
   const prof = (await db.query("select service_id from app.driver_profiles where user_id = $1", [me.id])).rows[0];
   const rule = await ruleOf(c, prof?.service_id);
-  return c.json({ status: true, active: null, requests: rows.map((r) => hideEta(request(r, rule))) });
+  // Two independent switches: a driver with standard requests OFF sees none; bids come only if passenger bids are ON (or a negotiation is already running).
+  const preferences = await driverPreferences(db, me.id);
+  return c.json({
+    status: true, active: null, preferences,
+    requests: preferences.accepts_standard ? rows.map((r) => hideEta(request(r, rule))) : [],
+    bids: await driverBidList(db, me.id),
+  });
 });
 
 /** First driver to accept wins: one atomic update decides, everyone else gets 'no longer available'. */
@@ -127,8 +134,9 @@ driverRideRoutes.post("/driver/requests/:id/accept", ...mw, async (c) => {
   const id = Number(c.req.param("id"));
   if (!Number.isInteger(id) || id <= 0) return c.json({ status: false, code: "request_gone", message: "This request is no longer available." }, 404);
 
-  const u = (await db.query("select u.is_online, p.service_id from app.users u join app.driver_profiles p on p.user_id = u.id where u.id = $1", [me.id])).rows[0];
+  const u = (await db.query("select u.is_online, p.service_id, p.accepts_standard from app.users u join app.driver_profiles p on p.user_id = u.id where u.id = $1", [me.id])).rows[0];
   if (!u?.is_online) return c.json({ status: false, code: "not_online", message: "Go online to accept rides." }, 409);
+  if (u.accepts_standard === false) return c.json({ status: false, code: "standard_requests_off", message: "Standard ride requests are turned off in your settings." }, 403);
   const block = await driverOnlineBlock(db, me.id, u.service_id);
   if (block) return c.json({ status: false, ...block }, 403);
 
@@ -262,6 +270,22 @@ driverRideRoutes.post("/driver/rides/:id/complete", ...mw, async (c) => {
 driverRideRoutes.post("/driver/rides/:id/cancel", ...mw, async (c) => {
   const db = c.get("db");
   const me = c.get("user").id;
+  // A ride that came from a bid carries a negotiated fare for one specific passenger, so it must never go back to the open pool: it is cancelled.
+  const fromBid = (await db.query("select bid_id from app.ride_requests where id = $1 and driver_id = $2 and status in ('accepted', 'arrived')", [idOf(c), me])).rows[0]?.bid_id != null;
+  if (fromBid) {
+    await db.query("begin");
+    try {
+      const r = await db.query(
+        `update app.ride_requests set status = 'cancelled', cancelled_by = 'driver', cancel_reason = 'Driver cancelled after the fare was agreed', cancelled_at = now()
+          where id = $1 and driver_id = $2 and status in ('accepted', 'arrived') returning id, rider_id`, [idOf(c), me]);
+      if (!r.rowCount) { await db.query("rollback"); return notYours(c); }
+      await db.query("update app.users set is_available = true where id = $1 and is_online", [me]);
+      await voidExtrasForRide(db, idOf(c));
+      await db.query("commit");
+      pushLater(c, pushRideEvent(db, c.env, Number(r.rows[0].rider_id), "driver_cancelled", idOf(c)));
+    } catch (e) { await db.query("rollback").catch(() => {}); throw e; }
+    return c.json({ status: true });
+  }
   await db.query("begin");
   try {
     const r = await db.query(
