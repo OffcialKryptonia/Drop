@@ -384,10 +384,12 @@ void main() {
       await t.pump();
       await t.pump(const Duration(milliseconds: 600));
       await t.tap(find.text('Cancel bid'));
-      await t.pumpAndSettle();
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 600));
       expect(find.text('Cancel this bid?'), findsOneWidget);
       await t.tap(find.widgetWithText(TextButton, 'Cancel bid').last);
-      await t.pumpAndSettle();
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 600));
       expect(be.calls, contains('cancel'));
       expect(await outcome(), DropBidOutcome.closed);
     });
