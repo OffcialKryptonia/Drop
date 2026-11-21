@@ -210,7 +210,7 @@ try {
   // --- cancelling a bid ---
   r = await call("POST", "/ride/bids", P.api_token, { ...trip, offer: mid });
   const b2 = r.json.data;
-  ok("a new bid opens after the last one finished", r.status === 201);
+  ok("a new bid opens after the last one finished", r.status === 201, JSON.stringify(r.json));
   await call("POST", `/driver/bids/${b2.id}/accept`, d1.T);
   r = await call("POST", `/ride/bids/${b2.id}/cancel`, P.api_token, {});
   ok("the passenger cancels the bid", r.status === 200 && r.json.data.status === "cancelled");

@@ -108,10 +108,10 @@ class FakeBackend implements PassengerBidBackend {
 }
 
 /// Opens the bid screen on top of a plain page so its outcome can be read.
-Future<DropBidOutcome?> Function() launch(WidgetTester tester, FakeBackend be, {Duration poll = const Duration(milliseconds: 200)}) {
+Future<Future<DropBidOutcome?> Function()> launch(WidgetTester tester, FakeBackend be, {Duration poll = const Duration(milliseconds: 200)}) async {
   DropBidOutcome? result;
   var done = false;
-  tester.pumpWidget(MaterialApp(
+  await tester.pumpWidget(MaterialApp(
     home: Builder(
       builder: (context) => Scaffold(
         body: Center(
@@ -138,12 +138,13 @@ void main() {
       var v = 4500.0;
       await t.pumpWidget(StatefulBuilder(builder: (c, set) => wrap(DropFareEditor(amount: v, min: 3850, max: 8250, reference: 5500, onChanged: (x) => set(() => v = x)))));
       expect(find.text('₦4,500'), findsOneWidget);
-      expect(find.textContaining('₦3,850 to ₦8,250'), findsOneWidget);
-      expect(find.textContaining('DROP estimate ₦5,500'), findsOneWidget);
+      expect(find.textContaining('₦3,850 to ₦8,250', findRichText: true), findsOneWidget);
+      expect(find.textContaining('DROP estimate ₦5,500', findRichText: true), findsOneWidget);
       await t.tap(find.byIcon(Icons.add));
       await t.pump();
       expect(v, 4600);
       await t.tap(find.byIcon(Icons.remove));
+      await t.pump();
       await t.tap(find.byIcon(Icons.remove));
       await t.pump();
       expect(v, 4400);
@@ -254,7 +255,7 @@ void main() {
       await t.pumpWidget(MaterialApp(home: Scaffold(body: DropIncomingBidCard(bid: bid(), busy: false, onAccept: () => log.add('accept'), onCounter: () => log.add('counter'), onDecline: () => log.add('decline')))));
       expect(find.byKey(const Key('bid_amount')), findsOneWidget);
       expect(find.text('₦4,500'), findsOneWidget);
-      expect(find.text('₦4,050'), findsOneWidget);
+      expect(find.textContaining('₦4,050', findRichText: true), findsOneWidget);
       expect(find.textContaining('Jabi Lake'), findsWidgets);
       expect(find.textContaining('Amina · 12 trips'), findsOneWidget);
       expect(find.textContaining('1.2 km · 3 min to pickup'), findsOneWidget);
@@ -300,7 +301,7 @@ void main() {
   group('passenger bid screen', () {
     testWidgets('waits for drivers, then lists them as they answer', (t) async {
       final be = FakeBackend(bidMap(declined: 2));
-      launch(t, be);
+      await launch(t, be);
       await t.tap(find.text('open'));
       await t.pump(const Duration(milliseconds: 50));
       expect(find.byKey(const Key('bid_offer')), findsOneWidget);
@@ -319,7 +320,7 @@ void main() {
 
     testWidgets('choosing a driver asks the server and finishes as confirmed', (t) async {
       final be = FakeBackend(bidMap(responses: [response(id: 11)]));
-      final outcome = launch(t, be);
+      final outcome = await launch(t, be);
       await t.tap(find.text('open'));
       await t.pump(const Duration(milliseconds: 50));
       await t.tap(find.textContaining('Choose Musa'));
@@ -330,7 +331,7 @@ void main() {
 
     testWidgets('a refused choice is explained and the bid stays open', (t) async {
       final be = FakeBackend(bidMap(responses: [response(id: 11)]))..selectFailure = ApiFailure('That driver is no longer available. Please choose another driver.');
-      launch(t, be);
+      await launch(t, be);
       await t.tap(find.text('open'));
       await t.pump(const Duration(milliseconds: 50));
       await t.tap(find.textContaining('Choose Musa'));
@@ -343,7 +344,7 @@ void main() {
 
     testWidgets('an expired bid offers to try again or book a standard ride', (t) async {
       final be = FakeBackend(bidMap(status: 'expired'));
-      final outcome = launch(t, be);
+      final outcome = await launch(t, be);
       await t.tap(find.text('open'));
       await t.pump(const Duration(milliseconds: 50));
       expect(find.byKey(const Key('bid_ended')), findsOneWidget);
@@ -355,7 +356,7 @@ void main() {
 
     testWidgets('losing the connection shows a calm banner, and the bid is kept', (t) async {
       final be = FakeBackend(bidMap());
-      launch(t, be);
+      await launch(t, be);
       await t.tap(find.text('open'));
       await t.pump(const Duration(milliseconds: 50));
       be.fail = true;
@@ -369,7 +370,7 @@ void main() {
 
     testWidgets('cancelling asks first, then tells the server', (t) async {
       final be = FakeBackend(bidMap());
-      final outcome = launch(t, be);
+      final outcome = await launch(t, be);
       await t.tap(find.text('open'));
       await t.pump(const Duration(milliseconds: 50));
       await t.tap(find.text('Cancel bid'));
