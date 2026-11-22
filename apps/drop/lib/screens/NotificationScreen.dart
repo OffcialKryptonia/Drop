@@ -1,5 +1,4 @@
 import '../manage_imports.dart';
-import '../drop/design/drop_theme.dart';
 
 class NotificationScreen extends StatefulWidget {
   @override

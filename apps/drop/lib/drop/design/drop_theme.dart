@@ -3,7 +3,6 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../../drop/design/drop_theme.dart';
 
 /// The user's appearance choice. [system] follows the phone's light/dark setting.
 enum DropThemePref { system, light, dark }

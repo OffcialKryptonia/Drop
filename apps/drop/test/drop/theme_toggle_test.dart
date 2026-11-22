@@ -28,6 +28,7 @@ void main() {
     expect(find.bySemanticsLabel('Light mode on. Switch to dark mode'), findsOneWidget);
 
     await t.tap(find.byType(DropThemeToggle));
+    await t.pump(); // first frame starts the spring clock
     await t.pump(const Duration(milliseconds: 80));
     expect(DropTheme.pref.value, DropThemePref.dark);
     // Mid-flight: the knob is between day and night.
