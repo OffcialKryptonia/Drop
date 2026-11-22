@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../service/RideApi.dart';
+import '../../service/net/drop_cache.dart';
 import '../design/drop_design.dart';
 import '../widgets/drop_money.dart';
 import '../widgets/drop_ride_ui.dart';
@@ -22,6 +23,7 @@ class _DropTripsScreenState extends State<DropTripsScreen> {
   List<Map<String, dynamic>> _trips = [];
   bool _loading = true;
   String? _error;
+  DateTime? _savedAt; // set while the list on screen is a saved copy, not fresh from the server
 
   @override
   void initState() {
@@ -29,16 +31,30 @@ class _DropTripsScreenState extends State<DropTripsScreen> {
     _load();
   }
 
+  List<Map<String, dynamic>> _parse(dynamic data) => ((data as List?) ?? []).whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+
+  /// Saved trips show at once (also with no internet); the fresh list replaces them when it arrives.
   Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+    final key = await DropCache.scoped(widget.driver ? 'history:driver' : 'history:rider');
+    if (_trips.isEmpty) {
+      final saved = await DropCache.read(key, maxAge: const Duration(days: 30));
+      if (saved != null && mounted) {
+        setState(() {
+          _trips = _parse(saved.data);
+          _savedAt = saved.savedAt;
+          _loading = false;
+        });
+      }
+    }
+    if (mounted && _trips.isEmpty) setState(() => _loading = true);
+    _error = null;
     try {
       final res = widget.driver ? await RideApi.driverHistory() : await RideApi.history();
-      _trips = ((res['data'] as List?) ?? []).whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+      _trips = _parse(res['data']);
+      _savedAt = null;
+      DropCache.put(key, res['data']);
     } catch (e) {
-      _error = 'Could not load your trips. Check your connection and try again.';
+      if (_trips.isEmpty) _error = 'Could not load your trips. Check your connection and try again.';
     }
     if (mounted) setState(() => _loading = false);
   }
@@ -135,9 +151,17 @@ class _DropTripsScreenState extends State<DropTripsScreen> {
         onRefresh: _load,
         child: ListView.separated(
           padding: const EdgeInsets.all(16),
-          itemCount: _trips.length,
+          itemCount: _trips.length + (_savedAt == null ? 0 : 1),
           separatorBuilder: (_, __) => const SizedBox(height: 10),
-          itemBuilder: (_, i) => _row(_trips[i]),
+          itemBuilder: (_, i) {
+            if (_savedAt != null) {
+              if (i == 0) {
+                return Text('Saved ${DropCache.ago(_savedAt!)}. Pull down to refresh when you are online.', key: const Key('saved_note'), style: TextStyle(fontSize: 12.5, color: DropColors.mutedText(context)));
+              }
+              return _row(_trips[i - 1]);
+            }
+            return _row(_trips[i]);
+          },
         ),
       );
     }

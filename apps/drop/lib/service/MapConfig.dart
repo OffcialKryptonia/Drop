@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart' show MapboxOptions;
 
 import '../components/VehicleIcons.dart';
@@ -59,20 +60,45 @@ class MapConfig {
 
   static MapConfig? _cached;
 
+  static const _savedKey = 'map_config_saved';
+
+  static MapConfig _apply(Map body) {
+    final config = fromApiResponse(body);
+    if (config.isMapbox) MapboxOptions.setAccessToken(config.mapboxPublicToken);
+    final icons = body['vehicle_icons'];
+    VehicleIcons.configure(icons is Map ? {for (final e in icons.entries) e.key.toString(): e.value.toString()} : const {});
+    return config;
+  }
+
+  /// The configuration saved from the last successful visit, read from the phone only. No network, so the map
+  /// shell can draw on the first frame, offline included. Null on the very first launch.
+  static Future<MapConfig?> loadSaved() async {
+    if (_cached != null) return _cached;
+    try {
+      final raw = (await SharedPreferences.getInstance()).getString(_savedKey);
+      if (raw == null) return null;
+      final body = jsonDecode(raw);
+      if (body is! Map) return null;
+      return _cached = _apply(body);
+    } catch (_) {
+      return null;
+    }
+  }
+
   static Future<MapConfig> load({bool refresh = false}) async {
     if (!refresh && _cached != null) return _cached!;
     try {
       final r = await http.get(Uri.parse('${mBaseUrl}map-config'), headers: {'Accept': 'application/json'}).timeout(const Duration(seconds: 8));
       final body = jsonDecode(utf8.decode(r.bodyBytes));
       if (r.statusCode == 200 && body is Map) {
-        _cached = fromApiResponse(body);
-        if (_cached!.isMapbox) MapboxOptions.setAccessToken(_cached!.mapboxPublicToken);
-        final icons = body['vehicle_icons'];
-        VehicleIcons.configure(icons is Map ? {for (final e in icons.entries) e.key.toString(): e.value.toString()} : const {});
+        _cached = _apply(body);
+        try {
+          await (await SharedPreferences.getInstance()).setString(_savedKey, jsonEncode(body));
+        } catch (_) {}
         return _cached!;
       }
     } catch (_) {}
-    return const MapConfig();
+    return _cached ?? const MapConfig();
   }
 
   static void clearCache() => _cached = null;

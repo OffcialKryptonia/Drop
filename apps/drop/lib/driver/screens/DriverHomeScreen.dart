@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:drop/service/DriverApplicationApi.dart';
+import 'package:drop/service/net/connectivity_service.dart';
+import 'package:drop/service/net/net_policy.dart';
 import 'package:drop/drop/design/drop_design.dart';
 import 'package:drop/drop/widgets/drop_bid_ui.dart';
 import 'package:drop/drop/widgets/drop_eta.dart';
@@ -310,15 +312,17 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     _sharing = false;
   }
 
-  /// Flips the switch at once and confirms with the server in the background; undoes it with a message if refused.
+  /// The switch only changes once the server has confirmed it. Offline, nothing is sent and nothing changes: the driver
+  /// is never shown as online (or offline) while DROP still thinks otherwise.
   Future<void> _toggle(bool wantOnline) async {
     if (busy) return;
+    if (ConnectivityService.instance.isOffline) {
+      _say(NetGate.offlineMessage);
+      return;
+    }
     final before = Map<String, dynamic>.from(status);
     if (wantOnline && !await _locationAllowed()) return;
-    setState(() {
-      busy = true;
-      status = {...status, 'is_online': wantOnline};
-    });
+    setState(() => busy = true);
     try {
       if (wantOnline) {
         // Last known position is instant; a fresh fix is only waited for briefly.
@@ -326,11 +330,15 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
         pos ??= await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.medium, timeLimit: const Duration(seconds: 8));
         if (mounted) setState(() => myPos = LatLng(pos!.latitude, pos.longitude));
         await DriverApplicationApi.setOnline(true, latitude: pos.latitude, longitude: pos.longitude);
+        if (mounted) setState(() => status = {...status, 'is_online': true}); // confirmed by the server
         _startSharing();
       } else {
-        _stopSharing();
-        if (mounted) setState(() => requests = []);
         await DriverApplicationApi.setOnline(false);
+        _stopSharing();
+        if (mounted) setState(() {
+          requests = [];
+          status = {...status, 'is_online': false}; // confirmed by the server
+        });
       }
       _load(); // refresh wallet and blocks without holding the switch
     } on ApiFailure catch (e) {

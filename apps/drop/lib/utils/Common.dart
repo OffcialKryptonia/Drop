@@ -1,3 +1,4 @@
+import '../service/net/connectivity_service.dart';
 import 'dart:ui' as ui;
 
 import 'package:crypto/crypto.dart';
@@ -113,10 +114,8 @@ const double degrees2Radians = pi / 180.0;
 
 double radians(double degrees) => degrees * degrees2Radians;
 
-Future<bool> isNetworkAvailable() async {
-  var connectivityResult = await Connectivity().checkConnectivity();
-  return connectivityResult != ConnectivityResult.none;
-}
+/// One answer for the whole app: see ConnectivityService.
+Future<bool> isNetworkAvailable() async => !ConnectivityService.instance.isOffline;
 
 String parseHtmlString(String? htmlString) {
   return parse(parse(htmlString).body!.text).documentElement!.text;

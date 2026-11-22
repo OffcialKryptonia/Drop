@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../utils/Constants.dart';
 import 'DriverApplicationApi.dart' show ApiFailure;
+import 'net/net_policy.dart';
 
 /// Passenger and driver ride endpoints of the DROP API. Prices are always computed by the server.
 class RideApi {
@@ -29,7 +30,7 @@ class RideApi {
     } catch (_) {}
     if (r.statusCode >= 200 && r.statusCode < 300) return body;
     final message = body['message']?.toString();
-    final failure = ApiFailure(message == null || message.isEmpty ? 'Something went wrong (${r.statusCode}). Please try again.' : message);
+    final failure = ApiFailure(message == null || message.isEmpty ? 'Something went wrong (${r.statusCode}). Please try again.' : message)..status = r.statusCode;
     _lastCode = body['code']?.toString();
     throw failure;
   }
@@ -38,18 +39,14 @@ class RideApi {
   static String? _lastCode;
   static String? get lastCode => _lastCode;
 
-  static Future<Map<String, dynamic>> _send(Future<http.Response> Function() call) async {
+  static Future<Map<String, dynamic>> _send(Future<http.Response> Function() call, {String? readKey}) {
     _lastCode = null;
-    try {
-      return _handle(await call().timeout(const Duration(seconds: 30)));
-    } on ApiFailure {
-      rethrow;
-    } catch (_) {
-      throw ApiFailure('Could not reach DROP. Check your internet connection and try again.');
-    }
+    if (readKey != null) return NetGate.read('r:$readKey', (t) async => _handle(await call().timeout(t)));
+    return NetGate.write((t) async => _handle(await call().timeout(t)));
   }
 
-  static Future<Map<String, dynamic>> _get(String path) async => _send(() async => http.get(_uri(path), headers: await _headers()));
+  /// A read: shared with identical requests in flight, retried on a weak network, refused at once when offline.
+  static Future<Map<String, dynamic>> _get(String path) async => _send(() async => http.get(_uri(path), headers: await _headers()), readKey: path);
 
   static Future<Map<String, dynamic>> _post(String path, [Map<String, dynamic>? body]) async =>
       _send(() async => http.post(_uri(path), headers: await _headers(), body: jsonEncode(body ?? {})));
