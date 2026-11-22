@@ -34,6 +34,7 @@ import '../service/RideApi.dart';
 import '../service/PushService.dart';
 import '../service/ToneService.dart';
 import '../utils/Colors.dart';
+import '../drop/design/drop_theme.dart';
 
 Map<String, dynamic> _m(dynamic v) => v is Map ? Map<String, dynamic>.from(v) : <String, dynamic>{};
 List<dynamic> _l(dynamic v) => v is List ? v : <dynamic>[];
@@ -444,12 +445,12 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 10),
         child: Row(children: [
-          Icon(Icons.access_time, color: Colors.grey.shade700),
+          Icon(Icons.access_time, color: DropTheme.muted),
           const SizedBox(width: 16),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-              if (sub.isNotEmpty) Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+              if (sub.isNotEmpty) Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: DropTheme.muted, fontSize: 13)),
             ]),
           ),
         ]),
@@ -962,7 +963,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
       body: Stack(children: [
         Positioned.fill(
           child: !mapLoaded
-              ? const ColoredBox(color: Color(0xFFEFEFEF))
+              ? ColoredBox(color: DropTheme.cardAlt)
               : AnimatedBuilder(animation: _live, builder: (_, __) => DropMap(
             provider: mapConfig.provider,
             tileUrl: mapConfig.tileUrl,
@@ -995,7 +996,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
                 Padding(
                   padding: const EdgeInsets.only(top: 10),
                   child: Material(
-                    color: Colors.white,
+                    color: DropTheme.card,
                     borderRadius: BorderRadius.circular(14),
                     elevation: 3,
                     child: InkWell(
@@ -1007,7 +1008,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
                         child: Row(mainAxisSize: MainAxisSize.min, children: [
                           Flexible(
                             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                              Text('Pickup point', style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+                              Text('Pickup point', style: TextStyle(fontSize: 12, color: DropTheme.muted)),
                               Text(locating ? 'Finding your location…' : pickupAddress, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
                             ]),
                           ),
@@ -1027,10 +1028,10 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
   }
 
   Widget _roundButton(IconData icon, VoidCallback onTap) => Material(
-        color: Colors.white,
+        color: DropTheme.card,
         shape: const CircleBorder(),
         elevation: 3,
-        child: InkWell(customBorder: const CircleBorder(), onTap: onTap, child: Padding(padding: const EdgeInsets.all(10), child: Icon(icon, color: Colors.black87))),
+        child: InkWell(customBorder: const CircleBorder(), onTap: onTap, child: Padding(padding: EdgeInsets.all(10), child: Icon(icon, color: DropTheme.text))),
       );
 
   Widget _searchBar() => Material(
@@ -1054,7 +1055,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
         width: double.infinity,
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
         decoration: const BoxDecoration(
-          color: Colors.white,
+          color: DropTheme.card,
           borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
           boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 12)],
         ),
@@ -1086,7 +1087,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
           snapSizes: const [0.27, 0.5, 0.88],
           builder: (context, scroll) => Container(
             decoration: const BoxDecoration(
-              color: Colors.white,
+              color: DropTheme.card,
               borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
               boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 12)],
             ),
@@ -1094,13 +1095,13 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
               controller: scroll,
               padding: EdgeInsets.fromLTRB(16, 0, 16, 18 + MediaQuery.of(context).padding.bottom),
               children: [
-                Center(child: Container(width: 44, height: 5, margin: const EdgeInsets.symmetric(vertical: 12), decoration: BoxDecoration(color: Colors.grey.shade400, borderRadius: BorderRadius.circular(4)))),
+                Center(child: Container(width: 44, height: 5, margin: EdgeInsets.symmetric(vertical: 12), decoration: BoxDecoration(color: DropTheme.border, borderRadius: BorderRadius.circular(4)))),
                 if (homeTypes.isNotEmpty) ...[
                   DropRideTypeStrip(types: homeTypes, selected: homeType, onTap: (t) => setState(() => homeType = (t['id'] as num).toInt())),
                   const SizedBox(height: 10),
                 ],
                 Material(
-                  color: const Color(0xFFF1F0EC),
+                  color: DropTheme.cardAlt,
                   borderRadius: BorderRadius.circular(14),
                   child: InkWell(
                     borderRadius: BorderRadius.circular(14),
@@ -1196,7 +1197,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
         Text(
           '${_d(quote['distance']).toStringAsFixed(1)} $unit · about ${_d(quote['duration_minutes']).round()} min'
           '${t['pickup_eta_minutes'] != null ? ' · arrive about ${dropClock(DateTime.now().add(Duration(minutes: (t['pickup_eta_minutes'] as num).round() + _d(quote['duration_minutes']).round())))}' : ''}',
-          style: TextStyle(color: Colors.grey.shade700),
+          style: TextStyle(color: DropTheme.muted),
         ),
         const SizedBox(height: 4),
         DropStopsEditor(
@@ -1252,7 +1253,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
               label: const Text('Offer my fare', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
             ),
           ),
-          Padding(padding: const EdgeInsets.only(top: 4), child: Center(child: Text('Name your own price. Drivers can accept or counter.', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)))),
+          Padding(padding: EdgeInsets.only(top: 4), child: Center(child: Text('Name your own price. Drivers can accept or counter.', style: TextStyle(fontSize: 12, color: DropTheme.muted)))),
         ],
       ]),
     ));
@@ -1270,16 +1271,16 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: selected ? primaryColor : Colors.grey.shade300, width: selected ? 2 : 1),
+          border: Border.all(color: selected ? primaryColor : DropTheme.border, width: selected ? 2 : 1),
           color: selected ? primaryColor.withValues(alpha: 0.06) : Colors.white,
         ),
         child: Row(children: [
-          Icon(Icons.local_taxi, color: selected ? primaryColor : Colors.grey.shade600),
+          Icon(Icons.local_taxi, color: selected ? primaryColor : DropTheme.muted),
           const SizedBox(width: 12),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text('${x['name']}  ·  ${x['capacity'] ?? ''} seats', style: const TextStyle(fontWeight: FontWeight.w800)),
-              Text(nearby > 0 ? (eta == null ? '$nearby nearby' : 'Driver ~$eta min away · $nearby nearby') : 'No drivers nearby right now', style: TextStyle(color: nearby > 0 ? Colors.grey.shade700 : Colors.orange.shade800, fontSize: 12)),
+              Text(nearby > 0 ? (eta == null ? '$nearby nearby' : 'Driver ~$eta min away · $nearby nearby') : 'No drivers nearby right now', style: TextStyle(color: nearby > 0 ? DropTheme.muted : Colors.orange.shade800, fontSize: 12)),
             ]),
           ),
           Text(_money(x['fare'], quote['currency']), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
@@ -1321,7 +1322,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
         Expanded(child: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800))),
         Text(_money(r['fare'], r['currency']), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
       ]),
-      if (sub.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text(sub, style: TextStyle(color: Colors.grey.shade700))),
+      if (sub.isNotEmpty) Padding(padding: EdgeInsets.only(top: 4), child: Text(sub, style: TextStyle(color: DropTheme.muted))),
       DropStopTimeline(pickup: (_m(r['pickup'])['address'] ?? '').toString(), dropoff: (_m(r['dropoff'])['address'] ?? '').toString(), stops: tripStops, activeStop: activeTimelineStop),
       if (r['eta'] is Map) ...[
         const SizedBox(height: 10),
@@ -1343,7 +1344,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(driver['name']?.toString() ?? 'Your driver', style: const TextStyle(fontWeight: FontWeight.w800)),
-              Text('$vehicle${v['plate'] != null ? '  ·  ${v['plate']}' : ''}', style: TextStyle(color: Colors.grey.shade700)),
+              Text('$vehicle${v['plate'] != null ? '  ·  ${v['plate']}' : ''}', style: TextStyle(color: DropTheme.muted)),
             ]),
           ),
           if (['accepted', 'arrived', 'in_progress'].contains(status))
@@ -1398,7 +1399,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
       Row(children: [
         const Icon(Icons.payments_outlined, size: 18),
         const SizedBox(width: 6),
-        Text(r['payment_method'] == 'wallet' ? 'Paying from wallet' : 'Paying cash to the driver', style: TextStyle(color: Colors.grey.shade700)),
+        Text(r['payment_method'] == 'wallet' ? 'Paying from wallet' : 'Paying cash to the driver', style: TextStyle(color: DropTheme.muted)),
         const Spacer(),
         if (status != 'in_progress') TextButton(onPressed: busy ? null : _cancel, child: const Text('Cancel ride', style: TextStyle(color: Colors.red))),
       ]),
@@ -1422,12 +1423,12 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
         if (done) Text(_money(f['fare'], f['currency']), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
       ]),
       const SizedBox(height: 6),
-      Text(sub, style: TextStyle(color: Colors.grey.shade700)),
+      Text(sub, style: TextStyle(color: DropTheme.muted)),
       if (done) ...[
         const SizedBox(height: 6),
-        Text('${_m(f['pickup'])['address'] ?? ''}  →  ${_m(f['dropoff'])['address'] ?? ''}', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+        Text('${_m(f['pickup'])['address'] ?? ''}  →  ${_m(f['dropoff'])['address'] ?? ''}', style: TextStyle(color: DropTheme.muted, fontSize: 12)),
         for (final stop in _l(f['stops']).map(_m))
-          Padding(padding: const EdgeInsets.only(top: 4), child: Text('Stop ${stop['sequence']}: ${stop['address'] ?? 'Additional stop'}', style: TextStyle(color: Colors.grey.shade600, fontSize: 12))),
+          Padding(padding: EdgeInsets.only(top: 4), child: Text('Stop ${stop['sequence']}: ${stop['address'] ?? 'Additional stop'}', style: TextStyle(color: DropTheme.muted, fontSize: 12))),
       ],
       if (done && f['id'] != null) ...[
         const SizedBox(height: 12),

@@ -1,5 +1,6 @@
 import 'package:mighty_core/core_mighty/mighty_core.dart';
 import 'manage_imports.dart';
+import 'drop/design/drop_theme.dart';
 import 'drop/widgets/drop_connectivity_banner.dart';
 import 'package:drop/driver/main.dart' as drv;
 import 'service/ModeController.dart';
@@ -65,6 +66,13 @@ void main() async {
   final keywordsReady = Future<void>.sync(() => initJsonFile()).catchError((_) {});
   sharedPref = await prefsReady;
   BootTimings.mark('prefs');
+  // Theme first: the saved Light/Dark/System choice decides the very first frame (no flash).
+  DropTheme.load(sharedPref);
+  await _applyThemeToStores();
+  DropTheme.revision.addListener(() async {
+    await _applyThemeToStores();
+    DropTheme.rebuildAll();
+  });
 
   appStore.setLanguage(sharedPref.getString(SELECTED_LANGUAGE_CODE) ?? defaultLanguageCode);
   await appStore.setLoggedIn(sharedPref.getBool(IS_LOGGED_IN) ?? false, isInitializing: true);
@@ -101,6 +109,12 @@ Future<void> updatePlayerId() async {
   });
 }
 
+/// Legacy screens still read `appStore.isDarkMode` and the nb_utils-style text colour globals; keep both stores in step.
+Future<void> _applyThemeToStores() async {
+  await appStore.setDarkMode(DropTheme.isDark);
+  await drv.appStore.setDarkMode(DropTheme.isDark);
+}
+
 class MyApp extends StatefulWidget {
   @override
   State<MyApp> createState() => _MyAppState();
@@ -110,6 +124,7 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
+    DropTheme.attach();
     // After the first frame: connectivity, push, language, settings and the session check. None of it can delay the screen.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       BootTimings.mark('first_frame');
@@ -126,14 +141,14 @@ class _MyAppState extends State<MyApp> {
   }
 
   Widget _riderApp() {
-    return Observer(builder: (context) {
+    return ValueListenableBuilder<DropThemePref>(valueListenable: DropTheme.pref, builder: (context, _, __) => Observer(builder: (context) {
       return MaterialApp(
         navigatorKey: navigatorKey,
         debugShowCheckedModeBanner: false,
         title: mAppName,
         theme: AppTheme.lightTheme,
         darkTheme: AppTheme.darkTheme,
-        themeMode: appStore.isDarkMode ? ThemeMode.dark : ThemeMode.light,
+        themeMode: DropTheme.themeMode,
         builder: (context, child) {
           return DropConnectivityHost(child: SafeArea(top: false, child: ScrollConfiguration(behavior: MyBehavior(), child: child!)));
         },
@@ -149,7 +164,7 @@ class _MyAppState extends State<MyApp> {
         ],
         localeResolutionCallback: (locale, supportedLocales) => locale,
       );
-    });
+    }));
   }
 }
 
@@ -181,7 +196,7 @@ class _DriverHostState extends State<_DriverHost> {
   @override
   Widget build(BuildContext context) {
     if (!ready) {
-      return const ColoredBox(color: Colors.white); // local set-up only: one quick frame, no spinner
+      return ColoredBox(color: DropTheme.card); // local set-up only: one quick frame, no spinner
     }
     return drv.DriverShell();
   }

@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import '../service/DriverApplicationApi.dart';
 import '../service/ModeController.dart';
 import '../utils/Colors.dart';
+import '../drop/design/drop_theme.dart';
 
 const _maxUploadBytes = 5 * 1024 * 1024;
 
@@ -309,10 +310,10 @@ class _DriverApplicationScreenState extends State<DriverApplicationScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: DropTheme.scaffold,
       appBar: AppBar(
         title: const Text('Drive with DROP'),
-        backgroundColor: Colors.white,
+        backgroundColor: DropTheme.card,
         foregroundColor: Colors.black87,
         elevation: 0,
         actions: [IconButton(icon: const Icon(Icons.help_outline), tooltip: 'Help', onPressed: _help)],
@@ -356,7 +357,7 @@ class _DriverApplicationScreenState extends State<DriverApplicationScreen> {
     return ListView(padding: const EdgeInsets.all(20), children: [
       const Text('Earn with your car', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
       const SizedBox(height: 8),
-      Text('Apply online in about 10 minutes. You keep using DROP as a passenger while we review your application.', style: TextStyle(color: Colors.grey.shade700)),
+      Text('Apply online in about 10 minutes. You keep using DROP as a passenger while we review your application.', style: TextStyle(color: DropTheme.muted)),
       const SizedBox(height: 20),
       _bullet(Icons.cake_outlined, 'At least $minAge years old'),
       _bullet(Icons.badge_outlined, 'Driving licence held for $minLicence year(s) or more'),
@@ -380,7 +381,7 @@ class _DriverApplicationScreenState extends State<DriverApplicationScreen> {
         for (int i = 0; i < 3; i++) ...[
           Expanded(
             child: Column(children: [
-              Container(height: 4, decoration: BoxDecoration(color: i <= step ? primaryColor : Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
+              Container(height: 4, decoration: BoxDecoration(color: i <= step ? primaryColor : DropTheme.border, borderRadius: BorderRadius.circular(2))),
               const SizedBox(height: 4),
               Text('${i + 1}. ${labels[i]}', style: TextStyle(fontSize: 12, fontWeight: i == step ? FontWeight.w700 : FontWeight.w400)),
             ]),
@@ -428,13 +429,13 @@ class _DriverApplicationScreenState extends State<DriverApplicationScreen> {
           onTap: busy ? null : _changePhoto,
           child: CircleAvatar(
             radius: 48,
-            backgroundColor: Colors.grey.shade200,
-            child: Icon(hasPhoto ? Icons.check_circle : Icons.add_a_photo_outlined, size: 36, color: hasPhoto ? Colors.green : Colors.grey.shade700),
+            backgroundColor: DropTheme.border,
+            child: Icon(hasPhoto ? Icons.check_circle : Icons.add_a_photo_outlined, size: 36, color: hasPhoto ? Colors.green : DropTheme.muted),
           ),
         ),
       ),
       const SizedBox(height: 6),
-      Center(child: Text(hasPhoto ? 'Photo added. Tap to change.' : 'Add a clear photo of your face', style: TextStyle(color: Colors.grey.shade700))),
+      Center(child: Text(hasPhoto ? 'Photo added. Tap to change.' : 'Add a clear photo of your face', style: TextStyle(color: DropTheme.muted))),
       const SizedBox(height: 20),
       TextField(controller: firstName, textCapitalization: TextCapitalization.words, decoration: _dec('First name', field: 'first_name')),
       const SizedBox(height: 12),
@@ -444,7 +445,7 @@ class _DriverApplicationScreenState extends State<DriverApplicationScreen> {
         onTap: _pickDob,
         child: InputDecorator(
           decoration: _dec('Date of birth', field: 'date_of_birth'),
-          child: Text(dob ?? 'Choose date', style: TextStyle(color: dob == null ? Colors.grey.shade600 : Colors.black87)),
+          child: Text(dob ?? 'Choose date', style: TextStyle(color: dob == null ? DropTheme.muted : Colors.black87)),
         ),
       ),
       const SizedBox(height: 24),
@@ -496,7 +497,7 @@ class _DriverApplicationScreenState extends State<DriverApplicationScreen> {
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: selected ? primaryColor : Colors.grey.shade300, width: selected ? 2 : 1),
+          border: Border.all(color: selected ? primaryColor : DropTheme.border, width: selected ? 2 : 1),
           color: selected ? primaryColor.withOpacity(0.06) : Colors.white,
         ),
         child: Row(children: [
@@ -509,7 +510,7 @@ class _DriverApplicationScreenState extends State<DriverApplicationScreen> {
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text((v['name'] ?? '').toString(), style: const TextStyle(fontWeight: FontWeight.w700)),
-              if (v['capacity'] != null) Text('Up to ${v['capacity']} passengers', style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+              if (v['capacity'] != null) Text('Up to ${v['capacity']} passengers', style: TextStyle(fontSize: 12, color: DropTheme.muted)),
             ]),
           ),
           if (selected) Icon(Icons.check_circle, color: primaryColor),
@@ -523,7 +524,7 @@ class _DriverApplicationScreenState extends State<DriverApplicationScreen> {
     return [
       const Text('Your documents', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
       const SizedBox(height: 4),
-      Text('Photos or PDFs, up to 5 MB each. Make sure everything is readable.', style: TextStyle(color: Colors.grey.shade700)),
+      Text('Photos or PDFs, up to 5 MB each. Make sure everything is readable.', style: TextStyle(color: DropTheme.muted)),
       const SizedBox(height: 12),
       if (docs.isEmpty) const Text('No documents are required for this vehicle type.'),
       for (final d in docs) _docRow(d, canUpload: true),
@@ -533,7 +534,7 @@ class _DriverApplicationScreenState extends State<DriverApplicationScreen> {
         const SizedBox(width: 12),
         Expanded(flex: 2, child: _primaryButton('Submit application', documentsComplete ? _submit : null)),
       ]),
-      if (!documentsComplete) Padding(padding: const EdgeInsets.only(top: 8), child: Text('Upload every required document to submit.', style: TextStyle(color: Colors.grey.shade700, fontSize: 12))),
+      if (!documentsComplete) Padding(padding: EdgeInsets.only(top: 8), child: Text('Upload every required document to submit.', style: TextStyle(color: DropTheme.muted, fontSize: 12))),
     ];
   }
 
@@ -580,7 +581,7 @@ class _DriverApplicationScreenState extends State<DriverApplicationScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade300)),
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), border: Border.all(color: DropTheme.border)),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           Expanded(child: Text('${d['name']}${d['required'] == true ? '' : ' (optional)'}', style: const TextStyle(fontWeight: FontWeight.w700))),
@@ -591,7 +592,7 @@ class _DriverApplicationScreenState extends State<DriverApplicationScreen> {
             padding: const EdgeInsets.only(top: 4),
             child: Text(requestNote.isNotEmpty ? 'DROP asks you to upload this. $requestNote' : 'DROP asks you to upload this document.', style: const TextStyle(fontSize: 12, color: Colors.deepOrange)),
           ),
-        if (expire != null && expire.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text('Expires $expire', style: TextStyle(fontSize: 12, color: Colors.grey.shade700))),
+        if (expire != null && expire.isNotEmpty) Padding(padding: EdgeInsets.only(top: 4), child: Text('Expires $expire', style: TextStyle(fontSize: 12, color: DropTheme.muted))),
         if (st == 'rejected' && note.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text(note, style: const TextStyle(fontSize: 12, color: Colors.red))),
         if ((canUpload && st != 'approved') || requested)
           Align(
@@ -628,7 +629,7 @@ class _DriverApplicationScreenState extends State<DriverApplicationScreen> {
       const SizedBox(height: 12),
       Center(child: Text(title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800))),
       const SizedBox(height: 8),
-      Center(child: Text(text, textAlign: TextAlign.center, style: TextStyle(color: Colors.grey.shade700))),
+      Center(child: Text(text, textAlign: TextAlign.center, style: TextStyle(color: DropTheme.muted))),
       if (note.isNotEmpty) ...[const SizedBox(height: 12), Text('From our team: $note')],
       const SizedBox(height: 20),
       for (final d in documents) _docRow(d, canUpload: false), // only documents DROP has asked for show an upload button

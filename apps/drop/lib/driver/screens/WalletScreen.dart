@@ -22,6 +22,7 @@ import '../utils/Constants.dart';
 import '../utils/Extensions/AppButtonWidget.dart';
 import '../utils/Extensions/app_common.dart';
 import '../utils/Extensions/app_textfield.dart';
+import '../../drop/design/drop_theme.dart';
 
 class WalletScreen extends StatefulWidget {
   @override
@@ -193,7 +194,7 @@ class WalletScreenState extends State<WalletScreen> {
           height: 52,
           width: double.infinity,
           child: FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.white, foregroundColor: bg, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(DropRadius.button))),
+            style: FilledButton.styleFrom(backgroundColor: DropTheme.card, foregroundColor: bg, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(DropRadius.button))),
             onPressed: _showAddMoney,
             child: FittedBox(fit: BoxFit.scaleDown, child: Text(negative ? 'Pay commission' : language.addMoney, maxLines: 1, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800))),
           ),

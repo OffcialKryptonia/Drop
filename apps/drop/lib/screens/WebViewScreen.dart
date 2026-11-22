@@ -1,4 +1,5 @@
 import '../manage_imports.dart';
+import '../drop/design/drop_theme.dart';
 
 class WebViewScreen extends StatefulWidget {
   static String tag = '/WebViewScreen';
@@ -151,7 +152,7 @@ class WebViewScreenState extends State<WebViewScreen> {
               });
             },
           ),
-          Container(height: context.height(), color: Colors.white, child: Loader().center().visible(isLoading == true))
+          Container(height: context.height(), color: DropTheme.card, child: Loader().center().visible(isLoading == true))
         ],
       );
     });
@@ -177,4 +178,4 @@ class WebViewScreenState extends State<WebViewScreen> {
       body: mBody(),
     );
   }
-}
+}

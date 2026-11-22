@@ -1,4 +1,5 @@
 import '../manage_imports.dart';
+import '../drop/design/drop_theme.dart';
 
 class RideDetailScreen extends StatefulWidget {
   final int orderId;
@@ -280,7 +281,7 @@ class RideDetailScreenState extends State<RideDetailScreen> {
               if (riderModel!.multiDropLocation != null && riderModel!.multiDropLocation!.isNotEmpty)
                 AppButtonWidget(
                   textColor: primaryColor,
-                  color: Colors.white,
+                  color: DropTheme.card,
                   // margin: EdgeInsets.all(4),
                   padding: EdgeInsets.symmetric(horizontal: 8, vertical: 0),
                   height: 30,
@@ -458,7 +459,7 @@ class RideDetailScreenState extends State<RideDetailScreen> {
                       context: context,
                       builder: (_) => AlertDialog(
                         contentPadding: EdgeInsets.zero,
-                        backgroundColor: Colors.white,
+                        backgroundColor: DropTheme.card,
                         content: AboutWidget(userData: userData),
                       ),
                     );

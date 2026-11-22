@@ -32,6 +32,7 @@ import 'package:drop/driver/utils/Extensions/int_extensions.dart';
 import 'package:drop/driver/utils/Images.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'FlightTrackingPage.dart';
+import '../../drop/design/drop_theme.dart';
 
 class ScheduleRideListScreen extends StatefulWidget {
   ScheduleRideListScreen({
@@ -224,7 +225,7 @@ class _ScheduleRideListScreenState extends State<ScheduleRideListScreen> {
                       padding: EdgeInsets.all(8),
                       margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: DropTheme.card,
                         border: Border.all(color: primaryColor),
                         borderRadius: BorderRadius.circular(defaultRadius),
                       ),
@@ -245,7 +246,7 @@ class _ScheduleRideListScreenState extends State<ScheduleRideListScreen> {
                                         Container(
                                           padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                           decoration: BoxDecoration(
-                                            color: Colors.grey.shade300,
+                                            color: DropTheme.border,
                                             borderRadius: BorderRadius.circular(8),
                                           ),
                                           child: Text(
@@ -334,13 +335,13 @@ class _ScheduleRideListScreenState extends State<ScheduleRideListScreen> {
                                                           ),
                                                       textTheme: TextTheme(
                                                         titleLarge: TextStyle(color: primaryColor, fontWeight: FontWeight.bold),
-                                                        bodyMedium: TextStyle(color: Colors.black87),
+                                                        bodyMedium: TextStyle(color: DropTheme.text),
                                                       ),
                                                     ),
                                                     child: AlertDialog(
                                                       title: Text(
                                                         '${language.flightDetails}',
-                                                        style: primaryTextStyle(color: Colors.black),
+                                                        style: primaryTextStyle(color: DropTheme.text),
                                                       ),
                                                       content: Column(
                                                         mainAxisSize: MainAxisSize.min,
@@ -489,7 +490,7 @@ class _ScheduleRideListScreenState extends State<ScheduleRideListScreen> {
                                   children: [
                                     Icon(Icons.check_circle, color: Colors.green),
                                     5.width,
-                                    Text(language.youWillGet, style: boldTextStyle(color: Colors.black)),
+                                    Text(language.youWillGet, style: boldTextStyle(color: DropTheme.text)),
                                   ],
                                 ),
                                 printAmountWidget(amount: '${youWillGet.toStringAsFixed(digitAfterDecimal)}', color: Colors.green, size: 14)
@@ -555,7 +556,7 @@ class _ScheduleRideListScreenState extends State<ScheduleRideListScreen> {
                               if (data.multiDropLocation != null && data.multiDropLocation!.isNotEmpty)
                                 AppButtonWidget(
                                   textColor: primaryColor,
-                                  color: Colors.white,
+                                  color: DropTheme.card,
                                   padding: EdgeInsets.symmetric(horizontal: 8, vertical: 0),
                                   // height: 30,
                                   shapeBorder: RoundedRectangleBorder(borderRadius: BorderRadius.circular(defaultRadius), side: BorderSide(color: primaryColor)),
@@ -667,14 +668,14 @@ class _ScheduleRideListScreenState extends State<ScheduleRideListScreen> {
       padding: EdgeInsets.all(14),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey.shade300),
+        border: Border.all(color: DropTheme.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(Icons.flight_takeoff, color: Colors.black87, size: 22),
+              Icon(Icons.flight_takeoff, color: DropTheme.text, size: 22),
               SizedBox(width: 8),
               Text(
                 "Airport Pickup",
@@ -694,7 +695,7 @@ class _ScheduleRideListScreenState extends State<ScheduleRideListScreen> {
                 "${language.flight}:",
                 style: TextStyle(
                   fontSize: 14,
-                  color: Colors.grey.shade600,
+                  color: DropTheme.muted,
                 ),
               ),
               SizedBox(width: 6),
@@ -711,7 +712,7 @@ class _ScheduleRideListScreenState extends State<ScheduleRideListScreen> {
                 "|  ${language.terminal}:",
                 style: TextStyle(
                   fontSize: 14,
-                  color: Colors.grey.shade600,
+                  color: DropTheme.muted,
                 ),
               ),
               SizedBox(width: 6),
@@ -720,7 +721,7 @@ class _ScheduleRideListScreenState extends State<ScheduleRideListScreen> {
                 style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.bold,
-                  color: Colors.black87,
+                  color: DropTheme.text,
                 ),
               ),
             ],
@@ -764,7 +765,7 @@ class _ScheduleRideListScreenState extends State<ScheduleRideListScreen> {
               child: AppButtonWidget(
                   text: language.cancel,
                   textColor: primaryColor,
-                  color: Colors.white,
+                  color: DropTheme.card,
                   shapeBorder: RoundedRectangleBorder(borderRadius: BorderRadius.circular(defaultRadius), side: BorderSide(color: primaryColor)),
                   onTap: () {
                     showModalBottomSheet(
@@ -1028,7 +1029,7 @@ class _ScheduleRideListScreenState extends State<ScheduleRideListScreen> {
                                       margin: EdgeInsets.symmetric(horizontal: 40),
                                       padding: EdgeInsets.all(16),
                                       decoration: BoxDecoration(
-                                        color: Colors.white,
+                                        color: DropTheme.card,
                                         borderRadius: BorderRadius.circular(defaultRadius),
                                         boxShadow: [
                                           BoxShadow(color: primaryColor.withValues(alpha: 0.4), blurRadius: 10, spreadRadius: 0, offset: Offset(0.0, 0.0)),

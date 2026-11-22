@@ -23,6 +23,7 @@ import '../screens/EditProfileScreen.dart';
 import '../utils/Common.dart';
 import '../utils/Constants.dart';
 import '../utils/Extensions/app_common.dart';
+import '../../drop/design/drop_theme.dart';
 
 final FirebaseAuth _auth = FirebaseAuth.instance;
 
@@ -361,7 +362,7 @@ Future<String?> askUserForEmail(
     barrierDismissible: false,
     builder: (context) {
       return AlertDialog(
-        backgroundColor: Colors.white,
+        backgroundColor: DropTheme.card,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
         ),
@@ -381,7 +382,7 @@ Future<String?> askUserForEmail(
                 child: Icon(
                   Icons.mail_outline_rounded,
                   size: 32,
-                  color: Colors.black,
+                  color: DropTheme.text,
                 ),
               ),
               SizedBox(height: 20),
@@ -390,7 +391,7 @@ Future<String?> askUserForEmail(
                 style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.bold,
-                  color: Colors.black87,
+                  color: DropTheme.text,
                 ),
               ),
               SizedBox(height: 24),
@@ -419,14 +420,14 @@ Future<String?> askUserForEmail(
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        side: BorderSide(color: Colors.grey[300]!),
+                        side: BorderSide(color: DropTheme.border!),
                       ),
                       child: Text(
                         language.cancel,
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
-                          color: Colors.grey[700],
+                          color: DropTheme.muted,
                         ),
                       ),
                     ),

@@ -4,6 +4,7 @@ import 'package:drop/driver/network/RestApis.dart';
 import 'package:drop/driver/utils/Colors.dart';
 import '../model/ModelFAQ.dart';
 import '../utils/Extensions/app_common.dart';
+import '../../drop/design/drop_theme.dart';
 
 class FAQScreen extends StatefulWidget {
   @override
@@ -78,8 +79,8 @@ class _FAQScreenState extends State<FAQScreen> {
                 faq.question ?? "",
                 style: boldTextStyle(),
               ),
-              backgroundColor: Colors.grey.shade200,
-              collapsedBackgroundColor: Colors.white,
+              backgroundColor: DropTheme.border,
+              collapsedBackgroundColor: DropTheme.card,
               children: [
                 Align(
                   alignment: Alignment.topLeft,

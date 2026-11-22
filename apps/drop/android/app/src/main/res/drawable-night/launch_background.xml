@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Launch window in OS dark mode: the same near-black as the app's dark scaffold, so there is no white flash. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/drop_night_bg" />
+</layer-list>

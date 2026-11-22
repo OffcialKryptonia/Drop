@@ -5,6 +5,7 @@ import '../drop/screens/drop_sounds_screen.dart';
 
 import '../manage_imports.dart';
 import 'ModeSwitchTile.dart';
+import '../drop/design/drop_theme.dart';
 
 class DrawerComponent extends StatefulWidget {
   final Function(String)? onClose;
@@ -19,7 +20,7 @@ class _DrawerComponentState extends State<DrawerComponent> {
   @override
   Widget build(BuildContext context) {
     return Drawer(
-      backgroundColor: Colors.white,
+      backgroundColor: DropTheme.card,
       child: Stack(
         children: [
           SingleChildScrollView(

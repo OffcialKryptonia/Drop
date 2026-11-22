@@ -222,6 +222,7 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
             controller: _map,
             markers: _markers,
             routePoints: _remainingRoute,
+            topInset: 150, // below the turn-by-turn banner
           ),
         ),
         SafeArea(

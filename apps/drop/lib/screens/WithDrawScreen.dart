@@ -1,4 +1,5 @@
 import '../manage_imports.dart';
+import '../drop/design/drop_theme.dart';
 
 class WithDrawScreen extends StatefulWidget {
   final UserBankAccount bankInfo;
@@ -402,7 +403,7 @@ class WithDrawScreenState extends State<WithDrawScreen> {
                                                     .split('|')
                                                     .indexOf(e)
                                             ? primaryColor
-                                            : Colors.white,
+                                            : DropTheme.card,
                                         border: Border.all(
                                             color: currentIndex ==
                                                     appStore

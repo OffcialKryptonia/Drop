@@ -1,4 +1,5 @@
 import '../manage_imports.dart';
+import '../drop/design/drop_theme.dart';
 
 // ignore: must_be_immutable
 class Newestimateridelistwidget extends StatefulWidget {
@@ -1465,7 +1466,7 @@ class NewestimateridelistwidgetState extends State<Newestimateridelistwidget> wi
               child: Container(
                 padding: EdgeInsets.all(4),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: DropTheme.card,
                   boxShadow: [
                     BoxShadow(color: Colors.black.withValues(alpha: 0.2), spreadRadius: 1),
                   ],
@@ -1474,7 +1475,7 @@ class NewestimateridelistwidgetState extends State<Newestimateridelistwidget> wi
                 margin: EdgeInsets.symmetric(horizontal: 14),
                 child: Icon(
                   Icons.my_location,
-                  color: Colors.black,
+                  color: DropTheme.text,
                 ),
               ),
             ),
@@ -1487,7 +1488,9 @@ class NewestimateridelistwidgetState extends State<Newestimateridelistwidget> wi
               SizedBox(
                 height: MediaQuery.of(context).size.height,
                 child: GoogleMap(
-                  padding: EdgeInsets.only(top: context.statusBarHeight + 4 + 24),
+                  style: DropTheme.isDark ? DropTheme.googleDarkMapStyle : null,
+                  // Compass sits below the top bars, clear of the status bar and the bottom sheet.
+                  padding: EdgeInsets.only(top: context.statusBarHeight + 88, bottom: 8),
                   mapToolbarEnabled: false,
                   zoomControlsEnabled: false,
                   myLocationButtonEnabled: false,
@@ -1505,7 +1508,7 @@ class NewestimateridelistwidgetState extends State<Newestimateridelistwidget> wi
                 ),
               ),
             Container(
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.only(topLeft: Radius.circular(2 * defaultRadius), topRight: Radius.circular(2 * defaultRadius))),
+              decoration: BoxDecoration(color: DropTheme.card, borderRadius: BorderRadius.only(topLeft: Radius.circular(2 * defaultRadius), topRight: Radius.circular(2 * defaultRadius))),
               child: !isBooking
                   ? bookRideWidget()
                   : StreamBuilder(
@@ -1586,7 +1589,7 @@ class NewestimateridelistwidgetState extends State<Newestimateridelistwidget> wi
         Visibility(
           visible: serviceList.isNotEmpty,
           child: Container(
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.only(topLeft: Radius.circular(2 * defaultRadius), topRight: Radius.circular(2 * defaultRadius))),
+            decoration: BoxDecoration(color: DropTheme.card, borderRadius: BorderRadius.only(topLeft: Radius.circular(2 * defaultRadius), topRight: Radius.circular(2 * defaultRadius))),
             child: SingleChildScrollView(
               child:
                   // true?bidBookingOption():
@@ -1597,7 +1600,7 @@ class NewestimateridelistwidgetState extends State<Newestimateridelistwidget> wi
         Visibility(
           visible: !appStore.isLoading && serviceList.isEmpty,
           child: Container(
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.only(topLeft: Radius.circular(2 * defaultRadius), topRight: Radius.circular(2 * defaultRadius))),
+            decoration: BoxDecoration(color: DropTheme.card, borderRadius: BorderRadius.only(topLeft: Radius.circular(2 * defaultRadius), topRight: Radius.circular(2 * defaultRadius))),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -1649,7 +1652,7 @@ class NewestimateridelistwidgetState extends State<Newestimateridelistwidget> wi
                             Container(
                               height: 70,
                               width: 70,
-                              decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.black54),
+                              decoration: BoxDecoration(shape: BoxShape.circle, color: DropTheme.muted),
                               child: Icon(Icons.check, color: Colors.white),
                             ),
                         ],
@@ -1689,7 +1692,7 @@ class NewestimateridelistwidgetState extends State<Newestimateridelistwidget> wi
                             Container(
                               height: 70,
                               width: 70,
-                              decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.black54),
+                              decoration: BoxDecoration(shape: BoxShape.circle, color: DropTheme.muted),
                               child: Icon(Icons.check, color: Colors.white),
                             ),
                         ],
@@ -1772,7 +1775,7 @@ class NewestimateridelistwidgetState extends State<Newestimateridelistwidget> wi
                     showModalBottomSheet(
                       context: context,
                       isScrollControlled: true,
-                      backgroundColor: Colors.white,
+                      backgroundColor: DropTheme.card,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.only(topRight: Radius.circular(2 * defaultRadius), topLeft: Radius.circular(2 * defaultRadius))),
                       builder: (_) {
                         return CarDetailWidget(service: e, tripType: widget.trip_type);
@@ -1861,7 +1864,7 @@ class NewestimateridelistwidgetState extends State<Newestimateridelistwidget> wi
                               showModalBottomSheet(
                                 context: context,
                                 isScrollControlled: true,
-                                backgroundColor: Colors.white,
+                                backgroundColor: DropTheme.card,
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.only(topRight: Radius.circular(2 * defaultRadius), topLeft: Radius.circular(2 * defaultRadius))),
                                 builder: (_) {
                                   return CarDetailWidget(service: e, tripType: widget.trip_type);
@@ -1931,7 +1934,7 @@ class NewestimateridelistwidgetState extends State<Newestimateridelistwidget> wi
                             children: [
                               AlertDialog(
                                 contentPadding: EdgeInsets.all(16),
-                                backgroundColor: Colors.white,
+                                backgroundColor: DropTheme.card,
                                 content: SingleChildScrollView(
                                   child: Column(
                                     mainAxisSize: MainAxisSize.min,
@@ -1985,7 +1988,7 @@ class NewestimateridelistwidgetState extends State<Newestimateridelistwidget> wi
                                           // selectedIndex;
                                           var data = await showModalBottomSheet(
                                             context: context,
-                                            backgroundColor: Colors.white,
+                                            backgroundColor: DropTheme.card,
                                             builder: (_) {
                                               return CouPonWidget(servicesListData!.serviceId!.toInt());
                                             },
@@ -2004,7 +2007,7 @@ class NewestimateridelistwidgetState extends State<Newestimateridelistwidget> wi
                                                       promoCode.clear();
                                                       setState(() {});
                                                     },
-                                                    child: Icon(Icons.close, color: Colors.black, size: 25),
+                                                    child: Icon(Icons.close, color: DropTheme.text, size: 25),
                                                   )
                                                 : null),
                                       ),
@@ -2558,7 +2561,7 @@ class _CoinSelectionDialogState extends State<CoinSelectionDialog> {
       child: Container(
         padding: EdgeInsets.symmetric(vertical: 15, horizontal: 15),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: DropTheme.card,
           borderRadius: BorderRadius.vertical(
             top: Radius.circular(20),
           ),
@@ -2575,7 +2578,7 @@ class _CoinSelectionDialogState extends State<CoinSelectionDialog> {
                   style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
-                    color: Colors.black87,
+                    color: DropTheme.text,
                   ),
                 ),
                 IconButton(
@@ -2615,7 +2618,7 @@ class _CoinSelectionDialogState extends State<CoinSelectionDialog> {
                           'Available Coins',
                           style: TextStyle(
                             fontSize: 12,
-                            color: Colors.grey[600],
+                            color: DropTheme.muted,
                           ),
                         ),
                         const SizedBox(height: 2),
@@ -2637,7 +2640,7 @@ class _CoinSelectionDialogState extends State<CoinSelectionDialog> {
                         'Max Usable',
                         style: TextStyle(
                           fontSize: 12,
-                          color: Colors.grey[600],
+                          color: DropTheme.muted,
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -2646,7 +2649,7 @@ class _CoinSelectionDialogState extends State<CoinSelectionDialog> {
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
-                          color: Colors.black87,
+                          color: DropTheme.text,
                         ),
                       ),
                     ],
@@ -2660,7 +2663,7 @@ class _CoinSelectionDialogState extends State<CoinSelectionDialog> {
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
-                color: Colors.black87,
+                color: DropTheme.text,
               ),
             ),
             const SizedBox(height: 8),
@@ -2686,11 +2689,11 @@ class _CoinSelectionDialogState extends State<CoinSelectionDialog> {
                     : null,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.grey[300]!),
+                  borderSide: BorderSide(color: DropTheme.border!),
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.grey[300]!),
+                  borderSide: BorderSide(color: DropTheme.border!),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -2706,7 +2709,7 @@ class _CoinSelectionDialogState extends State<CoinSelectionDialog> {
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
-                color: Colors.black87,
+                color: DropTheme.text,
               ),
             ),
             const SizedBox(height: 8),
@@ -2766,7 +2769,7 @@ class _CoinSelectionDialogState extends State<CoinSelectionDialog> {
                           'Ride Amount:',
                           style: TextStyle(
                             fontSize: 14,
-                            color: Colors.grey[700],
+                            color: DropTheme.muted,
                           ),
                         ),
                         Text(
@@ -2774,7 +2777,7 @@ class _CoinSelectionDialogState extends State<CoinSelectionDialog> {
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
-                            color: Colors.black87,
+                            color: DropTheme.text,
                           ),
                         ),
                       ],
@@ -2800,7 +2803,7 @@ class _CoinSelectionDialogState extends State<CoinSelectionDialog> {
                         ),
                       ],
                     ),
-                    Divider(height: 16, color: Colors.grey[300]),
+                    Divider(height: 16, color: DropTheme.border),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -2809,7 +2812,7 @@ class _CoinSelectionDialogState extends State<CoinSelectionDialog> {
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
-                            color: Colors.black87,
+                            color: DropTheme.text,
                           ),
                         ),
                         Text(
@@ -2833,7 +2836,7 @@ class _CoinSelectionDialogState extends State<CoinSelectionDialog> {
                     onPressed: () => Navigator.pop(context),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
-                      side: BorderSide(color: Colors.grey[300]!),
+                      side: BorderSide(color: DropTheme.border!),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -2843,7 +2846,7 @@ class _CoinSelectionDialogState extends State<CoinSelectionDialog> {
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
-                        color: Colors.grey[700],
+                        color: DropTheme.muted,
                       ),
                     ),
                   ),
@@ -2860,7 +2863,7 @@ class _CoinSelectionDialogState extends State<CoinSelectionDialog> {
                         : null,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: primaryColor,
-                      disabledBackgroundColor: Colors.grey[300],
+                      disabledBackgroundColor: DropTheme.border,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       elevation: 0,
                       shape: RoundedRectangleBorder(
@@ -2907,7 +2910,7 @@ class _QuickSelectButton extends StatelessWidget {
         decoration: BoxDecoration(
           border: Border.all(color: primaryColor.withOpacity(0.5)),
           borderRadius: BorderRadius.circular(8),
-          color: Colors.white,
+          color: DropTheme.card,
         ),
         child: Center(
           child: Text(

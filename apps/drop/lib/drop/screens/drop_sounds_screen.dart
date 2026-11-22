@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../service/ToneService.dart';
+import '../../drop/design/drop_theme.dart';
 
 /// Tone settings: pick the sound for each moment, in Driver mode and in Passenger mode.
 class DropSoundsScreen extends StatefulWidget {
@@ -50,7 +51,7 @@ class _DropSoundsScreenState extends State<DropSoundsScreen> {
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(s.title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-              Text(s.help, style: TextStyle(color: Colors.grey.shade700, fontSize: 13)),
+              Text(s.help, style: TextStyle(color: DropTheme.muted, fontSize: 13)),
             ]),
           ),
           for (final o in s.options)

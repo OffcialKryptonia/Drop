@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'drop/design/drop_theme.dart';
 import 'manage_imports.dart';
 
 class AppTheme {
@@ -19,7 +20,7 @@ class AppTheme {
     iconTheme: IconThemeData(color: scaffoldSecondaryDark),
     textTheme: TextTheme(titleLarge: TextStyle()),
     unselectedWidgetColor: Colors.black,
-    dividerColor: viewLineColor,
+    dividerColor: const Color(0xFFEAEAEA),
     cardColor: Colors.white,
     listTileTheme: ListTileThemeData(iconColor: Colors.white),
     dialogTheme: DialogThemeData(shape: dialogShape()),
@@ -46,28 +47,10 @@ class AppTheme {
     ),
   );
 
-  static final ThemeData darkTheme = ThemeData(
-    primarySwatch: createMaterialColor(primaryColor),
-    primaryColor: primaryColor,
-    scaffoldBackgroundColor: scaffoldColorDark,
-    fontFamily: GoogleFonts.nunito().fontFamily,
-    bottomNavigationBarTheme:
-        BottomNavigationBarThemeData(backgroundColor: scaffoldSecondaryDark),
-    iconTheme: IconThemeData(color: Colors.white),
-    textTheme: TextTheme(titleLarge: TextStyle(color: textSecondaryColor)),
-    unselectedWidgetColor: Colors.white60,
-    dividerColor: Colors.white12,
-    cardColor: scaffoldSecondaryDark,
-    dialogTheme: DialogThemeData(shape: dialogShape()),
-    appBarTheme: AppBarTheme(
-      backgroundColor: primaryColor,
-      systemOverlayStyle: SystemUiOverlayStyle(
-        statusBarIconBrightness: Brightness.light,
-        statusBarBrightness: Brightness.dark,
-      ),
-    ),
-  ).copyWith(
-    pageTransitionsTheme: PageTransitionsTheme(
+  static final ThemeData darkTheme = DropTheme.dark(
+    primary: primaryColor,
+    fontFamily: GoogleFonts.play().fontFamily,
+    transitions: PageTransitionsTheme(
       builders: <TargetPlatform, PageTransitionsBuilder>{
         TargetPlatform.android: OpenUpwardsPageTransitionsBuilder(),
         TargetPlatform.linux: OpenUpwardsPageTransitionsBuilder(),

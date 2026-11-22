@@ -27,6 +27,7 @@ import '../utils/Extensions/ConformationDialog.dart';
 import '../utils/Images.dart';
 import 'DashboardScreen.dart';
 import 'RideHistoryScreen.dart';
+import '../../drop/design/drop_theme.dart';
 
 //ignore:must_be_immutable
 class DetailScreen extends StatefulWidget {
@@ -293,7 +294,7 @@ class DetailScreenState extends State<DetailScreen> {
                                   margin: EdgeInsets.symmetric(horizontal: 40),
                                   padding: EdgeInsets.all(16),
                                   decoration: BoxDecoration(
-                                    color: Colors.white,
+                                    color: DropTheme.card,
                                     borderRadius: BorderRadius.circular(defaultRadius),
                                     boxShadow: [
                                       BoxShadow(color: primaryColor.withValues(alpha: 0.4), blurRadius: 10, spreadRadius: 0, offset: Offset(0.0, 0.0)),
@@ -624,7 +625,7 @@ class DetailScreenState extends State<DetailScreen> {
                       ),
                       AppButtonWidget(
                         textColor: primaryColor,
-                        color: Colors.white,
+                        color: DropTheme.card,
                         padding: EdgeInsets.symmetric(horizontal: 8, vertical: 0),
                         height: 30,
                         shapeBorder: RoundedRectangleBorder(
@@ -799,7 +800,7 @@ class DetailScreenState extends State<DetailScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(language.youEarned, style: secondaryTextStyle(color: Colors.black)),
+                    Text(language.youEarned, style: secondaryTextStyle(color: DropTheme.text)),
                     Row(
                       children: [printAmountWidget(amount: '${youWillGet.toStringAsFixed(digitAfterDecimal)}', color: Colors.green, size: 14, weight: FontWeight.normal)],
                     ),
@@ -835,7 +836,7 @@ class DetailScreenState extends State<DetailScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(language.youEarned, style: secondaryTextStyle(color: Colors.black)),
+                    Text(language.youEarned, style: secondaryTextStyle(color: DropTheme.text)),
                     Row(
                       children: [printAmountWidget(amount: '${youWillGet.toStringAsFixed(digitAfterDecimal)}', color: Colors.green, size: 14, weight: FontWeight.normal)],
                     ),

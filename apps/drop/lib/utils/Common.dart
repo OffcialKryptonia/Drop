@@ -10,6 +10,7 @@ import '../screens/DriverApplicationScreen.dart';
 import '../service/PushService.dart';
 import '../service/DriverApplicationApi.dart' show DriverApplicationApi;
 import '../service/call/call_controller.dart';
+import '../drop/design/drop_theme.dart';
 
 Widget dotIndicator(list, i) {
   return SizedBox(
@@ -40,7 +41,7 @@ InputDecoration inputDecoration(BuildContext context, {String? label, Widget? pr
     border: OutlineInputBorder(borderRadius: BorderRadius.circular(defaultRadius), borderSide: BorderSide(color: dividerColor)),
     focusedErrorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(defaultRadius), borderSide: BorderSide(color: dividerColor)),
     disabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(defaultRadius), borderSide: BorderSide(color: dividerColor)),
-    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(defaultRadius), borderSide: BorderSide(color: Colors.black)),
+    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(defaultRadius), borderSide: BorderSide(color: DropTheme.text)),
     enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(defaultRadius), borderSide: BorderSide(color: dividerColor)),
     errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(defaultRadius), borderSide: BorderSide(color: Colors.red)),
     alignLabelWithHint: alignWithHint,
@@ -126,7 +127,7 @@ Widget loaderWidget() {
     child: Container(
       padding: EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DropTheme.card,
         borderRadius: BorderRadius.circular(8),
         boxShadow: [
           BoxShadow(color: Colors.grey.withValues(alpha: 0.4), blurRadius: 10, spreadRadius: 0, offset: Offset(0.0, 0.0)),
@@ -841,7 +842,7 @@ Widget popupDialog(String title, String message, BuildContext context) {
       padding: EdgeInsets.all(20),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
-        color: Colors.white,
+        color: DropTheme.card,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -878,7 +879,7 @@ Widget popupDialog(String title, String message, BuildContext context) {
             textAlign: TextAlign.left,
             style: TextStyle(
               fontSize: 14,
-              color: Colors.black87,
+              color: DropTheme.text,
             ),
           ),
           SizedBox(height: 24),

@@ -9,6 +9,7 @@ import '../utils/Colors.dart';
 import '../utils/Extensions/AppButtonWidget.dart';
 import '../utils/Extensions/app_common.dart';
 import '../utils/Images.dart';
+import '../../drop/design/drop_theme.dart';
 
 class UpdateAvailable extends StatefulWidget {
   final bool? force;
@@ -42,7 +43,7 @@ class _UpdateAvailableState extends State<UpdateAvailable> {
               ),
               padding: EdgeInsets.all(16),
               decoration: BoxDecoration(
-                  color: Colors.white, borderRadius: BorderRadius.circular(12)),
+                  color: DropTheme.card, borderRadius: BorderRadius.circular(12)),
               child: Stack(children: [
                 Column(
                   mainAxisAlignment: MainAxisAlignment.center,

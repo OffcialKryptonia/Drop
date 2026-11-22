@@ -1,5 +1,6 @@
 
 import 'package:flutter/material.dart';
+import '../../drop/design/drop_theme.dart';
 
 
 /// The horizontal row of ride types on the passenger home sheet: a vehicle picture, the name and the seats.
@@ -37,7 +38,7 @@ class DropRideTypeStrip extends StatelessWidget {
                   Row(mainAxisSize: MainAxisSize.min, children: [
                     Text('${t['name']}', style: TextStyle(fontWeight: on ? FontWeight.w800 : FontWeight.w600, fontSize: 14)),
                     const SizedBox(width: 6),
-                    Icon(Icons.person, size: 14, color: Colors.grey.shade700),
+                    Icon(Icons.person, size: 14, color: DropTheme.muted),
                     Text('${t['capacity'] ?? ''}', style: TextStyle(fontSize: 13, color: Colors.grey.shade800)),
                   ]),
                 ]),

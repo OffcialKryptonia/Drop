@@ -5,11 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex">
   <title>Drop Admin</title>
+  <meta name="theme-color" content="#111111">
+  <script src="/admin/theme.js"></script>
   <link rel="stylesheet" href="/admin/admin.css">
 </head>
 <body>
   <!-- Signed-out screens -->
   <main id="authWrap">
+    <div class="theme-slot"></div>
     <section id="login" class="card" hidden>
       <h2>Sign in</h2>
       <p class="muted">Administrator account only.</p>
@@ -47,6 +50,7 @@
     <nav class="side" id="side" aria-label="Main">
       <div class="brand"><div class="mark">D</div> Drop Admin</div>
       <div id="navLinks"></div>
+      <div class="theme-slot"></div>
       <div class="who" id="who"></div>
       <p style="margin:12px 8px 0"><button class="ghost small" id="logout">Sign out</button></p>
     </nav>

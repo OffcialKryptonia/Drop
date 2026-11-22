@@ -2,6 +2,7 @@ import 'package:drop/model/search_location_model.dart' hide Text;
 
 import '../manage_imports.dart';
 import '../model/select_location_model.dart';
+import '../drop/design/drop_theme.dart';
 
 class GoogleMapScreen extends StatefulWidget {
   final bool? isDestination;
@@ -84,6 +85,7 @@ class GoogleMapScreenState extends State<GoogleMapScreen> {
             selectedPosition == null
                 ? Center(child: loaderWidget())
                 : GoogleMap(
+                    style: DropTheme.isDark ? DropTheme.googleDarkMapStyle : null,
                     zoomControlsEnabled: false,
                     initialCameraPosition: CameraPosition(
                       target: selectedPosition!,
@@ -123,7 +125,7 @@ class GoogleMapScreenState extends State<GoogleMapScreen> {
                     decoration: InputDecoration(
                       hintText: "Search for a place",
                       filled: true,
-                      fillColor: Colors.white,
+                      fillColor: DropTheme.card,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                         borderSide: BorderSide.none,
@@ -139,7 +141,7 @@ class GoogleMapScreenState extends State<GoogleMapScreen> {
                       margin: EdgeInsets.only(top: 5),
                       height: 200,
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: DropTheme.card,
                         borderRadius: BorderRadius.circular(8),
                         boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 5)],
                       ),
@@ -187,7 +189,7 @@ class GoogleMapScreenState extends State<GoogleMapScreen> {
                   Container(
                     padding: EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: DropTheme.card,
                       borderRadius: BorderRadius.circular(8),
                       boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 5)],
                     ),
