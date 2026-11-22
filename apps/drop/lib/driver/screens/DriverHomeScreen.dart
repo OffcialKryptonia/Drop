@@ -89,12 +89,16 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _loadProfile();
-    MapConfig.load().then((c) async {
-      mapConfig = c;
-      if (c.mapboxRegionBorderingEnabled) {
-        try { regionBoundaries = await RegionApi.boundaries(); } catch (_) { regionBoundaries = const []; }
+    // The map shell draws from the last saved settings at once (also offline); fresh settings replace them when they arrive.
+    MapConfig.loadSaved().then((saved) {
+      if (mounted) setState(() { if (saved != null) mapConfig = saved; mapLoaded = true; });
+    });
+    MapConfig.load(refresh: true).then((c) async {
+      List<List<LatLng>> borders = regionBoundaries;
+      if (c.mapboxRegionBorderingEnabled && borders.isEmpty) {
+        try { borders = await RegionApi.boundaries(); } catch (_) { borders = const []; }
       }
-      if (mounted) setState(() { mapConfig = c; mapLoaded = true; });
+      if (mounted) setState(() { mapConfig = c; regionBoundaries = borders; mapLoaded = true; });
     });
     _locateMe();
     _load(resume: true);
