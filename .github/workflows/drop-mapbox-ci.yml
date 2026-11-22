@@ -92,5 +92,7 @@ jobs:
         run: npx --yes tsx test/calls.test.ts
       - name: Fare bidding unit tests
         run: npx --yes tsx test/bidding.test.ts
+      - name: Admin light/dark theme checks
+        run: npx --yes tsx test/admin-theme.test.ts
       - name: Ride-flow smoke test syntax
         run: node --check test/rides-trip-smoke.mjs
