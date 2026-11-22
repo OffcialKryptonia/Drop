@@ -6,6 +6,8 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart' show LatLng;
 import 'package:share_plus/share_plus.dart';
 
+import '../main.dart' show sharedPref;
+import '../utils/Constants.dart' show LATITUDE, LONGITUDE;
 import '../components/DropMap.dart';
 import '../components/LiveLocation.dart';
 import '../components/RegionWatcher.dart';
