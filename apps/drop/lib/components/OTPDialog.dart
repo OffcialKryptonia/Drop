@@ -1,4 +1,5 @@
 import '../manage_imports.dart';
+import '../drop/design/drop_theme.dart';
 
 class OTPDialog extends StatefulWidget {
   final String? verificationId;
@@ -100,7 +101,7 @@ class OTPDialogState extends State<OTPDialog> {
                 onPressed: () {
                   Navigator.pop(context);
                 },
-                icon: Icon(Icons.cancel_outlined, color: Colors.black),
+                icon: Icon(Icons.cancel_outlined, color: DropTheme.text),
               )
             ],
           ),
@@ -197,7 +198,7 @@ class OTPDialogState extends State<OTPDialog> {
                     onTap: () {
                       Navigator.pop(context);
                     },
-                    child: Icon(Icons.cancel_outlined, color: Colors.black)),
+                    child: Icon(Icons.cancel_outlined, color: DropTheme.text)),
               ),
               Icon(Icons.message, color: primaryColor, size: 50),
               SizedBox(height: 16),

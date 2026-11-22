@@ -1,4 +1,5 @@
 import '../manage_imports.dart';
+import '../drop/design/drop_theme.dart';
 
 class ScheduleRideListScreen extends StatefulWidget {
   ScheduleRideListScreen({super.key});
@@ -62,7 +63,7 @@ class _ScheduleRideListScreenState extends State<ScheduleRideListScreen> {
                   padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   child: Text(
                     "🚖 ${language.schedule_list_desc}",
-                    style: secondaryTextStyle(size: 14, color: Colors.black, weight: FontWeight.bold),
+                    style: secondaryTextStyle(size: 14, color: DropTheme.text, weight: FontWeight.bold),
                   ),
                 ),
                 Expanded(
@@ -78,7 +79,7 @@ class _ScheduleRideListScreenState extends State<ScheduleRideListScreen> {
                             padding: EdgeInsets.all(8),
                             margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                             decoration: BoxDecoration(
-                              color: Colors.white,
+                              color: DropTheme.card,
                               border: Border.all(color: primaryColor),
                               borderRadius: BorderRadius.circular(defaultRadius),
                             ),
@@ -99,7 +100,7 @@ class _ScheduleRideListScreenState extends State<ScheduleRideListScreen> {
                                               Container(
                                                 padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                                 decoration: BoxDecoration(
-                                                  color: Colors.grey.shade300,
+                                                  color: DropTheme.border,
                                                   borderRadius: BorderRadius.circular(8),
                                                 ),
                                                 child: Text(
@@ -278,7 +279,7 @@ class _ScheduleRideListScreenState extends State<ScheduleRideListScreen> {
                                     if (schedule_ride_request[i].multiDropLocation != null && schedule_ride_request[i].multiDropLocation!.isNotEmpty)
                                       AppButtonWidget(
                                         textColor: primaryColor,
-                                        color: Colors.white,
+                                        color: DropTheme.card,
                                         padding: EdgeInsets.symmetric(horizontal: 8, vertical: 0),
                                         // height: 30,
                                         shapeBorder: RoundedRectangleBorder(borderRadius: BorderRadius.circular(defaultRadius), side: BorderSide(color: primaryColor)),
@@ -341,7 +342,7 @@ class _ScheduleRideListScreenState extends State<ScheduleRideListScreen> {
                                           AppButtonWidget(
                                             text: language.cancel,
                                             textColor: primaryColor,
-                                            color: Colors.white,
+                                            color: DropTheme.card,
                                             shapeBorder: RoundedRectangleBorder(borderRadius: BorderRadius.circular(defaultRadius), side: BorderSide(color: primaryColor)),
                                             onTap: () async {
                                               showModalBottomSheet(
@@ -400,7 +401,7 @@ class _ScheduleRideListScreenState extends State<ScheduleRideListScreen> {
       padding: EdgeInsets.all(14),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey.shade300),
+        border: Border.all(color: DropTheme.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -425,7 +426,7 @@ class _ScheduleRideListScreenState extends State<ScheduleRideListScreen> {
                 "${language.flightNumber}:",
                 style: TextStyle(
                   fontSize: 14,
-                  color: Colors.grey.shade600,
+                  color: DropTheme.muted,
                 ),
               ),
               SizedBox(width: 6),
@@ -442,7 +443,7 @@ class _ScheduleRideListScreenState extends State<ScheduleRideListScreen> {
                 "|  ${language.terminal}:",
                 style: TextStyle(
                   fontSize: 14,
-                  color: Colors.grey.shade600,
+                  color: DropTheme.muted,
                 ),
               ),
               SizedBox(width: 6),
@@ -451,7 +452,7 @@ class _ScheduleRideListScreenState extends State<ScheduleRideListScreen> {
                 style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.bold,
-                  color: Colors.black87,
+                  color: DropTheme.text,
                 ),
               ),
             ],
@@ -478,7 +479,7 @@ class _ScheduleRideListScreenState extends State<ScheduleRideListScreen> {
                   "${language.numberPlate}:",
                   style: TextStyle(
                     fontSize: 14,
-                    color: Colors.grey.shade600,
+                    color: DropTheme.muted,
                   ),
                 ),
                 SizedBox(width: 6),
@@ -487,7 +488,7 @@ class _ScheduleRideListScreenState extends State<ScheduleRideListScreen> {
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.bold,
-                    color: Colors.black87,
+                    color: DropTheme.text,
                   ),
                 ),
               ],
@@ -499,7 +500,7 @@ class _ScheduleRideListScreenState extends State<ScheduleRideListScreen> {
                   "${language.carModel}:",
                   style: TextStyle(
                     fontSize: 14,
-                    color: Colors.grey.shade600,
+                    color: DropTheme.muted,
                   ),
                 ),
                 SizedBox(width: 6),
@@ -508,7 +509,7 @@ class _ScheduleRideListScreenState extends State<ScheduleRideListScreen> {
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.bold,
-                    color: Colors.black87,
+                    color: DropTheme.text,
                   ),
                 ),
               ],
@@ -520,7 +521,7 @@ class _ScheduleRideListScreenState extends State<ScheduleRideListScreen> {
                   "${language.vehicleColor}:",
                   style: TextStyle(
                     fontSize: 14,
-                    color: Colors.grey.shade600,
+                    color: DropTheme.muted,
                   ),
                 ),
                 SizedBox(width: 6),
@@ -529,7 +530,7 @@ class _ScheduleRideListScreenState extends State<ScheduleRideListScreen> {
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.bold,
-                    color: Colors.black87,
+                    color: DropTheme.text,
                   ),
                 ),
               ],

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:drop/driver/main.dart';
+import '../../drop/design/drop_theme.dart';
 
 class TaxiCourierButton extends StatelessWidget {
   final String? ScheduleTime;
@@ -43,7 +44,7 @@ class TaxiCourierButton extends StatelessWidget {
             Text(
               "${language.schedule_at}: ${formattedDate} ${formattedTime}",
               style: TextStyle(
-                color: Colors.black87,
+                color: DropTheme.text,
                 fontWeight: FontWeight.w600,
                 fontSize: 12,
               ),

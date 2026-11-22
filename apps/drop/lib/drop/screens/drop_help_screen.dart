@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../service/DriverApplicationApi.dart';
 import '../../utils/Colors.dart';
+import '../../drop/design/drop_theme.dart';
 
 /// Help & complaints for riders and drivers: send a complaint, follow DROP's replies.
 class DropHelpScreen extends StatefulWidget {
@@ -128,7 +129,7 @@ class _NewComplaintState extends State<_NewComplaint> {
         TextField(controller: subject, maxLength: 150, decoration: InputDecoration(labelText: 'Subject', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)))),
         const SizedBox(height: 12),
         TextField(controller: description, maxLines: 6, maxLength: 3000, decoration: InputDecoration(labelText: 'What happened?', alignLabelWithHint: true, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)))),
-        if (widget.rideId != null) Padding(padding: const EdgeInsets.only(bottom: 8), child: Text('This will be linked to your trip #${widget.rideId}.', style: TextStyle(color: Colors.grey.shade700))),
+        if (widget.rideId != null) Padding(padding: EdgeInsets.only(bottom: 8), child: Text('This will be linked to your trip #${widget.rideId}.', style: TextStyle(color: DropTheme.muted))),
         const SizedBox(height: 8),
         SizedBox(
           height: 48,
@@ -209,7 +210,7 @@ class _ComplaintThreadState extends State<_ComplaintThread> {
                     child: ListView(padding: const EdgeInsets.all(16), children: [
                       Text((d['subject'] ?? '').toString(), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
                       const SizedBox(height: 4),
-                      Text((d['status_text'] ?? '').toString(), style: TextStyle(color: Colors.grey.shade700)),
+                      Text((d['status_text'] ?? '').toString(), style: TextStyle(color: DropTheme.muted)),
                       const SizedBox(height: 12),
                       Text((d['description'] ?? '').toString()),
                       const Divider(height: 32),
@@ -220,14 +221,14 @@ class _ComplaintThreadState extends State<_ComplaintThread> {
                             margin: const EdgeInsets.only(bottom: 8),
                             padding: const EdgeInsets.all(10),
                             constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
-                            decoration: BoxDecoration(color: m['added_by'] == 'admin' ? Colors.grey.shade200 : primaryColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(12)),
+                            decoration: BoxDecoration(color: m['added_by'] == 'admin' ? DropTheme.border : primaryColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(12)),
                             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                               if (m['added_by'] == 'admin') const Text('DROP support', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
                               Text((m['comment'] ?? '').toString()),
                             ]),
                           ),
                         ),
-                      if (comments.isEmpty) Text('No replies yet. We will answer here.', style: TextStyle(color: Colors.grey.shade700)),
+                      if (comments.isEmpty) Text('No replies yet. We will answer here.', style: TextStyle(color: DropTheme.muted)),
                     ]),
                   ),
                   SafeArea(

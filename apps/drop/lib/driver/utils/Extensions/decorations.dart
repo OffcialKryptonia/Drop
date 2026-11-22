@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:drop/driver/main.dart';
 import 'package:drop/driver/utils/Constants.dart';
+import '../../../drop/design/drop_theme.dart';
 
 /// returns Radius
 BorderRadius radius([double? radius]) {
@@ -48,7 +49,7 @@ Decoration boxDecorationDefault({
         ? null
         : (borderRadius ?? radius()),
     boxShadow: boxShadow ?? defaultBoxShadow(),
-    color: color ?? Colors.white,
+    color: color ?? DropTheme.card,
     gradient: gradient,
     border: border,
     shape: shape ?? BoxShape.rectangle,

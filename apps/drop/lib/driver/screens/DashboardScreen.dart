@@ -57,6 +57,7 @@ import '../utils/Images.dart';
 import 'LocationPermissionScreen.dart';
 import 'NotificationScreen.dart';
 import 'ScheduleRideListScreen.dart';
+import '../../drop/design/drop_theme.dart';
 
 class DashboardScreen extends StatefulWidget {
   @override
@@ -1662,7 +1663,9 @@ class DashboardScreenState extends State<DashboardScreen> with SingleTickerProvi
                 myLocationButtonEnabled: false,
                 myLocationEnabled: false,
                 compassEnabled: true,
-                padding: EdgeInsets.only(top: context.statusBarHeight + 4 + 24),
+                style: DropTheme.isDark ? DropTheme.googleDarkMapStyle : null,
+                // Compass sits below the top bars, clear of the status bar and the bottom sheet.
+                padding: EdgeInsets.only(top: context.statusBarHeight + 88, bottom: 8),
                 // padding: const EdgeInsets.only(top: 70),
                 onMapCreated: onMapCreated,
                 initialCameraPosition: CameraPosition(
@@ -1740,7 +1743,7 @@ class DashboardScreenState extends State<DashboardScreen> with SingleTickerProvi
                                           servicesListData != null && duration >= 0
                                               ? Container(
                                                   decoration: BoxDecoration(
-                                                    color: Colors.white,
+                                                    color: DropTheme.card,
                                                     borderRadius: BorderRadius.only(topLeft: Radius.circular(2 * defaultRadius), topRight: Radius.circular(2 * defaultRadius)),
                                                   ),
                                                   child: SingleChildScrollView(
@@ -1896,7 +1899,7 @@ class DashboardScreenState extends State<DashboardScreen> with SingleTickerProvi
                                                                       children: [
                                                                         Icon(Icons.check_circle, color: Colors.green),
                                                                         5.width,
-                                                                        Text(language.youWillGet, style: boldTextStyle(color: Colors.black)),
+                                                                        Text(language.youWillGet, style: boldTextStyle(color: DropTheme.text)),
                                                                       ],
                                                                     ),
                                                                     printAmountWidget(amount: '${youWillGet.toStringAsFixed(digitAfterDecimal)}', color: Colors.green, size: 14)
@@ -1919,7 +1922,7 @@ class DashboardScreenState extends State<DashboardScreen> with SingleTickerProvi
                                                                   startAddress: servicesListData!.startAddress),
                                                               if (servicesListData != null && servicesListData!.otherRiderData != null)
                                                                 Divider(
-                                                                  color: Colors.grey.shade300,
+                                                                  color: DropTheme.border,
                                                                   thickness: 0.7,
                                                                   height: 8,
                                                                 ),
@@ -2001,7 +2004,7 @@ class DashboardScreenState extends State<DashboardScreen> with SingleTickerProvi
                                         width: MediaQuery.of(context).size.width,
                                         padding: EdgeInsets.all(16),
                                         decoration: BoxDecoration(
-                                          color: Colors.white,
+                                          color: DropTheme.card,
                                           borderRadius: BorderRadius.only(topLeft: Radius.circular(2 * defaultRadius), topRight: Radius.circular(2 * defaultRadius)),
                                         ),
                                         child: Column(
@@ -2298,7 +2301,7 @@ class DashboardScreenState extends State<DashboardScreen> with SingleTickerProvi
                     child: Container(
                       padding: EdgeInsets.all(4),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: DropTheme.card,
                         boxShadow: [
                           BoxShadow(color: Colors.black.withValues(alpha: 0.2), spreadRadius: 1),
                         ],
@@ -2369,7 +2372,7 @@ class DashboardScreenState extends State<DashboardScreen> with SingleTickerProvi
           child: Container(
             padding: EdgeInsets.all(4),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: DropTheme.card,
               boxShadow: [
                 BoxShadow(color: Colors.black.withValues(alpha: 0.2), spreadRadius: 1),
               ],
@@ -2383,7 +2386,7 @@ class DashboardScreenState extends State<DashboardScreen> with SingleTickerProvi
           child: Container(
             padding: EdgeInsets.symmetric(vertical: 4, horizontal: 8),
             decoration: BoxDecoration(
-                color: Colors.white,
+                color: DropTheme.card,
                 boxShadow: [
                   BoxShadow(color: Colors.black.withValues(alpha: 0.2), spreadRadius: 1),
                 ],
@@ -2415,7 +2418,7 @@ class DashboardScreenState extends State<DashboardScreen> with SingleTickerProvi
           child: Container(
             padding: EdgeInsets.all(4),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: DropTheme.card,
               boxShadow: [
                 BoxShadow(color: Colors.black.withValues(alpha: 0.2), spreadRadius: 1),
               ],
@@ -2471,7 +2474,7 @@ class DashboardScreenState extends State<DashboardScreen> with SingleTickerProvi
                 duration: Duration(milliseconds: 600),
                 decoration: BoxDecoration(
                     // color:isOnLine?Colors.green:Colors.red,
-                    color: Colors.white,
+                    color: DropTheme.card,
                     borderRadius: BorderRadius.circular(30),
                     border: Border.all(
                       color: isOnLine ? Colors.green : Colors.red,
@@ -2517,7 +2520,7 @@ class DashboardScreenState extends State<DashboardScreen> with SingleTickerProvi
                   // width: MediaQuery.of(context).size.width,
                   text: language.cancel,
                   textColor: primaryColor,
-                  color: Colors.white,
+                  color: DropTheme.card,
                   shapeBorder: RoundedRectangleBorder(borderRadius: BorderRadius.circular(defaultRadius), side: BorderSide(color: primaryColor)),
                   // color: Colors.grey,
                   // textStyle: boldTextStyle(color: Colors.white),
@@ -2815,7 +2818,7 @@ class DashboardScreenState extends State<DashboardScreen> with SingleTickerProvi
         if (servicesListData != null && servicesListData!.multiDropLocation != null && servicesListData!.multiDropLocation!.isNotEmpty)
           AppButtonWidget(
             textColor: primaryColor,
-            color: Colors.white,
+            color: DropTheme.card,
             padding: EdgeInsets.symmetric(horizontal: 8, vertical: 0),
             height: 30,
             shapeBorder: RoundedRectangleBorder(borderRadius: BorderRadius.circular(defaultRadius), side: BorderSide(color: primaryColor)),
@@ -2996,7 +2999,7 @@ class DashboardScreenState extends State<DashboardScreen> with SingleTickerProvi
           servicesListData != null && duration >= 0
               ? Container(
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: DropTheme.card,
                     borderRadius: BorderRadius.only(topLeft: Radius.circular(2 * defaultRadius), topRight: Radius.circular(2 * defaultRadius)),
                   ),
                   child: SingleChildScrollView(
@@ -3124,7 +3127,7 @@ class DashboardScreenState extends State<DashboardScreen> with SingleTickerProvi
                                       children: [
                                         Icon(Icons.check_circle, color: Colors.green),
                                         5.width,
-                                        Text(language.youWillGet, style: boldTextStyle(color: Colors.black)),
+                                        Text(language.youWillGet, style: boldTextStyle(color: DropTheme.text)),
                                       ],
                                     ),
                                     printAmountWidget(amount: '${youWillGet.toStringAsFixed(digitAfterDecimal)}', color: Colors.green, size: 14)
@@ -3147,7 +3150,7 @@ class DashboardScreenState extends State<DashboardScreen> with SingleTickerProvi
                                   startAddress: servicesListData!.startAddress),
                               if (servicesListData != null && servicesListData!.otherRiderData != null)
                                 Divider(
-                                  color: Colors.grey.shade300,
+                                  color: DropTheme.border,
                                   thickness: 0.7,
                                   height: 8,
                                 ),
@@ -3194,7 +3197,7 @@ class DashboardScreenState extends State<DashboardScreen> with SingleTickerProvi
                                         await showModalBottomSheet(
                                             context: context,
                                             isDismissible: false,
-                                            backgroundColor: Colors.white,
+                                            backgroundColor: DropTheme.card,
                                             isScrollControlled: true,
                                             builder: (context) {
                                               return StatefulBuilder(builder: (context, stUpdate) {
@@ -3484,7 +3487,7 @@ class DashboardScreenState extends State<DashboardScreen> with SingleTickerProvi
           servicesListData != null
               ? Container(
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: DropTheme.card,
                     borderRadius: BorderRadius.only(topLeft: Radius.circular(2 * defaultRadius), topRight: Radius.circular(2 * defaultRadius)),
                   ),
                   child: SingleChildScrollView(
@@ -3587,7 +3590,7 @@ class DashboardScreenState extends State<DashboardScreen> with SingleTickerProvi
                               width: MediaQuery.of(context).size.width,
                               text: language.cancel_my_bid,
                               textColor: primaryColor,
-                              color: Colors.white,
+                              color: DropTheme.card,
                               shapeBorder: RoundedRectangleBorder(borderRadius: BorderRadius.circular(defaultRadius), side: BorderSide(color: primaryColor)),
                               onTap: () {
                                 rejectBid();
@@ -3648,7 +3651,7 @@ class DashboardScreenState extends State<DashboardScreen> with SingleTickerProvi
         height: 56,
         padding: EdgeInsets.all(6),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: DropTheme.card,
           borderRadius: BorderRadius.circular(12),
           boxShadow: [BoxShadow(color: Colors.grey, blurRadius: 2, spreadRadius: 1)],
         ),

@@ -10,6 +10,7 @@ import 'package:maplibre_gl/maplibre_gl.dart' as ml;
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart' as mb;
 
 import 'VehicleIcons.dart';
+import '../drop/design/drop_theme.dart';
 
 class DropMarker {
   final String id;
@@ -46,6 +47,13 @@ class DropMap extends StatefulWidget {
   final void Function(ll.LatLng center)? onIdle;
   final DropMapController? controller;
 
+  /// Space (below the status bar) kept clear for the screen's own top bars before the compass starts.
+  /// The compass sits at the top-right under this line, away from attribution, zoom and location buttons.
+  final double topInset;
+
+  /// Space at the bottom that attribution / logo / Google's controls must stay above (e.g. a bottom sheet's height).
+  final double bottomInset;
+
   const DropMap({
     Key? key,
     required this.provider,
@@ -63,6 +71,8 @@ class DropMap extends StatefulWidget {
     this.onMove,
     this.onIdle,
     this.controller,
+    this.topInset = 88,
+    this.bottomInset = 0,
   }) : super(key: key);
 
   @override
@@ -201,8 +211,51 @@ class _DropMapState extends State<DropMap> {
     if (!_isGoogle && !_isMapLibre && (widget.provider != 'mapbox' || _mapboxFailed)) _idle = Timer(const Duration(milliseconds: 450), () => widget.onIdle?.call(_center));
   }
 
+  bool get _dark => DropTheme.isDark;
+
+  /// Light/dark map style. Only the default style of each provider is swapped; a custom style chosen in Admin is respected.
+  String get _mapboxStyle => _dark && widget.mapboxStyleUri == 'mapbox://styles/mapbox/streets-v12' ? 'mapbox://styles/mapbox/dark-v11' : widget.mapboxStyleUri;
+  String get _libreStyle => _dark && widget.styleUrl == 'https://tiles.openfreemap.org/styles/liberty' ? 'https://tiles.openfreemap.org/styles/dark' : widget.styleUrl;
+
+  double _top(BuildContext c) => MediaQuery.paddingOf(c).top + widget.topInset;
+  double _bottom(BuildContext c) => MediaQuery.paddingOf(c).bottom + widget.bottomInset + 8;
+
+  Future<void> _applyMapboxOrnaments() async {
+    final map = _mapbox;
+    if (map == null || !mounted) return;
+    final top = _top(context), bottom = _bottom(context);
+    try {
+      await map.compass.updateSettings(mb.CompassSettings(position: mb.OrnamentPosition.TOP_RIGHT, marginTop: top, marginRight: 12, marginLeft: 0, marginBottom: 0));
+      await map.scaleBar.updateSettings(mb.ScaleBarSettings(enabled: false));
+      await map.logo.updateSettings(mb.LogoSettings(position: mb.OrnamentPosition.BOTTOM_LEFT, marginBottom: bottom, marginLeft: 8));
+      await map.attribution.updateSettings(mb.AttributionSettings(position: mb.OrnamentPosition.BOTTOM_LEFT, marginBottom: bottom, marginLeft: 92));
+    } catch (_) {
+      // Ornament placement is cosmetic; never fail the map over it.
+    }
+  }
+
+  String? _lastMapboxStyle;
+
+  void _syncMapboxStyle() {
+    final want = _mapboxStyle;
+    final map = _mapbox;
+    if (map == null || _lastMapboxStyle == null || _lastMapboxStyle == want) return;
+    _lastMapboxStyle = want;
+    _mapboxStyleReady = false;
+    map.style.setStyleURI(want).catchError((_) {});
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Re-place ornaments when safe-area / sheet insets change, and restyle when Light/Dark flips.
+    _applyMapboxOrnaments();
+    _syncMapboxStyle();
+  }
+
   @override
   Widget build(BuildContext context) {
+    _syncMapboxStyle();
     if (_isGoogle) return _googleMap();
     if (_isMapLibre) return _mapLibreMap();
     if (widget.provider == 'mapbox') {
@@ -214,7 +267,9 @@ class _DropMapState extends State<DropMap> {
 
   Future<void> _onMapboxCreated(mb.MapboxMap map) async {
     _mapbox = map;
+    _lastMapboxStyle = _mapboxStyle;
     try {
+      await _applyMapboxOrnaments();
       // Set the starting camera once. Supplying a new CameraViewportState on every
       // Flutter rebuild can re-assert the initial camera and fight user gestures.
       await map.setCamera(mb.CameraOptions(
@@ -290,7 +345,7 @@ class _DropMapState extends State<DropMap> {
 
   Widget _mapboxMap() => mb.MapWidget(
     key: ValueKey('drop-mapbox-${widget.mapboxStyleUri}'),
-    styleUri: widget.mapboxStyleUri,
+    styleUri: _mapboxStyle,
     onMapCreated: _onMapboxCreated,
     onStyleLoadedListener: (_) { _mapboxStyleReady = true; _syncMapboxAnnotations(); },
     onCameraChangeListener: (event) {
@@ -326,7 +381,12 @@ class _DropMapState extends State<DropMap> {
   }
 
   Widget _mapLibreMap() => ml.MapLibreMap(
-    styleString: widget.styleUrl,
+    styleString: _libreStyle,
+    compassEnabled: true,
+    compassViewPosition: ml.CompassViewPosition.topRight,
+    compassViewMargins: math.Point<num>(12, _top(context)),
+    attributionButtonPosition: ml.AttributionButtonPosition.bottomLeft,
+    attributionButtonMargins: math.Point<num>(8, _bottom(context)),
     initialCameraPosition: ml.CameraPosition(target: ml.LatLng(widget.initialCenter.latitude, widget.initialCenter.longitude), zoom: widget.initialZoom),
     trackCameraPosition: true,
     onMapCreated: (controller) { _mapLibre = controller; _mapLibreReady = true; },
@@ -340,6 +400,10 @@ class _DropMapState extends State<DropMap> {
     onMapCreated: (c) => _google = c,
     myLocationEnabled: widget.showMyLocation,
     myLocationButtonEnabled: false,
+    compassEnabled: true,
+    // Google moves its compass, logo and attribution with `padding`, so keep them clear of the top bars and sheets.
+    padding: EdgeInsets.only(top: _top(context), bottom: _bottom(context), right: 4),
+    style: _dark ? DropTheme.googleDarkMapStyle : null,
     zoomControlsEnabled: false,
     mapToolbarEnabled: false,
     onCameraMove: (p) => _moved(ll.LatLng(p.target.latitude, p.target.longitude)),
@@ -357,12 +421,24 @@ class _DropMapState extends State<DropMap> {
     mapController: _osm,
     options: fm.MapOptions(initialCenter: widget.initialCenter, initialZoom: widget.initialZoom, onMapReady: () => _osmReady = true, onPositionChanged: (camera, hasGesture) => _moved(camera.center)),
     children: [
-      fm.TileLayer(urlTemplate: widget.tileUrl, userAgentPackageName: 'com.kryptonia.drop'),
+      _dark
+          ? ColorFiltered(colorFilter: const ColorFilter.matrix(_osmDarkMatrix), child: fm.TileLayer(urlTemplate: widget.tileUrl, userAgentPackageName: 'com.kryptonia.drop'))
+          : fm.TileLayer(urlTemplate: widget.tileUrl, userAgentPackageName: 'com.kryptonia.drop'),
       if (widget.routePoints.length > 1) fm.PolylineLayer(polylines: [fm.Polyline(points: widget.routePoints, strokeWidth: 5, color: const Color(0xFF1A73E8), strokeCap: StrokeCap.round, strokeJoin: StrokeJoin.round)]),
       fm.MarkerLayer(markers: [for (final m in widget.markers)
         if (m.iconKey != null && _icons[m.iconKey!] != null) fm.Marker(point: m.point, width: VehicleIcons.logical, height: VehicleIcons.logical, alignment: Alignment.center, child: Transform.rotate(angle: m.heading * math.pi / 180, child: Image.memory(_icons[m.iconKey!]!, gaplessPlayback: true)))
         else fm.Marker(point: m.point, width: 44, height: 44, alignment: Alignment.topCenter, child: Icon(Icons.location_pin, color: m.color, size: 40))]),
-      fm.SimpleAttributionWidget(source: Text(widget.attribution)),
+      Padding(padding: EdgeInsets.only(bottom: _bottom(context) - 8), child: fm.SimpleAttributionWidget(source: Text(widget.attribution))),
     ],
   );
 }
+
+/// Inverts and slightly desaturates raster OSM tiles for dark mode (no separate dark tile server needed).
+const List<double> _osmDarkMatrix = <double>[
+  -0.8, 0, 0, 0, 255, //
+  0, -0.8, 0, 0, 255,
+  0, 0, -0.8, 0, 255,
+  0, 0, 0, 1, 0,
+];
+
+

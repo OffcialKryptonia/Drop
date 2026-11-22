@@ -1,5 +1,6 @@
 import '../manage_imports.dart';
 import 'package:scratcher/scratcher.dart';
+import '../drop/design/drop_theme.dart';
 
 class ScratchCouponScreen extends StatefulWidget {
   final num? coin_earnings;
@@ -117,7 +118,7 @@ class ScratchCouponScreenState extends State<ScratchCouponScreen> {
                       const SizedBox(height: 16),
                       Text(
                         'Scratch & Win!',
-                        style: boldTextStyle(size: 26, color: Colors.black87),
+                        style: boldTextStyle(size: 26, color: DropTheme.text),
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 8),
@@ -133,7 +134,7 @@ class ScratchCouponScreenState extends State<ScratchCouponScreen> {
                           width: double.infinity,
                           decoration: boxDecorationWithShadow(
                             borderRadius: BorderRadius.circular(24),
-                            backgroundColor: Colors.white,
+                            backgroundColor: DropTheme.card,
                             blurRadius: 24,
                             offset: const Offset(0, 10),
                             shadowColor: Colors.black.withValues(alpha: 0.08),
@@ -186,7 +187,7 @@ class ScratchCouponScreenState extends State<ScratchCouponScreen> {
                                     key: _scratchKey,
                                     brushSize: 50,
                                     threshold: _revealThreshold,
-                                    color: Colors.grey.shade300,
+                                    color: DropTheme.border,
                                     image: Image.asset(
                                       ic_scratch, // Ensure you have a pattern image
                                       fit: BoxFit.cover,
@@ -197,7 +198,7 @@ class ScratchCouponScreenState extends State<ScratchCouponScreen> {
                                       height: 200,
                                       width: 250,
                                       alignment: Alignment.center,
-                                      color: Colors.white,
+                                      color: DropTheme.card,
                                       child: Column(
                                         mainAxisAlignment: MainAxisAlignment.center,
                                         crossAxisAlignment: CrossAxisAlignment.center,

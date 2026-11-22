@@ -1,4 +1,5 @@
 import '../manage_imports.dart';
+import '../drop/design/drop_theme.dart';
 
 class Bidingscreen extends StatefulWidget {
   final Map? multiDropLocationNamesObj, multiDropObj, endLocation, source;
@@ -176,7 +177,7 @@ class BidingscreenState extends State<Bidingscreen> {
             width: MediaQuery.of(context).size.width,
             text: language.cancel,
             textColor: primaryColor,
-            color: Colors.white,
+            color: DropTheme.card,
             shapeBorder: RoundedRectangleBorder(borderRadius: BorderRadius.circular(defaultRadius), side: BorderSide(color: primaryColor)),
             onTap: () {
               showModalBottomSheet(
@@ -263,7 +264,7 @@ class BidingscreenState extends State<Bidingscreen> {
                             if (widget.multiDropObj != null && widget.multiDropObj!.isNotEmpty)
                               AppButtonWidget(
                                 textColor: primaryColor,
-                                color: Colors.white,
+                                color: DropTheme.card,
                                 padding: EdgeInsets.symmetric(horizontal: 8, vertical: 0),
                                 height: 30,
                                 shapeBorder: RoundedRectangleBorder(borderRadius: BorderRadius.circular(defaultRadius), side: BorderSide(color: primaryColor)),
@@ -384,8 +385,8 @@ class BidingscreenState extends State<Bidingscreen> {
                                   child: Container(
                                       padding: EdgeInsets.only(left: 8, bottom: 8),
                                       decoration: BoxDecoration(
-                                          color: Colors.white,
-                                          // border: Border.all(color: Colors.grey.shade300),
+                                          color: DropTheme.card,
+                                          // border: Border.all(color: DropTheme.border),
                                           boxShadow: [BoxShadow(color: Colors.black45, spreadRadius: 1, blurRadius: 1)],
                                           borderRadius: BorderRadius.circular(14)),
                                       // decoration: BoxDecoration(border: Border.all(color: dividerColor), borderRadius: BorderRadius.circular(defaultRadius)),

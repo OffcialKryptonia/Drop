@@ -6,6 +6,7 @@ import '../main.dart';
 import '../network/RestApis.dart';
 import '../utils/Extensions/extension.dart';
 import '../utils/utils.dart';
+import '../../drop/design/drop_theme.dart';
 
 class EarningReportWidget extends StatefulWidget {
   @override
@@ -92,11 +93,11 @@ class EarningReportWidgetState extends State<EarningReportWidget> {
                               style: TextButton.styleFrom(),
                             ),
                             datePickerTheme: DatePickerThemeData(
-                                backgroundColor: Colors.white,
+                                backgroundColor: DropTheme.card,
                                 cancelButtonStyle: ButtonStyle(),
                                 headerBackgroundColor: Colors.white),
                             dialogTheme:
-                                DialogThemeData(backgroundColor: Colors.white),
+                                DialogThemeData(backgroundColor: DropTheme.card),
                           ),
                           child: DateTimePicker(
                             controller: fromDateController,
@@ -130,11 +131,11 @@ class EarningReportWidgetState extends State<EarningReportWidget> {
                               style: TextButton.styleFrom(),
                             ),
                             datePickerTheme: DatePickerThemeData(
-                                backgroundColor: Colors.white,
+                                backgroundColor: DropTheme.card,
                                 cancelButtonStyle: ButtonStyle(),
                                 headerBackgroundColor: Colors.white),
                             dialogTheme:
-                                DialogThemeData(backgroundColor: Colors.white),
+                                DialogThemeData(backgroundColor: DropTheme.card),
                           ),
                           child: DateTimePicker(
                             controller: toDateController,

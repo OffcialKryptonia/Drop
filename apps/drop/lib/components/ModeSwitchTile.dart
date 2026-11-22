@@ -1,6 +1,7 @@
 import '../manage_imports.dart';
 import '../screens/DriverApplicationScreen.dart';
 import '../service/ModeController.dart';
+import '../drop/design/drop_theme.dart';
 
 /// Menu button for the passenger/driver mode.
 /// target 'driver' (passenger menu): becomes "Become a driver" until an application exists, then shows its status,
@@ -80,12 +81,12 @@ class _ModeSwitchTileState extends State<ModeSwitchTile> {
         child: Container(
           padding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
-            color: enabled ? primaryColor : Colors.grey.shade200,
+            color: enabled ? primaryColor : DropTheme.border,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Row(
             children: [
-              Icon(Icons.swap_horiz, color: enabled ? Colors.white : Colors.grey.shade600),
+              Icon(Icons.swap_horiz, color: enabled ? Colors.white : DropTheme.muted),
               SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -93,7 +94,7 @@ class _ModeSwitchTileState extends State<ModeSwitchTile> {
                   children: [
                     Text(
                       apply ? 'Become a driver' : (toDriver && pending != null ? 'Driver application' : (toDriver ? 'Switch to driver' : 'Switch to passenger')),
-                      style: TextStyle(fontWeight: FontWeight.w600, color: enabled ? Colors.white : Colors.grey.shade700),
+                      style: TextStyle(fontWeight: FontWeight.w600, color: enabled ? Colors.white : DropTheme.muted),
                     ),
                     if (apply) Text('Apply online in minutes', style: TextStyle(fontSize: 12, color: Colors.white70)),
                     if (pending != null) Text(pending, style: TextStyle(fontSize: 12, color: Colors.white70)),

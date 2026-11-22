@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../service/DriverApplicationApi.dart';
+import '../../drop/design/drop_theme.dart';
+import '../design/drop_design.dart';
 
 /// What the rider chose on the "Enter your route" screen.
 class DropRouteResult {
@@ -186,7 +188,7 @@ class _DropRouteScreenState extends State<DropRouteScreen> {
   Widget _field({required TextEditingController c, required FocusNode f, required String label, required IconData icon, Widget? trailing, bool autofocus = false, bool readOnly = false}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14),
-      decoration: BoxDecoration(color: const Color(0xFFF1F0EC), borderRadius: BorderRadius.circular(14)),
+      decoration: BoxDecoration(color: DropTheme.cardAlt, borderRadius: BorderRadius.circular(14)),
       child: Row(children: [
         Icon(icon),
         const SizedBox(width: 12),
@@ -199,7 +201,7 @@ class _DropRouteScreenState extends State<DropRouteScreen> {
             onChanged: readOnly ? null : _onChanged,
             textInputAction: TextInputAction.search,
             style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
-            decoration: InputDecoration(labelText: label, border: InputBorder.none, floatingLabelBehavior: FloatingLabelBehavior.always, labelStyle: TextStyle(color: Colors.grey.shade700, fontSize: 15)),
+            decoration: InputDecoration(labelText: label, border: InputBorder.none, floatingLabelBehavior: FloatingLabelBehavior.always, labelStyle: TextStyle(color: DropTheme.muted, fontSize: 15)),
           ),
         ),
         if (trailing != null) trailing,
@@ -218,7 +220,7 @@ class _DropRouteScreenState extends State<DropRouteScreen> {
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
-              if (subtitle.isNotEmpty) Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 14, color: Colors.grey.shade600)),
+              if (subtitle.isNotEmpty) Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 14, color: DropTheme.muted)),
             ]),
           ),
           if (trailing != null) trailing,
@@ -235,8 +237,8 @@ class _DropRouteScreenState extends State<DropRouteScreen> {
         onTap: () => setState(() => _tab = id),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-          decoration: BoxDecoration(color: on ? const Color(0xFF1C1C1C) : const Color(0xFFF1F0EC), borderRadius: BorderRadius.circular(24)),
-          child: Text(label, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: on ? Colors.white : Colors.black87)),
+          decoration: BoxDecoration(color: on ? (DropTheme.isDark ? DropColors.primary : const Color(0xFF1C1C1C)) : DropTheme.cardAlt, borderRadius: BorderRadius.circular(24)),
+          child: Text(label, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: on ? Colors.white : DropTheme.text)),
         ),
       ),
     );
@@ -244,7 +246,7 @@ class _DropRouteScreenState extends State<DropRouteScreen> {
 
   List<Widget> _resultTiles() {
     if (_searching && _results.isEmpty) return [const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()))];
-    if (_results.isEmpty) return [Padding(padding: const EdgeInsets.all(24), child: Text('No places found. Try another name or a nearby landmark.', style: TextStyle(color: Colors.grey.shade700)))];
+    if (_results.isEmpty) return [Padding(padding: EdgeInsets.all(24), child: Text('No places found. Try another name or a nearby landmark.', style: TextStyle(color: DropTheme.muted)))];
     return [
       for (final p in _results)
         _tile(
@@ -252,7 +254,7 @@ class _DropRouteScreenState extends State<DropRouteScreen> {
           title: p['title']?.toString() ?? '',
           subtitle: p['subtitle']?.toString() ?? '',
           trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-            if (p['distance_km'] != null) Text('${p['distance_km']}km', style: TextStyle(color: Colors.grey.shade700)),
+            if (p['distance_km'] != null) Text('${p['distance_km']}km', style: TextStyle(color: DropTheme.muted)),
             if (_adding == null)
               IconButton(
                 icon: const Icon(Icons.bookmark_border),
@@ -266,7 +268,7 @@ class _DropRouteScreenState extends State<DropRouteScreen> {
   }
 
   List<Widget> _suggestedTiles() {
-    if (widget.recents.isEmpty) return [Padding(padding: const EdgeInsets.all(24), child: Text('Places you ride to will show here.', style: TextStyle(color: Colors.grey.shade700)))];
+    if (widget.recents.isEmpty) return [Padding(padding: EdgeInsets.all(24), child: Text('Places you ride to will show here.', style: TextStyle(color: DropTheme.muted)))];
     return [
       for (final r in widget.recents)
         () {
@@ -316,7 +318,7 @@ class _DropRouteScreenState extends State<DropRouteScreen> {
     if (_adding != null) {
       body = _hasQuery
           ? _resultTiles()
-          : [Padding(padding: const EdgeInsets.all(24), child: Text('Type the address you want to save as ${_adding == 'other' ? 'a place' : _adding}.', style: TextStyle(color: Colors.grey.shade700)))];
+          : [Padding(padding: EdgeInsets.all(24), child: Text('Type the address you want to save as ${_adding == 'other' ? 'a place' : _adding}.', style: TextStyle(color: DropTheme.muted)))];
     } else if (_tab == 'results' && _hasQuery) {
       body = _resultTiles();
     } else if (_tab == 'saved') {
@@ -325,7 +327,7 @@ class _DropRouteScreenState extends State<DropRouteScreen> {
       body = _suggestedTiles();
     }
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: DropTheme.scaffold,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -334,7 +336,7 @@ class _DropRouteScreenState extends State<DropRouteScreen> {
               const Center(child: Padding(padding: EdgeInsets.symmetric(vertical: 14), child: Text('Enter your route', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)))),
               Align(
                 alignment: Alignment.centerRight,
-                child: IconButton(style: IconButton.styleFrom(backgroundColor: const Color(0xFFF1F0EC)), icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+                child: IconButton(style: IconButton.styleFrom(backgroundColor: DropTheme.cardAlt), icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
               ),
             ]),
             const SizedBox(height: 8),

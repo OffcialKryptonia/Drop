@@ -8,6 +8,7 @@ import '../utils/Colors.dart';
 import '../utils/Common.dart';
 import '../utils/Extensions/app_common.dart';
 import '../model/ReviewsModel.dart';
+import '../../drop/design/drop_theme.dart';
 
 class ReviewsListScreen extends StatefulWidget {
   @override
@@ -120,7 +121,7 @@ class ReviewsListScreenState extends State<ReviewsListScreen> with TickerProvide
                               ),
                               Row(
                                 children: [
-                                  Icon(Icons.access_time_rounded, size: 13, color: Colors.grey.shade500),
+                                  Icon(Icons.access_time_rounded, size: 13, color: DropTheme.muted),
                                   SizedBox(width: 4),
                                   Text(
                                     createdAt != null ? DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.parse(createdAt).toLocal()) : '',
@@ -152,7 +153,7 @@ class ReviewsListScreenState extends State<ReviewsListScreen> with TickerProvide
                                         child: Container(
                                           padding: EdgeInsets.all(3),
                                           decoration: BoxDecoration(
-                                            color: rating > 0 ? Color(0xFFFFC107) : Colors.grey.shade400,
+                                            color: rating > 0 ? Color(0xFFFFC107) : DropTheme.border,
                                             shape: BoxShape.circle,
                                             border: Border.all(color: context.cardColor, width: 1.5),
                                           ),
@@ -188,14 +189,14 @@ class ReviewsListScreenState extends State<ReviewsListScreen> with TickerProvide
                                             Container(
                                               padding: EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                                               decoration: BoxDecoration(
-                                                color: rating > 0 ? Color(0xFFFFF8E1) : Colors.grey.shade100,
+                                                color: rating > 0 ? (DropTheme.isDark ? Color(0xFF3A2F12) : Color(0xFFFFF8E1)) : DropTheme.border,
                                                 borderRadius: BorderRadius.circular(20),
                                               ),
                                               child: Text(
                                                 rating > 0 ? '$rating / 5' : '${language.noRating}',
                                                 style: boldTextStyle(
                                                   size: 11,
-                                                  color: rating > 0 ? Color(0xFFF59E0B) : Colors.grey.shade500,
+                                                  color: rating > 0 ? Color(0xFFF59E0B) : DropTheme.muted,
                                                 ),
                                               ),
                                             ),
@@ -266,7 +267,7 @@ class ReviewsListScreenState extends State<ReviewsListScreen> with TickerProvide
       children: List.generate(5, (index) {
         return Icon(
           index < rating ? Icons.star_rounded : Icons.star_outline_rounded,
-          color: index < rating ? Color(0xFFFFC107) : Colors.grey.shade300,
+          color: index < rating ? Color(0xFFFFC107) : DropTheme.border,
           size: 18,
         );
       }),

@@ -11,6 +11,7 @@ import 'package:drop/driver/utils/Extensions/app_common.dart';
 import 'package:drop/driver/utils/Extensions/dataTypeExtensions.dart';
 
 import '../main.dart';
+import '../../drop/design/drop_theme.dart';
 
 class DriverPayoutListScreen extends StatefulWidget {
   const DriverPayoutListScreen({super.key});
@@ -117,10 +118,10 @@ class _DriverPayoutListScreenState extends State<DriverPayoutListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: DropTheme.scaffold,
       appBar: _buildAppBar(),
       body: RefreshIndicator(
-        color: Colors.black,
+        color: DropTheme.text,
         onRefresh: () => _loadPayouts(reset: true),
         child: _buildBody(),
       ),
@@ -147,9 +148,9 @@ class _DriverPayoutListScreenState extends State<DriverPayoutListScreen> {
 
   Widget _buildBody() {
     if (_isLoading && _records.isEmpty) {
-      return const Center(
+      return Center(
         child: CircularProgressIndicator(
-          color: Colors.black,
+          color: DropTheme.text,
           strokeWidth: 2,
         ),
       );
@@ -187,7 +188,7 @@ class _DriverPayoutListScreenState extends State<DriverPayoutListScreen> {
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.black,
+        color: DropTheme.text,
         borderRadius: BorderRadius.circular(20),
       ),
       child: Column(
@@ -237,8 +238,8 @@ class _DriverPayoutListScreenState extends State<DriverPayoutListScreen> {
               _SummaryPill(
                 label: 'Paid',
                 value: '${payoutRecord!.totalPayoutCount}',
-                bg: Colors.white,
-                fg: Colors.black,
+                bg: DropTheme.card,
+                fg: DropTheme.text,
               ),
               const SizedBox(width: 10),
               _SummaryPill(
@@ -272,7 +273,7 @@ class _DriverPayoutListScreenState extends State<DriverPayoutListScreen> {
                 margin: const EdgeInsets.only(right: 8),
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
-                  color: selected ? Colors.black : Colors.white,
+                  color: selected ? Colors.black : DropTheme.card,
                   borderRadius: BorderRadius.circular(30),
                   border: Border.all(
                     color: selected ? Colors.black : const Color(0xFFDDDDDD),
@@ -298,14 +299,14 @@ class _DriverPayoutListScreenState extends State<DriverPayoutListScreen> {
     final hasMore = _pagination != null && _currentPage < _pagination!.totalPages;
 
     if (_isLoadingMore) {
-      return const Padding(
+      return Padding(
         padding: EdgeInsets.symmetric(vertical: 24),
         child: Center(
           child: SizedBox(
             width: 22,
             height: 22,
             child: CircularProgressIndicator(
-              color: Colors.black,
+              color: DropTheme.text,
               strokeWidth: 2,
             ),
           ),
@@ -344,7 +345,7 @@ class _DriverPayoutListScreenState extends State<DriverPayoutListScreen> {
           const SizedBox(height: 16),
           Text(
             'No payout records found',
-            style: secondaryTextStyle(size: 16, weight: FontWeight.w600, color: Colors.black),
+            style: secondaryTextStyle(size: 16, weight: FontWeight.w600, color: DropTheme.text),
           ),
           const SizedBox(height: 6),
           Text(
@@ -381,7 +382,7 @@ class _DriverPayoutListScreenState extends State<DriverPayoutListScreen> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
                 decoration: BoxDecoration(
-                  color: Colors.black,
+                  color: DropTheme.text,
                   borderRadius: BorderRadius.circular(30),
                 ),
                 child: Text(
@@ -412,9 +413,9 @@ class PayoutCard extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DropTheme.card,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFEEEEEE)),
+        border: Border.all(color: DropTheme.border),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.04),
@@ -433,9 +434,9 @@ class PayoutCard extends StatelessWidget {
                 Container(
                   padding: EdgeInsets.all(9),
                   decoration: BoxDecoration(
-                    color: Colors.grey[100],
+                    color: DropTheme.border,
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.grey[200]!),
+                    border: Border.all(color: DropTheme.border!),
                   ),
                   child: Icon(Icons.calendar_month_rounded, size: 18, color: primaryColor),
                 ),
@@ -451,7 +452,7 @@ class PayoutCard extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         'Generated ${_formatDate(record.generatedAt.toString())}',
-                        style: TextStyle(fontSize: 11, color: Colors.grey[400]),
+                        style: TextStyle(fontSize: 11, color: DropTheme.border),
                       ),
                     ],
                   ),
@@ -461,7 +462,7 @@ class PayoutCard extends StatelessWidget {
             ),
           ),
 
-          Divider(height: 1, color: Colors.grey[200]),
+          Divider(height: 1, color: DropTheme.border),
 
           const SizedBox(height: 16),
 
@@ -496,7 +497,7 @@ class PayoutCard extends StatelessWidget {
             margin: const EdgeInsets.symmetric(horizontal: 16),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
             decoration: BoxDecoration(
-              color: Colors.black,
+              color: DropTheme.text,
               borderRadius: BorderRadius.circular(13),
             ),
             child: Row(
@@ -552,14 +553,14 @@ class PayoutCard extends StatelessWidget {
                         pageRouteAnimation: PageRouteAnimation.SlideBottomTop);
                   },
                   borderRadius: BorderRadius.circular(6),
-                  child: const Padding(
+                  child: Padding(
                     padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                     child: Text(
                       "View Document",
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: Colors.black,
+                        color: DropTheme.text,
                       ),
                     ),
                   ),
@@ -575,7 +576,7 @@ class PayoutCard extends StatelessWidget {
   Widget _vDivider() => Container(
         width: 1,
         height: 36,
-        color: const Color(0xFFEEEEEE),
+        color: DropTheme.border,
       );
 }
 
@@ -590,9 +591,9 @@ class _StatusBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final config = switch (status.toLowerCase()) {
       'paid' => ('Paid', Colors.black, Colors.white, Icons.check_rounded),
-      'processing' => ('Processing', const Color(0xFFF0F0F0), Colors.black, Icons.sync_rounded),
+      'processing' => ('Processing', DropTheme.cardAlt, DropTheme.text, Icons.sync_rounded),
       'failed' => ('Failed', Colors.black, Colors.white, Icons.close_rounded),
-      _ => ('Pending', const Color(0xFFF0F0F0), Colors.black, Icons.hourglass_empty_rounded),
+      _ => ('Pending', DropTheme.cardAlt, DropTheme.text, Icons.hourglass_empty_rounded),
     };
 
     return Container(

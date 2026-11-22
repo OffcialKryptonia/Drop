@@ -1,4 +1,5 @@
 import '../manage_imports.dart';
+import '../drop/design/drop_theme.dart';
 
 class RidePaymentDetailScreen extends StatefulWidget {
   final int? rideId;
@@ -272,9 +273,9 @@ class RidePaymentDetailScreenState extends State<RidePaymentDetailScreen> {
                                     Container(
                                       decoration: BoxDecoration(
                                           color: Colors.white,
-                                          border: Border.all(color: Colors.grey.shade300),
+                                          border: Border.all(color: DropTheme.border),
                                           // boxShadow: [
-                                          // BoxShadow(color: Colors.grey.shade300,spreadRadius: 1,blurRadius: 1.5)
+                                          // BoxShadow(color: DropTheme.border,spreadRadius: 1,blurRadius: 1.5)
                                           // ],
                                           borderRadius: BorderRadius.circular(14)),
                                       padding: EdgeInsets.all(6),
@@ -287,7 +288,7 @@ class RidePaymentDetailScreenState extends State<RidePaymentDetailScreen> {
                                                   setState(() {});
                                                 },
                                                 child: Container(
-                                                  decoration: BoxDecoration(color: isCashPayment ? primaryColor : null, boxShadow: isCashPayment ? [BoxShadow(color: Colors.grey.shade400, spreadRadius: 1, blurRadius: 1)] : [], borderRadius: BorderRadius.circular(12)),
+                                                  decoration: BoxDecoration(color: isCashPayment ? primaryColor : null, boxShadow: isCashPayment ? [BoxShadow(color: DropTheme.border, spreadRadius: 1, blurRadius: 1)] : [], borderRadius: BorderRadius.circular(12)),
                                                   padding: EdgeInsets.all(12),
                                                   child: Row(
                                                     mainAxisSize: MainAxisSize.min,
@@ -314,7 +315,7 @@ class RidePaymentDetailScreenState extends State<RidePaymentDetailScreen> {
                                                   setState(() {});
                                                 },
                                                 child: Container(
-                                                  decoration: BoxDecoration(color: isCashPayment == false ? primaryColor : null, boxShadow: isCashPayment == false ? [BoxShadow(color: Colors.grey.shade400, spreadRadius: 1, blurRadius: 1)] : [], borderRadius: BorderRadius.circular(12)),
+                                                  decoration: BoxDecoration(color: isCashPayment == false ? primaryColor : null, boxShadow: isCashPayment == false ? [BoxShadow(color: DropTheme.border, spreadRadius: 1, blurRadius: 1)] : [], borderRadius: BorderRadius.circular(12)),
                                                   padding: EdgeInsets.all(12),
                                                   child: Row(
                                                     mainAxisSize: MainAxisSize.min,
@@ -407,7 +408,7 @@ class RidePaymentDetailScreenState extends State<RidePaymentDetailScreen> {
                             margin: EdgeInsets.symmetric(horizontal: 40),
                             padding: EdgeInsets.all(16),
                             decoration: BoxDecoration(
-                              color: Colors.white,
+                              color: DropTheme.card,
                               borderRadius: BorderRadius.circular(defaultRadius),
                               boxShadow: [
                                 BoxShadow(color: primaryColor.withValues(alpha: 0.4), blurRadius: 10, spreadRadius: 0, offset: Offset(0.0, 0.0)),
@@ -447,7 +448,7 @@ class RidePaymentDetailScreenState extends State<RidePaymentDetailScreen> {
                       4.height,
                       Text(
                         language.extraChargesNote,
-                        style: secondaryTextStyle(color: Colors.black),
+                        style: secondaryTextStyle(color: DropTheme.text),
                       ).paddingSymmetric(horizontal: 16),
                     ],
                     AppButtonWidget(
@@ -623,7 +624,7 @@ class RidePaymentDetailScreenState extends State<RidePaymentDetailScreen> {
                       SizedBox(height: 8),
                       AppButtonWidget(
                         textColor: primaryColor,
-                        color: Colors.white,
+                        color: DropTheme.card,
                         height: 30,
                         shapeBorder: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(defaultRadius),
@@ -956,10 +957,10 @@ class RidePaymentDetailScreenState extends State<RidePaymentDetailScreen> {
       },
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: DropTheme.card,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected ? primaryColor : Colors.grey[300]!,
+            color: isSelected ? primaryColor : DropTheme.border!,
             width: isSelected ? 2 : 1,
           ),
           boxShadow: [
@@ -1003,7 +1004,7 @@ class RidePaymentDetailScreenState extends State<RidePaymentDetailScreen> {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: isSelected ? primaryColor : Colors.grey[400]!,
+                    color: isSelected ? primaryColor : DropTheme.border!,
                     width: 2,
                   ),
                   color: isSelected ? primaryColor : Colors.transparent,

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import '../utils/Colors.dart';
 import 'BankInfoScreen.dart';
+import '../../drop/design/drop_theme.dart';
 
 /// Withdraw and payout history for drivers. Balance, smallest payout, bank account and history come from one call.
 /// The amount leaves the wallet when the request is made; DROP pays the bank account and marks it paid.
@@ -122,14 +123,14 @@ class _DriverWithdrawScreenState extends State<DriverWithdrawScreen> {
                     else
                       Container(
                         padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(12)),
+                        decoration: BoxDecoration(border: Border.all(color: DropTheme.border), borderRadius: BorderRadius.circular(12)),
                         child: Row(children: [
                           const Icon(Icons.account_balance_outlined),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                               Text('${bank['bank_name'] ?? ''}', style: const TextStyle(fontWeight: FontWeight.w700)),
-                              Text('${bank['account_number'] ?? ''}  ·  ${bank['account_name'] ?? ''}', style: TextStyle(color: Colors.grey.shade700)),
+                              Text('${bank['account_number'] ?? ''}  ·  ${bank['account_name'] ?? ''}', style: TextStyle(color: DropTheme.muted)),
                             ]),
                           ),
                         ]),
@@ -160,7 +161,7 @@ class _DriverWithdrawScreenState extends State<DriverWithdrawScreen> {
                     const SizedBox(height: 24),
                     const Text('Payout history', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
                     const SizedBox(height: 8),
-                    if (history.isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 16), child: Text('No payouts yet.', style: TextStyle(color: Colors.grey.shade700))),
+                    if (history.isEmpty) Padding(padding: EdgeInsets.symmetric(vertical: 16), child: Text('No payouts yet.', style: TextStyle(color: DropTheme.muted))),
                     for (final h in history)
                       ListTile(
                         contentPadding: EdgeInsets.zero,

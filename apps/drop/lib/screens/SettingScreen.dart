@@ -1,4 +1,5 @@
 import '../manage_imports.dart';
+import '../drop/widgets/drop_theme_toggle.dart';
 
 class SettingScreen extends StatefulWidget {
   @override
@@ -38,6 +39,7 @@ class SettingScreenState extends State<SettingScreen> {
         padding: EdgeInsets.only(bottom: 16, top: 16),
         child: Column(
           children: [
+            const DropAppearanceCard(),
             Visibility(
               visible: sharedPref.getString(LOGIN_TYPE) != 'mobile' &&
                   sharedPref.getString(LOGIN_TYPE) != LoginTypeGoogle &&

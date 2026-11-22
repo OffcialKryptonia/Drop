@@ -1,4 +1,5 @@
 import '../manage_imports.dart';
+import '../drop/design/drop_theme.dart';
 
 class FAQScreen extends StatefulWidget {
   @override
@@ -73,8 +74,8 @@ class _FAQScreenState extends State<FAQScreen> {
                 faq.question ?? "",
                 style: boldTextStyle(),
               ),
-              backgroundColor: Colors.grey.shade200,
-              collapsedBackgroundColor: Colors.white,
+              backgroundColor: DropTheme.border,
+              collapsedBackgroundColor: DropTheme.card,
               children: [
                 Padding(
                   padding:

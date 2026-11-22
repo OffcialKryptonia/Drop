@@ -38,6 +38,7 @@ import 'Colors.dart';
 import 'Constants.dart';
 import 'Extensions/AppButtonWidget.dart';
 import 'Extensions/app_common.dart';
+import '../../drop/design/drop_theme.dart';
 
 Widget dotIndicator(list, i) {
   return SizedBox(
@@ -69,7 +70,7 @@ InputDecoration inputDecoration(BuildContext context, {String? label, Widget? pr
     border: OutlineInputBorder(borderRadius: BorderRadius.circular(defaultRadius), borderSide: BorderSide(color: dividerColor)),
     focusedErrorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(defaultRadius), borderSide: BorderSide(color: dividerColor)),
     disabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(defaultRadius), borderSide: BorderSide(color: dividerColor)),
-    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(defaultRadius), borderSide: BorderSide(color: Colors.black)),
+    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(defaultRadius), borderSide: BorderSide(color: DropTheme.text)),
     enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(defaultRadius), borderSide: BorderSide(color: dividerColor)),
     errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(defaultRadius), borderSide: BorderSide(color: Colors.red)),
     alignLabelWithHint: true,
@@ -196,7 +197,7 @@ Widget loaderWidget() {
     child: Container(
       padding: EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DropTheme.card,
         borderRadius: BorderRadius.circular(8),
         boxShadow: [
           BoxShadow(color: Colors.grey.withValues(alpha: 0.4), blurRadius: 10, spreadRadius: 0, offset: Offset(0.0, 0.0)),
@@ -542,7 +543,7 @@ Widget earningWidget({String? text, String? image, num? totalAmount}) {
         Container(
           margin: EdgeInsets.only(left: 2),
           padding: EdgeInsets.all(4),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(defaultRadius)),
+          decoration: BoxDecoration(color: DropTheme.card, borderRadius: BorderRadius.circular(defaultRadius)),
           child: Image.asset(image!, fit: BoxFit.cover, height: 40, width: 40),
         )
       ],
@@ -977,7 +978,7 @@ Widget buildInfoTile({
   return Container(
     padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
     decoration: BoxDecoration(
-      color: Colors.grey[100],
+      color: DropTheme.border,
       borderRadius: BorderRadius.circular(12),
     ),
     margin: EdgeInsets.only(right: 8),
@@ -985,7 +986,7 @@ Widget buildInfoTile({
       crossAxisAlignment: CrossAxisAlignment.center,
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Icon(icon, size: 24, color: Colors.black54),
+        Icon(icon, size: 24, color: DropTheme.muted),
         SizedBox(width: 8),
         Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -1004,7 +1005,7 @@ Widget buildInfoTile({
             Text(
               subtitle,
               style: TextStyle(
-                color: Colors.grey[600],
+                color: DropTheme.muted,
                 fontSize: 10,
               ),
             ),
@@ -1036,7 +1037,7 @@ Widget popupDialog(String title, String message, BuildContext context) {
       padding: EdgeInsets.all(20),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
-        color: Colors.white,
+        color: DropTheme.card,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1073,7 +1074,7 @@ Widget popupDialog(String title, String message, BuildContext context) {
             textAlign: TextAlign.left,
             style: TextStyle(
               fontSize: 14,
-              color: Colors.black87,
+              color: DropTheme.text,
             ),
           ),
           SizedBox(height: 24),

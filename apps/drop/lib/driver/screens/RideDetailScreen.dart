@@ -25,6 +25,7 @@ import '../utils/Extensions/AppButtonWidget.dart';
 import 'ChatScreen.dart';
 import 'ComplaintScreen.dart';
 import 'PDF_Screen.dart';
+import '../../drop/design/drop_theme.dart';
 
 class RideDetailScreen extends StatefulWidget {
   final int orderId;
@@ -281,7 +282,7 @@ class RideDetailScreenState extends State<RideDetailScreen> {
               if (riderModel!.multiDropLocation != null && riderModel!.multiDropLocation!.isNotEmpty)
                 AppButtonWidget(
                   textColor: primaryColor,
-                  color: Colors.white,
+                  color: DropTheme.card,
                   padding: EdgeInsets.symmetric(horizontal: 8, vertical: 0),
                   height: 30,
                   shapeBorder: RoundedRectangleBorder(borderRadius: BorderRadius.circular(defaultRadius), side: BorderSide(color: primaryColor)),
@@ -507,7 +508,7 @@ class RideDetailScreenState extends State<RideDetailScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(language.youEarned, style: secondaryTextStyle(color: Colors.black)),
+                    Text(language.youEarned, style: secondaryTextStyle(color: DropTheme.text)),
                     Row(
                       children: [printAmountWidget(amount: '${youWillGet.toStringAsFixed(digitAfterDecimal)}', color: Colors.green, size: 14, weight: FontWeight.normal)],
                     ),
@@ -598,7 +599,7 @@ class RideDetailScreenState extends State<RideDetailScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(language.youEarned, style: secondaryTextStyle(color: Colors.black)),
+                    Text(language.youEarned, style: secondaryTextStyle(color: DropTheme.text)),
                     Row(
                       children: [printAmountWidget(amount: '${youWillGet.toStringAsFixed(digitAfterDecimal)}', color: Colors.green, size: 14, weight: FontWeight.normal)],
                     ),

@@ -1,4 +1,5 @@
 import '../manage_imports.dart';
+import '../drop/design/drop_theme.dart';
 
 class RideAcceptWidget extends StatefulWidget {
   final Driver? driverData;
@@ -277,7 +278,7 @@ class RideAcceptWidgetState extends State<RideAcceptWidget> {
               if (widget.rideRequest!.multiDropLocation != null && widget.rideRequest!.multiDropLocation!.isNotEmpty)
                 AppButtonWidget(
                   textColor: primaryColor,
-                  color: Colors.white,
+                  color: DropTheme.card,
                   padding: EdgeInsets.symmetric(horizontal: 8, vertical: 0),
                   height: 30,
                   shapeBorder: RoundedRectangleBorder(borderRadius: BorderRadius.circular(defaultRadius), side: BorderSide(color: primaryColor)),
@@ -307,7 +308,7 @@ class RideAcceptWidgetState extends State<RideAcceptWidget> {
                 width: MediaQuery.of(context).size.width,
                 text: language.cancel,
                 textColor: primaryColor,
-                color: Colors.white,
+                color: DropTheme.card,
                 shapeBorder: RoundedRectangleBorder(borderRadius: BorderRadius.circular(defaultRadius), side: BorderSide(color: primaryColor)),
                 onTap: () {
                   showModalBottomSheet(

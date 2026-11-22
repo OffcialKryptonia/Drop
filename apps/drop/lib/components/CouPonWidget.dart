@@ -1,4 +1,5 @@
 import '../manage_imports.dart';
+import '../drop/design/drop_theme.dart';
 
 class CouPonWidget extends StatefulWidget {
   final int? servicesId;
@@ -102,7 +103,7 @@ class CouPonWidgetState extends State<CouPonWidget> {
                         CouponData data = couponData[index];
                         return Container(
                           decoration: BoxDecoration(
-                              color: Colors.white,
+                              color: DropTheme.card,
                               boxShadow: [
                                 BoxShadow(
                                     color: Colors.black45,

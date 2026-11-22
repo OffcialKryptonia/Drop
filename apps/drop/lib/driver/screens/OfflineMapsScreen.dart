@@ -6,6 +6,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:maplibre_gl/maplibre_gl.dart' as ml;
 
 import '../../service/MapConfig.dart';
+import '../../drop/design/drop_theme.dart';
 
 /// Downloads the visible area around the driver's current location for offline map viewing.
 /// This stores map tiles only; ride requests, tracking and payments still require connectivity.
@@ -190,9 +191,9 @@ class _OfflineMapsScreenState extends State<OfflineMapsScreen> {
                     ),
                   ),
                 const SizedBox(height: 12),
-                const Text(
+                Text(
                   'Offline maps store map imagery and labels only. Requesting a ride, live driver tracking, route updates and payments still need an internet connection. Downloaded areas can use device storage.',
-                  style: TextStyle(fontSize: 12, color: Colors.black54),
+                  style: TextStyle(fontSize: 12, color: DropTheme.muted),
                 ),
               ],
             ),

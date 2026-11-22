@@ -13,6 +13,7 @@ import 'package:drop/driver/utils/Common.dart';
 import 'package:drop/driver/utils/Constants.dart';
 import 'package:drop/driver/utils/Extensions/dataTypeExtensions.dart';
 
+import 'package:drop/drop/design/drop_theme.dart';
 import 'package:drop/drop/widgets/drop_connectivity_banner.dart';
 import 'AppTheme.dart';
 import 'Services/ChatMessagesService.dart';
@@ -90,12 +91,14 @@ class DriverShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Observer(builder: (context) {
+    return ValueListenableBuilder<DropThemePref>(valueListenable: DropTheme.pref, builder: (context, _, __) => Observer(builder: (context) {
       return MaterialApp(
         navigatorKey: navigatorKey,
         debugShowCheckedModeBanner: false,
         title: mAppName,
         theme: AppTheme.lightTheme,
+        darkTheme: AppTheme.darkTheme,
+        themeMode: DropTheme.themeMode,
         builder: (context, child) {
           return DropConnectivityHost(child: SafeArea(top: false, child: ScrollConfiguration(behavior: MyBehavior(), child: child!)));
         },
@@ -110,6 +113,6 @@ class DriverShell extends StatelessWidget {
           AppLocalizations(),
         ],
       );
-    });
+    }));
   }
 }

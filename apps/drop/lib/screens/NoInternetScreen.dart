@@ -1,4 +1,5 @@
 import '../manage_imports.dart';
+import '../drop/design/drop_theme.dart';
 
 class NoInternetScreen extends StatefulWidget {
   @override
@@ -54,7 +55,7 @@ class _NoInternetScreenState extends State<NoInternetScreen> {
             width: MediaQuery.of(context).size.width,
             text: language.tryAgain,
             textColor: primaryColor,
-            color: Colors.white,
+            color: DropTheme.card,
             shapeBorder: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(defaultRadius),
                 side: BorderSide(color: primaryColor)),

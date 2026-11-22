@@ -3,6 +3,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../service/DriverApplicationApi.dart';
+import '../../drop/design/drop_theme.dart';
 
 /// SOS for the live trip (rider and driver). One big button tells DROP's team with the person's location and trip;
 /// the national emergency number and the person's own emergency contacts are a tap away.
@@ -85,7 +86,7 @@ class _SosSheetState extends State<_SosSheet> {
             Expanded(child: Text('Emergency', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900))),
           ]),
           const SizedBox(height: 6),
-          Text(sent ? 'DROP has been alerted with your location and trip. Stay on the line if we call you.' : 'In danger? Tell DROP now. We receive your location and trip details straight away.', style: TextStyle(color: Colors.grey.shade700)),
+          Text(sent ? 'DROP has been alerted with your location and trip. Stay on the line if we call you.' : 'In danger? Tell DROP now. We receive your location and trip details straight away.', style: TextStyle(color: DropTheme.muted)),
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,

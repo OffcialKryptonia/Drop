@@ -4,6 +4,7 @@ import 'package:flutter_vector_icons/flutter_vector_icons.dart';
 import 'package:drop/driver/utils/Common.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../drop/widgets/drop_theme_toggle.dart';
 import '../main.dart';
 import '../model/SettingModel.dart';
 import '../utils/Colors.dart';
@@ -54,6 +55,7 @@ class SettingScreenState extends State<SettingScreen> {
             padding: EdgeInsets.only(bottom: 16, top: 16),
             child: Column(
               children: [
+                const DropAppearanceCard(),
                 Visibility(
                   visible: sharedPref.getString(LOGIN_TYPE) != LoginTypeOTP &&
                       sharedPref.getString(LOGIN_TYPE) != LoginTypeGoogle &&

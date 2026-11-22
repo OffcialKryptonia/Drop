@@ -604,7 +604,7 @@
     api("GET", "/admin/extra-types").then(function (r) {
       var list = (r.body || {}).data || [];
       list.forEach(function (t) {
-        var row = h("div", { class: "row", style: "display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line,#eee);flex-wrap:wrap" });
+        var row = h("div", { class: "row", style: "display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line);flex-wrap:wrap" });
         row.appendChild(h("div", { style: "flex:1;min-width:150px" }, h("div", { class: "t", text: t.name }),
           h("div", { class: "s", text: (t.active ? "On" : "Hidden") + " \u00B7 " + (t.take_commission ? "DROP takes commission" : "No commission") + " \u00B7 " + (t.max_amount ? "Max " + Number(t.max_amount).toLocaleString() : "No limit") })));
         if (can("ride_extra edit")) {
@@ -633,7 +633,7 @@
           add.disabled = true;
           api("POST", "/admin/extra-types", { name: n.value.trim(), take_commission: cm.value === "1", max_amount: mx.value }).then(function (x) { add.disabled = false; if (x.ok) { toast("Added"); pageExtras(root.parentNode || root); } else msg(out, errText(x)); });
         });
-        card.appendChild(h("div", { style: "border-top:1px solid var(--line,#eee);margin-top:10px;padding-top:10px" }, h("div", { class: "t", text: "Add a charge type" }), field("Name", n), h("div", { class: "grid2" }, field("Commission", cm), field("Limit", mx)), add, out));
+        card.appendChild(h("div", { style: "border-top:1px solid var(--line);margin-top:10px;padding-top:10px" }, h("div", { class: "t", text: "Add a charge type" }), field("Name", n), h("div", { class: "grid2" }, field("Commission", cm), field("Limit", mx)), add, out));
       }
     });
   }
@@ -857,7 +857,7 @@
         if (!r.ok) { card.appendChild(h("p", { class: "msg", text: errText(r) })); return; }
         var grid = h("div", { class: "grid2" });
         (r.body.data || []).forEach(function (ic) {
-          var img = h("img", { style: "width:64px;height:64px;object-fit:contain;background:#f1f1f1;border-radius:8px" });
+          var img = h("img", { style: "width:64px;height:64px;object-fit:contain;background:var(--chip-bg);border-radius:8px" });
           if (ic.url) img.src = ic.url; else img.alt = "built-in";
           var row = h("div", { class: "row", style: "gap:12px;align-items:center;margin-bottom:10px" }, img,
             h("div", { style: "flex:1" }, h("div", { class: "t", text: ic.label }), h("div", { class: "muted", text: ic.url ? "Your picture" : "Built-in picture" })));
@@ -914,7 +914,7 @@
       var hist = h("div", { class: "card" }, h("div", { class: "t", text: pg.total + " transfer" + (pg.total === 1 ? "" : "s") }));
       if (!list.length) hist.appendChild(h("div", { class: "empty", text: "No transfers yet." }));
       list.forEach(function (t) {
-        hist.appendChild(h("div", { class: "row", style: "padding:8px 0;border-top:1px solid var(--line,#eee)" },
+        hist.appendChild(h("div", { class: "row", style: "padding:8px 0;border-top:1px solid var(--line)" },
           h("div", { class: "t", text: "\u20A6" + Number(t.amount).toLocaleString() + " \u00B7 @" + t.sender + " \u2192 @" + t.recipient }),
           h("div", { class: "s", text: String(t.created_at).slice(0, 16).replace("T", " ") + (t.note ? " \u00B7 " + t.note : "") })));
       });
@@ -946,7 +946,7 @@
       var hist = h("div", { class: "card" }, h("div", { class: "t", text: pg.total + " link" + (pg.total === 1 ? "" : "s") }));
       if (!list.length) hist.appendChild(h("div", { class: "empty", text: "No pay links yet." }));
       list.forEach(function (t) {
-        hist.appendChild(h("div", { class: "row", style: "padding:8px 0;border-top:1px solid var(--line,#eee)" },
+        hist.appendChild(h("div", { class: "row", style: "padding:8px 0;border-top:1px solid var(--line)" },
           h("div", { class: "t", text: "\u20A6" + Number(t.amount).toLocaleString() + " \u00B7 @" + t.passenger + " \u00B7 " + t.status }),
           h("div", { class: "s", text: String(t.created_at).slice(0, 16).replace("T", " ") + (t.payer_name ? " \u00B7 paid by " + t.payer_name : "") + (t.gateway ? " via " + t.gateway : "") })));
       });
@@ -970,7 +970,7 @@
         if (!r.ok) { out.appendChild(h("p", { class: "msg err", text: errText(r) })); return; }
         if (!list.length) out.appendChild(h("div", { class: "empty", text: "No matching rider or driver." }));
         list.forEach(function (u) {
-          var row = h("div", { class: "row", style: "display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line,#eee)" });
+          var row = h("div", { class: "row", style: "display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line)" });
           row.appendChild(h("div", { style: "flex:1" }, h("div", { class: "t", text: (u.display_name || u.username) + " \u00B7 " + u.user_type }),
             h("div", { class: "s", text: [u.username ? "@" + u.username : "", u.contact_number ? (u.country_code || "") + u.contact_number : "", u.email || "no email", u.status].filter(Boolean).join(" \u00B7 ") })));
           if (can("user_account edit")) {
@@ -1052,7 +1052,7 @@
       if (!docs.length) lc.appendChild(h("div", { class: "empty", text: "None yet. Until you add some, drivers are not asked for any documents." }));
       docs.forEach(function (d) {
         var names = d.service_ids.length ? d.service_ids.map(function (id) { var s = services.filter(function (x) { return x.id === id; })[0]; return s ? s.name : "#" + id; }).join(", ") : "all ride types";
-        var row = h("div", { class: "row", style: "display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line,#eee)" },
+        var row = h("div", { class: "row", style: "display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line)" },
           h("div", { style: "flex:1" }, h("div", { class: "t", text: d.name + (d.status ? "" : " (off)") }),
             h("div", { class: "s", text: (d.is_required ? "Required" : "Optional") + (d.has_expiry_date ? " \u00B7 has expiry" : "") + " \u00B7 " + names + " \u00B7 " + d.uploads + " upload" + (d.uploads === 1 ? "" : "s") })));
         if (can("document edit")) {
@@ -1099,7 +1099,7 @@
       var card = h("div", { class: "card" }, h("div", { class: "t", text: pg.total + " request" + (pg.total === 1 ? "" : "s") }));
       if (!list.length) card.appendChild(h("div", { class: "empty", text: "Nothing here." }));
       list.forEach(function (p) {
-        var row = h("div", { class: "row", style: "padding:10px 0;border-top:1px solid var(--line,#eee)" },
+        var row = h("div", { class: "row", style: "padding:10px 0;border-top:1px solid var(--line)" },
           h("div", { class: "t", text: "\u20A6" + Number(p.amount).toLocaleString() + " \u00B7 " + (p.driver || p.username) }),
           h("div", { class: "s", text: p.bank_name + " \u00B7 " + p.account_number + " \u00B7 " + p.account_name }),
           h("div", { class: "s", text: String(p.created_at).slice(0, 16).replace("T", " ") + (p.admin_note ? " \u00B7 " + p.admin_note : "") }));
@@ -1198,7 +1198,7 @@
       if (!list.length) hist.appendChild(h("div", { class: "empty", text: "No calls yet." }));
       list.forEach(function (x) {
         var dur = x.duration_seconds != null ? " \u00B7 " + Math.floor(x.duration_seconds / 60) + "m " + (x.duration_seconds % 60) + "s" : "";
-        hist.appendChild(h("div", { class: "row", style: "padding:10px 0;border-top:1px solid var(--line,#eee)" },
+        hist.appendChild(h("div", { class: "row", style: "padding:10px 0;border-top:1px solid var(--line)" },
           h("div", { class: "t", text: (x.caller || "") + " \u2192 " + (x.callee || "") + " \u00B7 " + x.status + dur }),
           h("div", { class: "s", text: "Trip #" + x.ride_request_id + " \u00B7 " + x.provider + " \u00B7 " + new Date(x.created_at).toLocaleString() + (x.end_reason ? " \u00B7 " + x.end_reason : "") })));
       });
@@ -1250,7 +1250,7 @@
           [reg, svc, en, omn, omx, oam, oax].forEach(function (e) { e.addEventListener("change", sync); e.addEventListener("input", sync); });
           rm.addEventListener("click", function () { overrides.splice(i, 1); drawOverrides(); });
           if (!can("ride_bid edit")) { [reg, svc, en, omn, omx, oam, oax, rm].forEach(function (e) { e.disabled = true; }); }
-          list.appendChild(h("div", { style: "padding:12px 0;border-top:1px solid var(--line,#eee)" },
+          list.appendChild(h("div", { style: "padding:12px 0;border-top:1px solid var(--line)" },
             h("div", { class: "grid2" }, field("Region", reg), field("Ride type", svc)),
             field("Bidding here", en),
             h("div", { class: "grid2" }, field("Lowest offer %", omn), field("Highest offer %", omx)),
@@ -1307,7 +1307,7 @@
       var list = d.recent || [];
       if (!list.length) hist.appendChild(h("div", { class: "empty", text: "No bids yet." }));
       list.forEach(function (x) {
-        hist.appendChild(h("div", { class: "row", style: "padding:10px 0;border-top:1px solid var(--line,#eee)" },
+        hist.appendChild(h("div", { class: "row", style: "padding:10px 0;border-top:1px solid var(--line)" },
           h("div", { class: "t", text: "#" + x.id + " · " + x.status + " · offered " + money(x.offer_fare) + " (estimate " + money(x.estimate_fare) + ")" + (x.agreed_fare != null ? " · agreed " + money(x.agreed_fare) : "") }),
           h("div", { class: "s", text: (x.pickup_address || "") + " → " + (x.dropoff_address || "") + " · " + x.responses + " answers · " + x.rounds_used + " rounds · " + new Date(x.created_at).toLocaleString() })));
       });
@@ -1344,7 +1344,7 @@
       if (!list.length) live.appendChild(h("div", { class: "empty", text: "No rides are waiting for pickup." }));
       list.forEach(function (x) {
         var state = x.overridden ? "Authorised by admin" : x.verified ? "Code verified" : !x.has_code ? "No code (older ride)" : x.locked ? "Locked after wrong tries" : "Waiting for code" + (x.failed ? " \u00B7 " + x.failed + " wrong" : "");
-        var row = h("div", { class: "row", style: "padding:10px 0;border-top:1px solid var(--line,#eee)" },
+        var row = h("div", { class: "row", style: "padding:10px 0;border-top:1px solid var(--line)" },
           h("div", { class: "t", text: "Trip #" + x.id + " \u00B7 " + x.status + " \u00B7 " + state }),
           h("div", { class: "s", text: "Driver: " + (x.driver || "") + " \u00B7 Passenger: " + (x.passenger || "") + (x.booking_source === "admin" ? " \u00B7 booked by admin" : "") }),
           h("div", { class: "s", text: x.pickup || "" }));
@@ -1381,7 +1381,7 @@
       if (!list.length) card.appendChild(h("div", { class: "empty", text: "Nothing here." }));
       list.forEach(function (x) {
         var sym = (x.currency && x.currency.symbol) || "\u20A6";
-        var row = h("div", { class: "row", style: "padding:10px 0;border-top:1px solid var(--line,#eee)" },
+        var row = h("div", { class: "row", style: "padding:10px 0;border-top:1px solid var(--line)" },
           h("div", { class: "t", text: "#" + x.id + " \u00B7 " + x.kind + " \u00B7 " + sym + Number(x.amount).toLocaleString() + (x.paid_with ? " \u00B7 " + x.paid_with : "") }),
           h("div", { class: "s", text: "Trip #" + x.ride_id + " \u00B7 Driver: " + (x.driver_name || "") + " \u00B7 Passenger: " + (x.passenger_name || "") }),
           h("div", { class: "s", text: String(x.created_at).slice(0, 16).replace("T", " ") + " UTC" + (x.note ? " \u00B7 " + x.note : "") }));
@@ -1435,7 +1435,7 @@
       if (!list.length) card.appendChild(h("div", { class: "empty", text: "Nothing here." }));
       list.forEach(function (a) {
         var c = a.context || {}, who = c.person || {}, other = c.other_party, ride = c.ride, veh = c.vehicle;
-        var row = h("div", { class: "row", style: "padding:10px 0;border-top:1px solid var(--line,#eee)" },
+        var row = h("div", { class: "row", style: "padding:10px 0;border-top:1px solid var(--line)" },
           h("div", { class: "t", text: "#" + a.id + " · " + (who.name || "Unknown") + " (" + a.role + ") · " + (who.phone || "no phone") }),
           h("div", { class: "s", text: String(a.created_at).slice(0, 16).replace("T", " ") + " UTC" }));
         if (ride) row.appendChild(h("div", { class: "s", text: "Trip #" + ride.id + " (" + ride.status + "): " + ride.pickup + " → " + ride.dropoff }));
@@ -1501,7 +1501,7 @@
       var card = h("div", { class: "card" }, h("div", { class: "t", text: pg.total + " complaint" + (pg.total === 1 ? "" : "s") }));
       if (!list.length) card.appendChild(h("div", { class: "empty", text: "Nothing here." }));
       list.forEach(function (c) {
-        var row = h("div", { class: "row", style: "padding:10px 0;border-top:1px solid var(--line,#eee);cursor:pointer" },
+        var row = h("div", { class: "row", style: "padding:10px 0;border-top:1px solid var(--line);cursor:pointer" },
           h("div", { class: "t", text: "#" + c.id + " · " + c.subject }),
           h("div", { class: "s", text: c.person + " (" + c.role + ") · " + String(c.created_at).slice(0, 16).replace("T", " ") + (c.ride_request_id ? " · trip #" + c.ride_request_id : "") }));
         row.addEventListener("click", function () { cm.open = cm.open === c.id ? null : c.id; pageComplaints(root); });
@@ -1559,7 +1559,7 @@
       }
       var card = h("div", { class: "card" }, h("div", { class: "t", text: list.length + " banks" }));
       list.forEach(function (b) {
-        var row = h("div", { class: "row", style: "display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line,#eee)" });
+        var row = h("div", { class: "row", style: "display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line)" });
         row.appendChild(b.logo_url ? h("img", { src: b.logo_url, alt: "", style: "width:28px;height:28px;border-radius:6px;object-fit:contain" }) : h("div", { style: "width:28px;height:28px;border-radius:6px;background:#f3e3dc;display:flex;align-items:center;justify-content:center;font-weight:700", text: b.name.charAt(0) }));
         row.appendChild(h("div", { style: "flex:1" }, h("div", { class: "t", text: b.name }), h("div", { class: "s", text: b.code + " \u00B7 " + (KIND_LABEL[b.kind] || b.kind) + (b.active ? "" : " \u00B7 hidden") })));
         if (can("bank edit")) {

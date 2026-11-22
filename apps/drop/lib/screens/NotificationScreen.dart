@@ -83,7 +83,7 @@ class NotificationScreenState extends State<NotificationScreen>
                           }
                         },
                         child: Container(
-                          // color: data.readAt==null?Colors.grey.shade200:null,
+                          // color: data.readAt==null?DropTheme.border:null,
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [

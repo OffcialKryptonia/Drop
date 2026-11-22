@@ -7,6 +7,7 @@ import 'package:drop/driver/utils/Extensions/dataTypeExtensions.dart';
 import 'package:timeline_tile/timeline_tile.dart';
 
 import '../main.dart';
+import '../../drop/design/drop_theme.dart';
 
 class RideHistoryScreen extends StatefulWidget {
   final List<RideHistory> rideHistory;
@@ -51,7 +52,7 @@ class RideHistoryScreenState extends State<RideHistoryScreen> {
                 padding: EdgeInsets.all(8),
                 child: ImageIcon(
                     AssetImage(statusTypeIcon(type: mData.historyType)),
-                    color: Colors.black),
+                    color: DropTheme.text),
                 decoration: BoxDecoration(
                     color: Colors.transparent,
                     border:

@@ -33,6 +33,7 @@ import '../utils/Extensions/app_common.dart';
 import '../utils/Images.dart';
 import 'DrawerWidget.dart';
 import 'package:drop/components/ModeSwitchTile.dart';
+import '../../drop/design/drop_theme.dart';
 
 class DrawerComponent extends StatefulWidget {
   final Function? onCall;
@@ -47,7 +48,7 @@ class _DrawerComponentState extends State<DrawerComponent> {
   @override
   Widget build(BuildContext context) {
     return Drawer(
-      backgroundColor: Colors.white,
+      backgroundColor: DropTheme.card,
       child: SingleChildScrollView(
         padding: EdgeInsets.all(16),
         child: Column(

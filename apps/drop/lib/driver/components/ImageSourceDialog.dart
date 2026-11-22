@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../main.dart';
 import '../utils/Extensions/extension.dart';
 import '../utils/utils.dart';
+import '../../drop/design/drop_theme.dart';
 
 class ImageSourceDialog extends StatefulWidget {
   final Function()? onGallery;
@@ -50,7 +51,7 @@ class _ImageSourceDialogState extends State<ImageSourceDialog> {
                       height: 26,
                       width: 26,
                       fit: BoxFit.cover,
-                      color: Colors.black),
+                      color: DropTheme.text),
                   SizedBox(width: 8),
                   Text(language.gallery, style: primaryTextStyle()),
                 ],
@@ -70,7 +71,7 @@ class _ImageSourceDialogState extends State<ImageSourceDialog> {
                       height: 26,
                       width: 26,
                       fit: BoxFit.cover,
-                      color: Colors.black),
+                      color: DropTheme.text),
                   SizedBox(width: 8),
                   Text(language.camera, style: primaryTextStyle()),
                 ],
@@ -91,7 +92,7 @@ class _ImageSourceDialogState extends State<ImageSourceDialog> {
                         height: 26,
                         width: 26,
                         fit: BoxFit.cover,
-                        color: Colors.black),
+                        color: DropTheme.text),
                     SizedBox(width: 8),
                     Text(language.file, style: primaryTextStyle()),
                   ],

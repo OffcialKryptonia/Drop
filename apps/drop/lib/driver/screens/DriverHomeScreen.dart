@@ -34,6 +34,7 @@ import '../components/DrawerComponent.dart';
 import '../utils/Colors.dart';
 import 'DocumentsScreen.dart';
 import 'WalletScreen.dart';
+import '../../drop/design/drop_theme.dart';
 
 /// Home of driver mode. Online toggle with wallet and document checks done by the server,
 /// location sharing only while online and while the app is open.
@@ -945,7 +946,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
     }
     return Scaffold(
       key: _scaffoldKey,
-      backgroundColor: const Color(0xFFEFEFEF),
+      backgroundColor: DropTheme.cardAlt,
       drawer: DrawerComponent(),
       body: loading
           ? const Center(child: CircularProgressIndicator())
@@ -954,7 +955,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
               : Stack(children: [
                   Positioned.fill(
                     child: !mapLoaded
-                        ? const ColoredBox(color: Color(0xFFEFEFEF))
+                        ? ColoredBox(color: DropTheme.cardAlt)
                         : AnimatedBuilder(
                             animation: _live,
                             builder: (_, __) => DropMap(
@@ -1016,10 +1017,10 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
       );
 
   Widget _roundButton(IconData icon, VoidCallback onTap) => Material(
-        color: Colors.white,
+        color: DropTheme.card,
         shape: const CircleBorder(),
         elevation: 3,
-        child: InkWell(customBorder: const CircleBorder(), onTap: onTap, child: Padding(padding: const EdgeInsets.all(10), child: Icon(icon, color: Colors.black87))),
+        child: InkWell(customBorder: const CircleBorder(), onTap: onTap, child: Padding(padding: EdgeInsets.all(10), child: Icon(icon, color: DropTheme.text))),
       );
 
   /// Menu, online switch and wallet balance floating over the map.
@@ -1031,7 +1032,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
         const SizedBox(width: 10),
         Expanded(
           child: Material(
-            color: Colors.white,
+            color: DropTheme.card,
             borderRadius: BorderRadius.circular(28),
             elevation: 3,
             child: Padding(
@@ -1056,7 +1057,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
         ),
         const SizedBox(width: 10),
         Material(
-          color: Colors.white,
+          color: DropTheme.card,
           borderRadius: BorderRadius.circular(20),
           elevation: 3,
           child: InkWell(

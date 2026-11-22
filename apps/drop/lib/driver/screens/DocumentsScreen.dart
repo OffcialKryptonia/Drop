@@ -26,6 +26,7 @@ import '../utils/Constants.dart';
 import '../utils/Extensions/ConformationDialog.dart';
 import '../utils/Images.dart';
 import 'DashboardScreen.dart';
+import '../../drop/design/drop_theme.dart';
 
 class DocumentsScreen extends StatefulWidget {
   final bool isShow;
@@ -67,8 +68,8 @@ class DocumentsScreenState extends State<DocumentsScreen> {
             textButtonTheme: TextButtonThemeData(
               style: TextButton.styleFrom(),
             ),
-            datePickerTheme: DatePickerThemeData(backgroundColor: Colors.white, cancelButtonStyle: ButtonStyle(), headerBackgroundColor: Colors.white),
-            dialogTheme: DialogThemeData(backgroundColor: Colors.white),
+            datePickerTheme: DatePickerThemeData(backgroundColor: DropTheme.card, cancelButtonStyle: ButtonStyle(), headerBackgroundColor: Colors.white),
+            dialogTheme: DialogThemeData(backgroundColor: DropTheme.card),
           ),
           child: child!,
         );

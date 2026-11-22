@@ -9,6 +9,7 @@ import '../utils/Colors.dart';
 import '../utils/Common.dart';
 import '../utils/Extensions/AppButtonWidget.dart';
 import '../utils/Extensions/app_common.dart';
+import '../../drop/design/drop_theme.dart';
 
 /// Adding money to the driver wallet: bank transfer to the driver's own account number (Pocketfi).
 /// The wallet is credited automatically when the transfer arrives; nothing is paid inside the app.
@@ -90,7 +91,7 @@ class PaymentScreenState extends State<PaymentScreen> {
                         SizedBox(height: 24),
                         AppButtonWidget(text: language.copyAccountNumber, width: MediaQuery.of(context).size.width, onTap: () => copy(a.accountNumber.validate())),
                         SizedBox(height: 12),
-                        AppButtonWidget(text: language.close, width: MediaQuery.of(context).size.width, color: Colors.grey.shade700, onTap: close),
+                        AppButtonWidget(text: language.close, width: MediaQuery.of(context).size.width, color: DropTheme.muted, onTap: close),
                       ],
                     )
                   : Column(
