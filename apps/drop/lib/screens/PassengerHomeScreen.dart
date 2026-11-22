@@ -1054,7 +1054,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
   Widget _sheet(Widget child) => Container(
         width: double.infinity,
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           color: DropTheme.card,
           borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
           boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 12)],
@@ -1086,7 +1086,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
           snap: true,
           snapSizes: const [0.27, 0.5, 0.88],
           builder: (context, scroll) => Container(
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               color: DropTheme.card,
               borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
               boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 12)],

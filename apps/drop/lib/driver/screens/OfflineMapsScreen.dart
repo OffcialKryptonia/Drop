@@ -191,7 +191,7 @@ class _OfflineMapsScreenState extends State<OfflineMapsScreen> {
                     ),
                   ),
                 const SizedBox(height: 12),
-                const Text(
+                Text(
                   'Offline maps store map imagery and labels only. Requesting a ride, live driver tracking, route updates and payments still need an internet connection. Downloaded areas can use device storage.',
                   style: TextStyle(fontSize: 12, color: DropTheme.muted),
                 ),
