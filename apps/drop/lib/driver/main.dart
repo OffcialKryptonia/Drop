@@ -13,6 +13,7 @@ import 'package:drop/driver/utils/Common.dart';
 import 'package:drop/driver/utils/Constants.dart';
 import 'package:drop/driver/utils/Extensions/dataTypeExtensions.dart';
 
+import 'package:drop/drop/widgets/drop_connectivity_banner.dart';
 import 'AppTheme.dart';
 import 'Services/ChatMessagesService.dart';
 import 'Services/NotificationService.dart';
@@ -96,7 +97,7 @@ class DriverShell extends StatelessWidget {
         title: mAppName,
         theme: AppTheme.lightTheme,
         builder: (context, child) {
-          return SafeArea(top: false, child: ScrollConfiguration(behavior: MyBehavior(), child: child!));
+          return DropConnectivityHost(child: SafeArea(top: false, child: ScrollConfiguration(behavior: MyBehavior(), child: child!)));
         },
         home: const DriverHomeScreen(),
         supportedLocales: getSupportedLocales(),

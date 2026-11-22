@@ -1,6 +1,6 @@
 import 'package:mighty_core/core_mighty/mighty_core.dart';
-import 'package:timezone/data/latest.dart' as tz;
 import 'manage_imports.dart';
+import 'drop/widgets/drop_connectivity_banner.dart';
 import 'package:drop/driver/main.dart' as drv;
 import 'service/ModeController.dart';
 
@@ -34,10 +34,7 @@ String sourceLocationTitle = '';
 const int marker_size_height = 120;
 bool isPopupOpen = false;
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  sharedPref = await SharedPreferences.getInstance();
-
+Future<void> _initFirebase() async {
   if (Platform.isIOS) {
     await Firebase.initializeApp();
   } else {
@@ -55,24 +52,33 @@ void main() async {
     }
   }
   FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+}
+
+/// Only what is local and needed to draw the first screen happens here. Nothing in this function talks to the
+/// network: push set-up, language updates, settings and the session check all start after the first frame (see [BootTasks]).
+void main() async {
+  BootTimings.mark('main');
+  WidgetsFlutterBinding.ensureInitialized();
+  // Independent local work runs side by side instead of one after another.
+  final prefsReady = SharedPreferences.getInstance();
+  final firebaseReady = _initFirebase().catchError((_) {});
+  final keywordsReady = Future<void>.sync(() => initJsonFile()).catchError((_) {});
+  sharedPref = await prefsReady;
+  BootTimings.mark('prefs');
+
   appStore.setLanguage(sharedPref.getString(SELECTED_LANGUAGE_CODE) ?? defaultLanguageCode);
   await appStore.setLoggedIn(sharedPref.getBool(IS_LOGGED_IN) ?? false, isInitializing: true);
   ModeController.onSignedOut = () => appStore.setLoggedIn(false);
   await ModeController.restore(sharedPref);
   await appStore.setUserEmail(sharedPref.getString(USER_EMAIL) ?? '', isInitialization: true);
   await appStore.setUserProfile(sharedPref.getString(USER_PROFILE_PHOTO) ?? '');
-  try {
-    initJsonFile();
-  } catch (e) {}
-  try {
-    await oneSignalSettings();
-  } catch (e) {}
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
-  tz.initializeTimeZones();
   await mightyCoreInit();
+  await Future.wait([firebaseReady, keywordsReady]);
+  BootTimings.mark('ready');
   runApp(MyApp());
 }
 
@@ -101,33 +107,13 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  late StreamSubscription<List<ConnectivityResult>> connectivitySubscription;
-
   @override
   void initState() {
     super.initState();
-    init();
-  }
-
-  @override
-  void setState(fn) {
-    if (mounted) super.setState(fn);
-    connectivitySubscription.cancel();
-  }
-
-  void init() async {
-    connectivitySubscription = Connectivity().onConnectivityChanged.listen((e) {
-      if (e.contains(ConnectivityResult.none)) {
-        log('not connected');
-        launchScreen(navigatorKey.currentState!.overlay!.context, NoInternetScreen());
-      } else {
-        if (netScreenKey.currentContext != null) {
-          if (Navigator.canPop(navigatorKey.currentState!.overlay!.context)) {
-            Navigator.pop(navigatorKey.currentState!.overlay!.context);
-          }
-        }
-        log('connected');
-      }
+    // After the first frame: connectivity, push, language, settings and the session check. None of it can delay the screen.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      BootTimings.mark('first_frame');
+      BootTasks.run();
     });
   }
 
@@ -149,9 +135,9 @@ class _MyAppState extends State<MyApp> {
         darkTheme: AppTheme.darkTheme,
         themeMode: appStore.isDarkMode ? ThemeMode.dark : ThemeMode.light,
         builder: (context, child) {
-          return SafeArea(top: false, child: ScrollConfiguration(behavior: MyBehavior(), child: child!));
+          return DropConnectivityHost(child: SafeArea(top: false, child: ScrollConfiguration(behavior: MyBehavior(), child: child!)));
         },
-        home: SplashScreen(),
+        home: bootHome(),
         supportedLocales: getSupportedLocales(),
         locale: Locale(appStore.selectedLanguage.validate(value: defaultLanguageCode)),
         localizationsDelegates: [
@@ -195,7 +181,7 @@ class _DriverHostState extends State<_DriverHost> {
   @override
   Widget build(BuildContext context) {
     if (!ready) {
-      return MaterialApp(debugShowCheckedModeBanner: false, home: Scaffold(body: Center(child: CircularProgressIndicator())));
+      return const ColoredBox(color: Colors.white); // local set-up only: one quick frame, no spinner
     }
     return drv.DriverShell();
   }

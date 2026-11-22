@@ -8,6 +8,7 @@ import 'package:drop/model/select_location_model.dart';
 
 import '../manage_imports.dart';
 import '../service/ModeController.dart';
+import '../service/net/drop_cache.dart';
 
 Future<LoginResponse> signUpApi(Map request) async {
   return parseModel(
@@ -437,6 +438,7 @@ Future<UserDetailModel> getDriverDetail({int? userId}) async {
 }
 
 logOutSuccess() async {
+  await DropCache.clearAll(); // nothing saved about the person stays on the phone
   sharedPref.remove(FIRST_NAME);
   sharedPref.remove(LAST_NAME);
   sharedPref.remove(USER_PROFILE_PHOTO);

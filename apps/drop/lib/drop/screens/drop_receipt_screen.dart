@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import '../../service/RideApi.dart';
+import '../../service/net/drop_cache.dart';
 import '../design/drop_design.dart';
 import '../widgets/drop_extras.dart';
 import '../widgets/drop_money.dart';
@@ -24,6 +25,7 @@ class _DropReceiptScreenState extends State<DropReceiptScreen> {
   Map<String, dynamic>? _r;
   String? _error;
   bool _loading = true;
+  DateTime? _savedAt;
 
   @override
   void initState() {
@@ -31,21 +33,33 @@ class _DropReceiptScreenState extends State<DropReceiptScreen> {
     _load();
   }
 
+  /// A finished trip's receipt does not change, so the saved copy opens at once and works offline.
   Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+    final key = await DropCache.scoped('receipt:${widget.driver ? 'd' : 'r'}:${widget.rideId}');
+    if (_r == null) {
+      final saved = await DropCache.read(key, maxAge: const Duration(days: 90));
+      if (saved != null && saved.data is Map && mounted) {
+        setState(() {
+          _r = Map<String, dynamic>.from(saved.data as Map);
+          _savedAt = saved.savedAt;
+          _loading = false;
+        });
+      }
+    }
+    if (mounted && _r == null) setState(() => _loading = true);
+    _error = null;
     try {
       final res = widget.driver ? await RideApi.driverReceipt(widget.rideId) : await RideApi.receipt(widget.rideId);
       final d = res['data'];
       if (d is Map) {
         _r = Map<String, dynamic>.from(d);
-      } else {
+        _savedAt = null;
+        DropCache.put(key, d);
+      } else if (_r == null) {
         _error = (res['message'] ?? 'No receipt for this trip yet.').toString();
       }
     } catch (e) {
-      _error = 'Could not load the receipt. Check your connection and try again.';
+      if (_r == null) _error = 'Could not load the receipt. Check your connection and try again.';
     }
     if (mounted) setState(() => _loading = false);
   }
@@ -187,7 +201,10 @@ class _DropReceiptScreenState extends State<DropReceiptScreen> {
                     ]),
                   ),
                 )
-              : _body(_r!),
+              : Column(children: [
+                  if (_savedAt != null) Padding(padding: const EdgeInsets.fromLTRB(16, 8, 16, 0), child: Text('Saved copy from ${DropCache.ago(_savedAt!)}', key: const Key('saved_note'), style: TextStyle(fontSize: 12.5, color: DropColors.mutedText(context)))),
+                  Expanded(child: _body(_r!)),
+                ]),
     );
   }
 }

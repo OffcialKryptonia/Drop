@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../utils/Constants.dart';
+import 'net/net_policy.dart';
 
 /// Something the server (or the network) refused, with a message fit to show the person.
 class ApiFailure implements Exception {
@@ -12,6 +13,20 @@ class ApiFailure implements Exception {
   final Map<String, String> fields;
 
   ApiFailure(this.message, [this.fields = const {}]);
+
+  /// HTTP status when the server answered (null for network failures).
+  int? status;
+
+  /// The device was offline, so nothing was sent.
+  bool offline = false;
+
+  /// The request timed out *after* it may have reached the server. The result is unknown: check before trying again.
+  bool unconfirmed = false;
+
+  bool timedOut = false;
+
+  /// A gateway or availability error that is worth one more try for a read.
+  bool get retriable => status != null && (status == 502 || status == 503 || status == 504);
 
   @override
   String toString() => message;
@@ -47,17 +62,14 @@ class DriverApplicationApi {
       });
     }
     final message = body['message']?.toString();
-    throw ApiFailure(message == null || message.isEmpty ? 'Something went wrong (${r.statusCode}). Please try again.' : message, fields);
+    throw ApiFailure(message == null || message.isEmpty ? 'Something went wrong (${r.statusCode}). Please try again.' : message, fields)..status = r.statusCode;
   }
 
-  static Future<Map<String, dynamic>> _send(Future<http.Response> Function() call) async {
-    try {
-      return _handle(await call().timeout(const Duration(seconds: 60)));
-    } on ApiFailure {
-      rethrow;
-    } catch (_) {
-      throw ApiFailure('Could not reach DROP. Check your internet connection and try again.');
-    }
+  /// Reads are shared and retried; everything else is a write: refused offline, never retried, never queued.
+  /// Uploads (photos, documents) get a longer allowance.
+  static Future<Map<String, dynamic>> _send(Future<http.Response> Function() call, {String? readKey, Duration? timeout}) {
+    if (readKey != null) return NetGate.read('d:$readKey', (t) async => _handle(await call().timeout(t)));
+    return NetGate.write((t) async => _handle(await call().timeout(t)), timeout: timeout ?? const Duration(seconds: 25));
   }
 
   /// Address suggestions from DROP's shared place-search provider (Google when configured, otherwise OpenStreetMap).
@@ -68,17 +80,17 @@ class DriverApplicationApi {
       q['lat'] = latitude.toString();
       q['lng'] = longitude.toString();
     }
-    final response = await _send(() async => http.get(_uri('places/search', q), headers: await _headers()));
+    final response = await _send(() async => http.get(_uri('places/search', q), headers: await _headers()), readKey: 'places/search?${q['q']}');
     final data = response['data'];
     if (data is! List) return const [];
     return data.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
   }
 
   /// Ride types, required documents and rules (minimum age, licence years, upload size).
-  static Future<Map<String, dynamic>> requirements() async => _send(() async => http.get(_uri('driver/requirements'), headers: await _headers()));
+  static Future<Map<String, dynamic>> requirements() async => _send(() async => http.get(_uri('driver/requirements'), headers: await _headers()), readKey: 'driver/requirements');
 
   /// The person's draft, review status and per-document status.
-  static Future<Map<String, dynamic>> application() async => _send(() async => http.get(_uri('driver/application'), headers: await _headers()));
+  static Future<Map<String, dynamic>> application() async => _send(() async => http.get(_uri('driver/application'), headers: await _headers()), readKey: 'driver/application');
 
   static Future<void> savePersonal({required String firstName, required String lastName, required String dateOfBirth}) async {
     await _send(() async => http.put(
@@ -97,7 +109,7 @@ class DriverApplicationApi {
   }
 
   static Future<void> uploadPhoto(Uint8List bytes) async {
-    await _send(() async => http.put(_uri('driver/application/photo'), headers: await _headers(contentType: 'application/octet-stream'), body: bytes));
+    await _send(() async => http.put(_uri('driver/application/photo'), headers: await _headers(contentType: 'application/octet-stream'), body: bytes), timeout: const Duration(seconds: 90));
   }
 
   static Future<void> uploadDocument(int documentId, Uint8List bytes, {String? expireDate}) async {
@@ -105,7 +117,7 @@ class DriverApplicationApi {
           _uri('driver/documents/$documentId', expireDate == null ? null : {'expire_date': expireDate}),
           headers: await _headers(contentType: 'application/octet-stream'),
           body: bytes,
-        ));
+        ), timeout: const Duration(seconds: 90));
   }
 
   static Future<void> submit() async {
@@ -115,7 +127,7 @@ class DriverApplicationApi {
   // ---- driver mode: online state ----
 
   /// Online state, wallet against the minimum, and why going online may be blocked.
-  static Future<Map<String, dynamic>> driverStatus() async => _send(() async => http.get(_uri('driver/status'), headers: await _headers()));
+  static Future<Map<String, dynamic>> driverStatus() async => _send(() async => http.get(_uri('driver/status'), headers: await _headers()), readKey: 'driver/status');
 
   static Future<void> setOnline(bool online, {double? latitude, double? longitude}) async {
     await _send(() async => http.post(
@@ -136,10 +148,10 @@ class DriverApplicationApi {
   // ---- driver mode: profile, payouts ----
 
   /// Referral code, ride type and vehicle.
-  static Future<Map<String, dynamic>> driverProfile() async => _send(() async => http.get(_uri('driver/profile'), headers: await _headers()));
+  static Future<Map<String, dynamic>> driverProfile() async => _send(() async => http.get(_uri('driver/profile'), headers: await _headers()), readKey: 'driver/profile');
 
   /// Balance, smallest payout, bank account and payout history.
-  static Future<Map<String, dynamic>> payouts() async => _send(() async => http.get(_uri('driver/payouts'), headers: await _headers()));
+  static Future<Map<String, dynamic>> payouts() async => _send(() async => http.get(_uri('driver/payouts'), headers: await _headers()), readKey: 'driver/payouts');
 
   static Future<String> requestPayout(num amount) async {
     final r = await _send(() async => http.post(
@@ -152,7 +164,7 @@ class DriverApplicationApi {
 
   // ---- plain helpers for other small features (SOS, complaints) ----
 
-  static Future<Map<String, dynamic>> getJson(String path) async => _send(() async => http.get(_uri(path), headers: await _headers()));
+  static Future<Map<String, dynamic>> getJson(String path) async => _send(() async => http.get(_uri(path), headers: await _headers()), readKey: path);
 
   static Future<Map<String, dynamic>> putJson(String path, Map<String, dynamic> body) async =>
       _send(() async => http.put(_uri(path), headers: await _headers(contentType: 'application/json'), body: jsonEncode(body)));

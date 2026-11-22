@@ -6,6 +6,8 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart' show LatLng;
 import 'package:share_plus/share_plus.dart';
 
+import '../main.dart' show sharedPref;
+import '../utils/Constants.dart' show LATITUDE, LONGITUDE;
 import '../components/DropMap.dart';
 import '../components/LiveLocation.dart';
 import '../components/RegionWatcher.dart';
@@ -186,34 +188,67 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
   // ---------- startup ----------
 
   Future<void> _start() async {
-    mapConfig = await MapConfig.load();
-    try { maxAdditionalStops = await RideApi.stopLimit(); } catch (_) { maxAdditionalStops = 0; }
-    if (mapConfig.mapboxRegionBorderingEnabled) {
-      try { regionBoundaries = await RegionApi.boundaries(); } catch (_) { regionBoundaries = const []; }
-    }
+    // 1. The shell: everything here comes from the phone, so the map and layout appear on the first frame.
+    final saved = await MapConfig.loadSaved();
+    if (saved != null) mapConfig = saved;
+    final lat = sharedPref.getDouble(LATITUDE), lng = sharedPref.getDouble(LONGITUDE);
+    if (lat != null && lng != null && !(lat == 0 && lng == 0)) center = LatLng(lat, lng); // only places the map; never used as the pickup
     if (mounted) setState(() => mapLoaded = true);
     DropMoney.load();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) DropEmailPrompt.maybeShow(context);
     });
-    await _locate();
+
+    // 2. Live information catches up in the background; none of it holds the screen.
+    _refreshLiveSettings();
+    unawaited(_locate());
+
+    // 3. A ride already in progress is looked up at once. The screen waits for that answer only briefly: on a weak
+    //    network the passenger sees the booking screen, and a ride that turns up later still takes over.
+    var handled = false;
+    final resume = _resumeOpenRide();
+    try {
+      handled = await resume.timeout(const Duration(seconds: 4));
+    } on TimeoutException {
+      handled = false;
+    }
+    if (!handled && mounted && phase == _Phase.loading) setState(() => phase = _Phase.plan);
+  }
+
+  /// Map settings, stop limit and region borders. Each updates the screen when it arrives, and each may fail quietly.
+  void _refreshLiveSettings() {
+    MapConfig.load(refresh: true).then((c) {
+      if (mounted) setState(() => mapConfig = c);
+      if (c.mapboxRegionBorderingEnabled && regionBoundaries.isEmpty) {
+        RegionApi.boundaries().then((b) {
+          if (mounted) setState(() => regionBoundaries = b);
+        }).catchError((_) {});
+      }
+    }).catchError((_) {});
+    RideApi.stopLimit().then((n) {
+      if (mounted) setState(() => maxAdditionalStops = n);
+    }).catchError((_) {});
+  }
+
+  /// True when it found a ride or a bid and took over the screen.
+  Future<bool> _resumeOpenRide() async {
     try {
       final r = _m((await RideApi.current())['data']);
       if (r.isNotEmpty) {
         _setRide(r);
-        return;
+        return true;
       }
       // A bid the passenger left open (app closed, phone locked) is picked up again where it was.
       final b = _m((await RideApi.currentBid())['data']);
       if (b.isNotEmpty && mounted) {
         setState(() => phase = _Phase.plan);
         WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted) _openBid(b); });
-        return;
+        return true;
       }
     } on ApiFailure catch (e) {
-      _say(e.message);
+      if (!e.offline) _say(e.message); // offline already shows in the connectivity strip
     }
-    if (mounted) setState(() => phase = _Phase.plan);
+    return false;
   }
 
   /// Every real GPS fix: ask about a region change, and keep the automatic pickup under the passenger.
@@ -238,13 +273,24 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
       var p = await Geolocator.checkPermission();
       if (p == LocationPermission.denied) p = await Geolocator.requestPermission();
       if (p == LocationPermission.denied || p == LocationPermission.deniedForever) throw Exception('denied');
-      final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+      Position pos;
+      try {
+        pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high, timeLimit: const Duration(seconds: 8));
+      } on TimeoutException {
+        // A slow fix must not leave the passenger without a pickup: use the phone's last fix, and the live stream refines it.
+        final last = await Geolocator.getLastKnownPosition();
+        if (last == null) rethrow;
+        pos = last;
+      }
       pickup = LatLng(pos.latitude, pos.longitude);
       _pickupAuto = true;
+      sharedPref.setDouble(LATITUDE, pos.latitude);
+      sharedPref.setDouble(LONGITUDE, pos.longitude);
       _live.start(seed: pickup);
       center = pickup!;
-      pickupAddress = await _addressOf(pickup!, fallback: 'Your location');
       _map.animateTo(pickup!, zoom: 17);
+      if (mounted) setState(() => locating = false); // the map and the pickup show now; the street name follows
+      pickupAddress = await _addressOf(pickup!, fallback: 'Your location');
     } catch (_) {
       _say('Turn on location and allow DROP to use it, so we know where to pick you up.');
     }
@@ -518,10 +564,31 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
       );
       _setRide(_m(res['data']));
     } on ApiFailure catch (e) {
-      _say(e.message);
-      if (RideApi.lastCode == 'already_has_ride') _start();
+      if (e.unconfirmed) {
+        // The request may have reached DROP. Never guess and never send it twice: ask the server what really happened.
+        await _reconcileRequest();
+      } else {
+        _say(e.message);
+        if (RideApi.lastCode == 'already_has_ride') _start();
+      }
     }
     if (mounted) setState(() => busy = false);
+  }
+
+  /// After a request that timed out: look for the ride on the server. Found: continue with it. Not found: say so plainly
+  /// and let the passenger try again. Cannot tell: ask the passenger to check before requesting again.
+  Future<void> _reconcileRequest() async {
+    _say('Checking whether your request went through…');
+    try {
+      final r = _m((await RideApi.current())['data']);
+      if (r.isNotEmpty) {
+        _setRide(r);
+        return;
+      }
+      _say('Your request did not go through. You can request again.');
+    } on ApiFailure {
+      _say('We could not confirm your request. Please check your connection and your current ride before requesting again.');
+    }
   }
 
   // ---------- optional bidding: the passenger names a fare, drivers answer, the passenger chooses ----------

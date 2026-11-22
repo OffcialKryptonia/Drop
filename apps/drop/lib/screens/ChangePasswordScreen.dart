@@ -36,7 +36,6 @@ class ChangePasswordScreenState extends State<ChangePasswordScreen> {
 
       await changePassword(req).then((value) async {
         await updateUserPassword(oldPassController.text.trim(), newPassController.text.trim());
-        await sharedPref.setString(USER_PASSWORD, newPassController.text.trim());
         toast(value.message.toString());
         appStore.setLoading(false);
 
