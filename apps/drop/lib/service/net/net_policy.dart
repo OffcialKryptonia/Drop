@@ -48,7 +48,10 @@ class NetGate {
     if (connectivity.isOffline) return Future.error(ApiFailure(offlineMessage)..offline = true);
     final shared = _inFlight[key];
     if (shared != null) return shared;
-    final f = _readWithRetry(run, retries, timeout).whenComplete(() => _inFlight.remove(key));
+    // The braces matter: returning the removed future from whenComplete would make it wait for itself.
+    final f = _readWithRetry(run, retries, timeout).whenComplete(() {
+      _inFlight.remove(key);
+    });
     _inFlight[key] = f;
     return f;
   }
