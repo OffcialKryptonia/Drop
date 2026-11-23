@@ -99,14 +99,12 @@ try {
   ok("a deactivated airport refuses bookings at once", (await code(zone, AP1, { id: a1, direction: "drop" })) === "422:airport_inactive");
   ok("edit is audit-logged", (await db.query("select 1 from app.admin_audit where action = 'airport_edit' and target = $1", [String(a1)])).rowCount >= 1);
 } finally {
-  if (svcAir !== undefined) {
-    await db.query("delete from app.ride_requests where service_id = any($1)", [[svcAir, svcNow].filter(Boolean)]);
-    await db.query("delete from app.services where id = any($1)", [[svcAir, svcNow].filter(Boolean)]);
-  }
+  if (svcAir !== undefined) await db.query("delete from app.ride_requests where service_id = any($1)", [[svcAir, svcNow].filter(Boolean)]);
   if (airports.length) {
     await db.query("update app.ride_requests set airport_id = null where airport_id = any($1)", [airports.filter(Boolean)]);
     await db.query("delete from app.airports where id = any($1)", [airports.filter(Boolean)]);
   }
+  if (svcAir !== undefined) await db.query("delete from app.services where id = any($1)", [[svcAir, svcNow].filter(Boolean)]);
   for (const g of [region, regionOff]) if (g !== undefined) await db.query("delete from app.regions where id = $1", [g]);
   await db.query("update app.regions set status = true where id = any($1)", [was]);
   for (const id of ids) await db.query("delete from app.users where id = $1", [id]).catch(() => {});
