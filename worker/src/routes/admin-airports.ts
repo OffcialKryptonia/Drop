@@ -6,6 +6,7 @@ import { audit, guard } from "../lib/permissions";
 import { readBody, validationFailed } from "../lib/legacy";
 import { requireWebOrBearer } from "../auth/web-or-bearer";
 import { activeRules } from "../lib/airports";
+import { loadFlightConfig, mergeConfig, saveFlightConfig, FLIGHT_FIELDS } from "../lib/airport-flight";
 
 export const adminAirportRoutes = new Hono<AppEnv>();
 export const airportPublicRoutes = new Hono<AppEnv>();
@@ -175,13 +176,24 @@ adminAirportRoutes.delete("/admin/airport-prices/:id", ...guard("airport delete"
   return c.json({ message: "Deleted" });
 });
 
+/** Which flight / meeting fields passengers are asked for, per direction, and which are required. */
+adminAirportRoutes.get("/admin/airport-flight-fields", ...guard("airport list"), async (c) => c.json({ data: await loadFlightConfig(c.get("db")), fields: FLIGHT_FIELDS }));
+adminAirportRoutes.put("/admin/airport-flight-fields", ...guard("airport edit"), async (c) => {
+  const body = await readBody(c);
+  const cfg = mergeConfig(body);
+  await saveFlightConfig(c.get("db"), cfg);
+  await audit(c, "airport_flight_fields_edit", "settings", { drop: Object.entries(cfg.drop).filter(([, v]) => v.required).map(([k]) => k), pickup: Object.entries(cfg.pickup).filter(([, v]) => v.required).map(([k]) => k) });
+  return c.json({ message: "Saved", data: cfg });
+});
+
 /** Airports the app may offer: active, in an active region. The app never hardcodes airports; this is the only source. */
 airportPublicRoutes.get("/airports", withDb, requireWebOrBearer, async (c) => {
   const r = await c.get("db").query(
     `select a.id, a.name, a.iata_code, a.latitude, a.longitude, a.terminals, a.pickup_instructions, a.region_id
        from app.airports a join app.regions g on g.id = a.region_id and g.status
       where a.status and a.deleted_at is null order by a.name`);
-  return c.json({ status: true, flight_tracking: false, data: r.rows.map((x) => ({ ...x, id: Number(x.id), region_id: Number(x.region_id), latitude: Number(x.latitude), longitude: Number(x.longitude) })) });
+  const flightFields = await loadFlightConfig(c.get("db"));
+  return c.json({ status: true, flight_tracking: false, flight_fields: flightFields, data: r.rows.map((x) => ({ ...x, id: Number(x.id), region_id: Number(x.region_id), latitude: Number(x.latitude), longitude: Number(x.longitude) })) });
 });
 
 export { activeRules };

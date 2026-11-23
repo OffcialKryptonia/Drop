@@ -14,7 +14,8 @@ import { requireWebOrBearer } from "../auth/web-or-bearer";
 import { currencyInfo, userCurrency } from "../lib/currency";
 import { readBody, validationFailed } from "../lib/legacy";
 import { quoteRide, listRideTypes } from "../lib/ride-pricing";
-import { airportFare, pickPriceRule } from "../lib/airports";
+import { AIRPORT_COLS, AIRPORT_JOIN, airportFare, airportView, pickPriceRule } from "../lib/airports";
+import { loadFlightConfig, validateFlight } from "../lib/airport-flight";
 import { computeFare } from "../lib/fare";
 import { getSetting } from "../lib/driver-application";
 import { chargeCancellationFee } from "../lib/ride-settlement";
@@ -43,6 +44,7 @@ const requestSchema = tripSchema.extend({
   service_id: z.coerce.number().int().positive({ error: "Choose a ride type." }),
   payment_method: z.enum(["cash", "wallet", "card", "virtual_account"], { error: "Choose how you will pay." }),
   option_ids: z.array(z.coerce.number().int().positive()).max(20).default([]),
+  flight: z.record(z.string(), z.unknown()).optional(),
 });
 
 const OPEN = ["searching", "accepted", "arrived", "in_progress"];
@@ -52,6 +54,7 @@ const ride = (r: Row) => ({
   id: Number(r.id),
   status: r.status,
   booking_source: r.booking_source ?? "passenger",
+  airport: airportView(r, false),
   service: { id: Number(r.service_id), name: r.service_name ?? null, category: r.service_category ?? null, map_icon: iconKeyFor(r.service_category as string, r.service_map_icon as string) },
   pickup: { lat: r.pickup_lat, lng: r.pickup_lng, address: r.pickup_address },
   dropoff: { lat: r.dropoff_lat, lng: r.dropoff_lng, address: r.dropoff_address },
@@ -82,7 +85,7 @@ const ride = (r: Row) => ({
 });
 
 /** One ride with its service name and, once accepted, the driver's details and live position. */
-const RIDE_SELECT = `select r.*, s.name as service_name, s.category as service_category, s.map_icon_key as service_map_icon,
+const RIDE_SELECT = `select r.*, s.name as service_name, s.category as service_category, s.map_icon_key as service_map_icon, ${AIRPORT_COLS},
        du.first_name as driver_first_name, du.last_name as driver_last_name, du.profile_image_key as driver_image_key,
        du.latitude as driver_lat, du.longitude as driver_lng, du.last_location_update_at as driver_location_at,
        p.vehicle_make, p.vehicle_model, p.vehicle_colour, p.vehicle_plate,
@@ -91,6 +94,7 @@ const RIDE_SELECT = `select r.*, s.name as service_name, s.category as service_c
          from app.ride_request_stops st where st.ride_request_id = r.id), '[]'::jsonb) as stops
   from app.ride_requests r
   join app.services s on s.id = r.service_id
+  ${AIRPORT_JOIN}
   left join app.users du on du.id = r.driver_id
   left join app.driver_profiles p on p.user_id = r.driver_id`;
 
@@ -130,7 +134,7 @@ rideRoutes.post("/ride/estimate", ...mw, async (c) => {
   const q = await quoteRide(c.get("db"), c.env, p.data.pickup, p.data.dropoff, p.data.stops, p.data.airport);
   if (!q.ok) return c.json({ status: false, code: q.code, message: q.message }, 422);
   return c.json({
-    airport: q.airport ? { id: q.airport.airport.id, name: q.airport.airport.name, iata_code: q.airport.airport.iata_code, direction: q.airport.direction, terminals: q.airport.airport.terminals, pickup_instructions: q.airport.airport.pickup_instructions, flight_tracking: false } : null,
+    airport: q.airport ? { id: q.airport.airport.id, name: q.airport.airport.name, iata_code: q.airport.airport.iata_code, direction: q.airport.direction, terminals: q.airport.airport.terminals, pickup_instructions: q.airport.airport.pickup_instructions, flight_tracking: false, flight_fields: (await loadFlightConfig(c.get("db")))[q.airport.direction] } : null,
     status: true,
     region: { id: q.region.id, name: q.region.name },
     currency: currencyInfo(q.region.currency),
@@ -184,16 +188,24 @@ rideRoutes.post("/ride/request", ...mw, async (c) => {
     if (bal < fare.total) return c.json({ status: false, code: "insufficient_wallet", message: `Your wallet balance is too low for this ride. Fare ${fare.total}, balance ${bal}.`, fare: fare.total, balance: bal }, 422);
   }
 
+  // Airport bookings carry flight/meeting details; the admin decides which fields are required.
+  let flight: Record<string, unknown> | null = null;
+  if (q.airport) {
+    const v = validateFlight(await loadFlightConfig(db), q.airport.direction, p.data.flight, q.airport.airport.terminals);
+    if (!v.ok) return c.json({ status: false, code: "flight_details_invalid", message: Object.values(v.errors)[0], errors: v.errors }, 422);
+    flight = v.flight;
+  }
+
   const expiry = await getSetting(db, "ride_request_expiry_seconds", 120);
   try {
     await db.query("begin");
     const ins = await db.query(
       `insert into app.ride_requests (rider_id, service_id, region_id, pickup_lat, pickup_lng, pickup_address, dropoff_lat, dropoff_lng, dropoff_address,
-              distance, distance_unit, duration_minutes, route_source, fare, fare_breakdown, options, payment_method, expires_at, currency, airport_id, airport_direction)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17, now() + make_interval(secs => $18), $19, $20, $21)
+              distance, distance_unit, duration_minutes, route_source, fare, fare_breakdown, options, payment_method, expires_at, currency, airport_id, airport_direction, flight)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17, now() + make_interval(secs => $18), $19, $20, $21, $22::jsonb)
        returning id`,
       [me.id, type.id, q.region.id, p.data.pickup.lat, p.data.pickup.lng, p.data.pickup.address ?? null, p.data.dropoff.lat, p.data.dropoff.lng, p.data.dropoff.address ?? null,
-        q.distance, q.region.distance_unit, q.route.duration_minutes, q.route.source, fare.total, JSON.stringify(fare), JSON.stringify(options), p.data.payment_method, expiry, q.region.currency, q.airport?.airport.id ?? null, q.airport?.direction ?? null],
+        q.distance, q.region.distance_unit, q.route.duration_minutes, q.route.source, fare.total, JSON.stringify(fare), JSON.stringify(options), p.data.payment_method, expiry, q.region.currency, q.airport?.airport.id ?? null, q.airport?.direction ?? null, flight ? JSON.stringify(flight) : null],
     );
     const rideId = Number(ins.rows[0].id);
     for (let i = 0; i < p.data.stops.length; i++) {
