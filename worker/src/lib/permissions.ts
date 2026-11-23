@@ -7,6 +7,7 @@ import { requireAuth } from "../auth/middleware";
 export const MODULES: { key: string; label: string; actions: string[] }[] = [
   { key: "service", label: "Ride types", actions: ["list", "add", "edit", "delete"] },
   { key: "service_option", label: "Ride options", actions: ["list", "add", "edit", "delete"] },
+  { key: "airport", label: "Airports", actions: ["list", "add", "edit", "delete"] },
   { key: "region", label: "Regions", actions: ["list", "add", "edit", "delete"] },
   { key: "payment_gateway", label: "Payment methods", actions: ["list", "edit"] },
   { key: "driver_application", label: "Driver applications", actions: ["list", "edit"] },
