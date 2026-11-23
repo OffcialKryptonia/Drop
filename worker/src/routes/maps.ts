@@ -24,6 +24,9 @@ mapRoutes.get("/map-config", withDb, async (c) => {
     mapbox_enabled: s.mapbox_enabled,
     mapbox_configured: s.mapbox_configured,
     mapbox_style_uri: s.active === "mapbox" ? s.mapbox_style_uri : null,
+    mapbox_dark_style_uri: s.active === "mapbox" && s.mapbox_dark_style_uri ? s.mapbox_dark_style_uri : null,
+    // Dark vector style for the MapLibre / OpenStreetMap map, hosted with the Worker (no API key needed).
+    maplibre_dark_style_url: origin + "/map-styles/drop-dark.json",
     mapbox_public_token: s.active === "mapbox" ? s.mapbox_public_token : null,
     mapbox_region_bordering_enabled: s.mapbox_region_bordering_enabled,
     mapbox_fallback_reason: s.fallback_reason,
@@ -44,6 +47,7 @@ const updateSchema = z.object({
   mapbox_enabled: z.boolean().optional(),
   mapbox_region_bordering_enabled: z.boolean().optional(),
   mapbox_style_uri: z.string().trim().max(300).refine((u) => u === "" || u.startsWith("mapbox://styles/"), "Use a Mapbox style URI such as mapbox://styles/mapbox/streets-v12.").optional(),
+  mapbox_dark_style_uri: z.string().trim().max(300).refine((u) => u === "" || u.startsWith("mapbox://styles/"), "Use a Mapbox style URI such as mapbox://styles/mapbox/dark-v11.").optional(),
   mapbox_public_token: z.string().trim().max(500).nullable().optional(),
 });
 
@@ -87,6 +91,7 @@ mapRoutes.put("/admin/map-settings", ...guard("map_settings edit"), async (c) =>
   await saveSetting(db, "mapbox_enabled", enabled ? "true" : "false");
   await saveSetting(db, "mapbox_region_bordering_enabled", regionEnabled ? "true" : "false");
   await saveSetting(db, "mapbox_style_uri", p.data.mapbox_style_uri?.trim() || DEFAULT_MAPBOX_STYLE);
+  if (p.data.mapbox_dark_style_uri !== undefined) await saveSetting(db, "mapbox_dark_style_uri", p.data.mapbox_dark_style_uri.trim());
   await saveSetting(db, "mapbox_config_updated_at", new Date().toISOString());
   await db.query("delete from app.settings where key = 'google_maps_failed_at'");
   await audit(c, "map_settings", "map_provider", { provider: selectedProvider, mapbox_enabled: enabled, mapbox_region_bordering_enabled: regionEnabled, token_changed: credentialsChanged, style_changed: styleChanged });

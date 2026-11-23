@@ -800,6 +800,8 @@
         Array.from(provider.options).forEach(function (option) { if (option.value === "mapbox") option.disabled = !enabled.checked || !d.mapbox_configured; });
       });
       var style = text(d.mapbox_style_uri || "mapbox://styles/mapbox/streets-v12");
+      var darkStyle = text(d.mapbox_dark_style_uri || "");
+      darkStyle.placeholder = "Automatic (mapbox://styles/mapbox/dark-v11)";
       var token = h("input", { type: "password", autocomplete: "new-password", placeholder: d.mapbox_public_token_masked || "pk...." });
       var show = h("button", { class: "ghost small", type: "button", text: "Show" });
       show.addEventListener("click", function () { token.type = token.type === "password" ? "text" : "password"; show.textContent = token.type === "password" ? "Show" : "Hide"; });
@@ -824,10 +826,11 @@
           } } })),
         tokenStatus,
         field("Mapbox style URI (optional)", style, "Default: mapbox://styles/mapbox/streets-v12. You may use a Mapbox Studio style."),
+        field("Mapbox dark style URI (optional)", darkStyle, "Used in dark mode. Leave empty to use the matching official Mapbox dark style. Needed only if the style above is a custom Studio style."),
         h("div", { class: "row" }, h("span", { text: "Use Mapbox for Region Bordering" }), h("label", { class: "switch" }, borders, h("span"))),
         h("p", { class: "muted", text: "When enabled, existing service-region polygons are supplied as GeoJSON for Mapbox-compatible point-in-polygon and boundary-proximity checks, regardless of the selected map renderer. If Mapbox is selected, the same polygons are also drawn as fill/outline layers. Region membership, ride eligibility and switching remain controlled by the Worker/PostGIS backend." }));
       function saveMapSettings(extra, after) {
-        var body = Object.assign({ provider: provider.value, osm_tile_url: tiles.value.trim(), osm_routing_url: routing.value.trim(), mapbox_enabled: enabled.checked, mapbox_region_bordering_enabled: borders.checked, mapbox_style_uri: style.value.trim() }, extra || {});
+        var body = Object.assign({ provider: provider.value, osm_tile_url: tiles.value.trim(), osm_routing_url: routing.value.trim(), mapbox_enabled: enabled.checked, mapbox_region_bordering_enabled: borders.checked, mapbox_style_uri: style.value.trim(), mapbox_dark_style_uri: darkStyle.value.trim() }, extra || {});
         if (!Object.prototype.hasOwnProperty.call(extra || {}, "mapbox_public_token") && token.value.trim()) body.mapbox_public_token = token.value.trim();
         api("PUT", "/admin/map-settings", body).then(function (x) {
           if (x.ok) { if (after) after(); else { toast("Saved"); pageMaps(root); } }

@@ -963,7 +963,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
                               tileUrl: mapConfig.tileUrl,
                               styleUrl: mapConfig.styleUrl,
                               attribution: mapConfig.attribution,
-                              mapboxStyleUri: mapConfig.mapboxStyleUri,
+                              mapboxStyleUri: mapConfig.mapboxStyleUri, darkStyleUrl: mapConfig.darkStyleUrl, mapboxDarkStyleUri: mapConfig.mapboxDarkStyleUri,
                               showRegionBorders: mapConfig.mapboxRegionBorderingEnabled,
                               regionBoundaries: regionBoundaries,
                               initialCenter: myPos ?? const LatLng(9.0765, 7.3986),
