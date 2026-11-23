@@ -14,6 +14,7 @@ import { driverPickupFlags, issuePickupCode, pickupSettings, startAllowedSql, ve
 import { completeRide } from "../lib/ride-settlement";
 import { pushLater, pushRideEvent } from "../lib/push";
 import { driverBidList, driverPreferences } from "./ride-bids";
+import { AIRPORT_COLS, AIRPORT_JOIN, airportView } from "../lib/airports";
 
 export const driverRideRoutes = new Hono<AppEnv>();
 type C = Context<AppEnv>;
@@ -35,6 +36,7 @@ const request = (r: Row, rule: CommissionRule) => {
   return {
     id: Number(r.id),
     status: r.status,
+    airport: airportView(r, true),
     fare,
     commission,
     earning: Math.round((fare - commission) * 100) / 100,
@@ -60,12 +62,13 @@ const request = (r: Row, rule: CommissionRule) => {
 async function activeOf(c: C) {
   return (
     await c.get("db").query(
-      `select r.*, u.first_name as rider_first_name, u.contact_number as rider_contact_number,
+      `select r.*, ${AIRPORT_COLS}, u.first_name as rider_first_name, u.contact_number as rider_contact_number,
               du.latitude as driver_lat, du.longitude as driver_lng, du.last_location_update_at as driver_location_at,
               coalesce((select jsonb_agg(jsonb_build_object('id', st.id, 'sequence', st.sequence, 'lat', st.lat, 'lng', st.lng,
                 'address', st.address, 'status', st.status, 'arrived_at', st.arrived_at, 'completed_at', st.completed_at) order by st.sequence)
                 from app.ride_request_stops st where st.ride_request_id = r.id), '[]'::jsonb) as stops
          from app.ride_requests r join app.users u on u.id = r.rider_id
+         ${AIRPORT_JOIN}
          left join app.users du on du.id = r.driver_id
         where r.driver_id = $1 and r.status in ('accepted', 'arrived', 'in_progress') order by r.id desc limit 1`,
       [c.get("user").id],
@@ -101,11 +104,12 @@ driverRideRoutes.get("/driver/requests", ...mw, async (c) => {
   const radius = await getSetting(db, "nearby_driver_radius_m", 5000);
   const rows = (
     await db.query(
-      `select r.*, u.first_name as rider_first_name, extensions.st_distance(du.location, ${POINT}) as pickup_m,
+      `select r.*, ${AIRPORT_COLS}, u.first_name as rider_first_name, extensions.st_distance(du.location, ${POINT}) as pickup_m,
               coalesce((select jsonb_agg(jsonb_build_object('id', st.id, 'sequence', st.sequence, 'lat', st.lat, 'lng', st.lng,
                 'address', st.address, 'status', st.status, 'arrived_at', st.arrived_at, 'completed_at', st.completed_at) order by st.sequence)
                 from app.ride_request_stops st where st.ride_request_id = r.id), '[]'::jsonb) as stops
          from app.ride_requests r
+         ${AIRPORT_JOIN}
          join app.users u on u.id = r.rider_id
          join app.users du on du.id = $1
          join app.driver_profiles p on p.user_id = $1

@@ -152,3 +152,26 @@ export async function activeRules(db: Client, airportId: number): Promise<PriceR
 
 /** Plain-metre guard used only for admin sanity checks. */
 export const metresBetween = (a: LatLng, b: LatLng) => haversineKm(a, b) * 1000;
+
+/** Columns and join that put an airport's details on a ride row (alias `ap`). */
+export const AIRPORT_COLS = `ap.name as airport_name, ap.iata_code as airport_iata, ap.pickup_instructions as airport_instructions, ap.terminals as airport_terminals`;
+export const AIRPORT_JOIN = `left join app.airports ap on ap.id = r.airport_id`;
+
+/** Airport details as shown on a ride. Drivers get the flight details without the passenger's phone number. */
+export function airportView(r: Record<string, unknown>, forDriver: boolean) {
+  if (r.airport_id == null) return null;
+  const direction = r.airport_direction as AirportDirection;
+  const flight = (r.flight ?? null) as Record<string, unknown> | null;
+  let shown: unknown = flight;
+  if (forDriver && flight) { const { contact_phone, ...rest } = flight; shown = { ...rest, has_contact: Boolean(contact_phone) }; }
+  return {
+    id: Number(r.airport_id),
+    name: r.airport_name ?? null,
+    iata_code: r.airport_iata ?? null,
+    direction,
+    label: direction === "drop" ? "Airport Drop" : "Airport Pickup",
+    pickup_instructions: r.airport_instructions ?? null,
+    flight: shown,
+    flight_tracking: false,
+  };
+}

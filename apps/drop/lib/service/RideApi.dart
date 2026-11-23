@@ -154,8 +154,12 @@ class RideApi {
     required double dropLng,
     required String dropAddress,
     List<Map<String, dynamic>> stops = const [],
+    Map<String, dynamic>? airport,
   }) =>
-      _post('ride/estimate', {'pickup': _point(pickupLat, pickupLng, pickupAddress), 'dropoff': _point(dropLat, dropLng, dropAddress), 'stops': stops});
+      _post('ride/estimate', {'pickup': _point(pickupLat, pickupLng, pickupAddress), 'dropoff': _point(dropLat, dropLng, dropAddress), 'stops': stops, if (airport != null) 'airport': airport});
+
+  /// Airports the admin has switched on, plus which flight fields to ask for. The app never hardcodes airports.
+  static Future<Map<String, dynamic>> airports() => _get('airports');
 
   static Future<Map<String, dynamic>> request({
     required double pickupLat,
@@ -168,8 +172,12 @@ class RideApi {
     required String paymentMethod,
     List<int> optionIds = const [],
     List<Map<String, dynamic>> stops = const [],
+    Map<String, dynamic>? airport,
+    Map<String, dynamic>? flight,
   }) =>
       _post('ride/request', {
+        if (airport != null) 'airport': airport,
+        if (flight != null) 'flight': flight,
         'pickup': _point(pickupLat, pickupLng, pickupAddress),
         'dropoff': _point(dropLat, dropLng, dropAddress),
         'stops': stops,

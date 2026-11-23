@@ -582,7 +582,7 @@
     Promise.all([api("GET", "/admin/airports"), api("GET", "/admin/regions")]).then(function (res) {
       var list = (res[0].body && res[0].body.data) || [], regions = (res[1].body && res[1].body.data) || [];
       root.textContent = "";
-      root.appendChild(head("Airports", "Airports riders can book to and from. An airport only appears in the app when it is switched on and has a location and a geofence or radius. Live flight tracking is not enabled.", can("airport add") ? h("button", { text: "Add airport", on: { click: function () { airportForm(root, null, regions); } } }) : null));
+      root.appendChild(head("Airports", "Airports riders can book to and from. An airport only appears in the app when it is switched on and has a location and a geofence or radius. Live flight tracking is not enabled.", h("div", { class: "acts" }, can("airport edit") ? h("button", { class: "ghost", text: "Flight fields", on: { click: function () { airportFlightFields(root); } } }) : null, can("airport add") ? h("button", { text: "Add airport", on: { click: function () { airportForm(root, null, regions); } } }) : null)));
       var card = h("div", { class: "card" });
       if (!list.length) card.appendChild(h("div", { class: "empty", text: "No airports yet. Add one and enter its verified details." }));
       list.forEach(function (a) {
@@ -601,6 +601,42 @@
           h("span", { class: "pill " + (a.status ? "on" : ""), text: a.status ? "On" : "Off" })));
       });
       root.appendChild(card);
+    });
+  }
+
+
+  // Which details a passenger is asked for on an airport booking. They are typed in by the passenger; DROP does not track flights.
+  function airportFlightFields(root) {
+    loading(root);
+    api("GET", "/admin/airport-flight-fields").then(function (r) {
+      var cfg = (r.body && r.body.data) || {}, names = (r.body && r.body.fields) || [];
+      var labels = { airline: "Airline", flight_number: "Flight number", arrival_date: "Date", arrival_time: "Time", terminal: "Terminal", passenger_count: "Passengers", luggage_count: "Luggage", contact_phone: "Contact number", instructions: "Special instructions" };
+      root.textContent = "";
+      root.appendChild(head("Airport flight fields", "Choose what passengers are asked on airport bookings and what is required. Flight details are typed in by the passenger and are not checked against a flight provider."));
+      var boxes = {};
+      [["drop", "Airport Drop (to the airport)"], ["pickup", "Airport Pickup (from the airport)"]].forEach(function (d) {
+        var card = h("div", { class: "card" }, h("div", { class: "t", text: d[1] }));
+        boxes[d[0]] = {};
+        names.forEach(function (n) {
+          var on = h("input", { type: "checkbox", checked: !!(cfg[d[0]] && cfg[d[0]][n] && cfg[d[0]][n].enabled) });
+          var req = h("input", { type: "checkbox", checked: !!(cfg[d[0]] && cfg[d[0]][n] && cfg[d[0]][n].required) });
+          req.addEventListener("change", function () { if (req.checked) on.checked = true; });
+          on.addEventListener("change", function () { if (!on.checked) req.checked = false; });
+          boxes[d[0]][n] = { on: on, req: req };
+          card.appendChild(h("div", { class: "row" }, h("div", { text: labels[n] || n }), h("label", { class: "chk" }, on, " Ask"), h("label", { class: "chk" }, req, " Required")));
+        });
+        root.appendChild(card);
+      });
+      var out = h("p", { class: "msg" });
+      var save = h("button", { text: "Save", style: "width:100%;margin-top:14px" });
+      save.addEventListener("click", function () {
+        var body = {};
+        Object.keys(boxes).forEach(function (d) { body[d] = {}; names.forEach(function (n) { body[d][n] = { enabled: boxes[d][n].on.checked, required: boxes[d][n].req.checked }; }); });
+        save.disabled = true;
+        api("PUT", "/admin/airport-flight-fields", body).then(function (x) { save.disabled = false; if (x.ok) { toast("Saved"); pageAirports(root); } else msg(out, errText(x)); });
+      });
+      root.appendChild(out); root.appendChild(save);
+      root.appendChild(h("button", { class: "ghost", text: "Back", style: "width:100%;margin-top:8px", on: { click: function () { pageAirports(root); } } }));
     });
   }
 

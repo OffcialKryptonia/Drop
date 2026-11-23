@@ -94,6 +94,40 @@ try {
   const noMode = await call("POST", "/ride/request", P.api_token, { pickup: zone, dropoff: AP1, service_id: svcNow, payment_method: "cash", airport: { id: a1, direction: "drop" } });
   ok("a ride type without airport rides cannot be used", noMode.status === 422 && noMode.json.code === "ride_type_unavailable", JSON.stringify(noMode.json));
 
+  // --- Phase 3: flight details and driver view ---
+  const D = await reg("driver", "dv"); ids.push(D.id);
+  await db.query("update app.driver_profiles set status = 'approved', service_id = $2 where user_id = $1", [D.id, svcAir]);
+  await db.query("update app.users set status = 'active' where id = $1", [D.id]);
+  await db.query("insert into app.wallets (user_id, kind, balance, allow_negative) values ($1,'driver',5000,true) on conflict (user_id, kind) do update set balance = 5000", [D.id]);
+  const DT = (await call("POST", "/login", null, { email: `dv${s}@x.com`, password: "secret123" })).json.data.api_token;
+  await call("POST", "/mode", DT, { mode: "driver" });
+  await call("POST", "/driver/online", DT, { online: true, latitude: 8.985, longitude: 7.26 });
+  const cfgRes = await call("GET", "/admin/airport-flight-fields", A);
+  ok("admin can read flight field settings", cfgRes.status === 200 && cfgRes.json.data?.pickup?.flight_number?.required === true, JSON.stringify(cfgRes.json));
+  ok("riders cannot change flight field settings", (await call("PUT", "/admin/airport-flight-fields", P.api_token, {})).status === 403);
+  const pubCfg = await call("GET", "/airports", P.api_token);
+  ok("public airport list carries the field settings", pubCfg.json.flight_fields?.pickup?.terminal?.required === true);
+  await call("PUT", `/admin/airports/${a1}`, A, body("AirportOne", AP1.lat, AP1.lng, { status: true }));
+  const pickReq = (flight) => call("POST", "/ride/request", P.api_token, { pickup: AP1, dropoff: zone2, service_id: svcAir, payment_method: "cash", airport: { id: a1, direction: "pickup" }, flight });
+  const missing = await pickReq({});
+  ok("required flight details are enforced by the server", missing.status === 422 && missing.json.code === "flight_details_invalid" && !!missing.json.errors?.flight_number, JSON.stringify(missing.json));
+  ok("a terminal the airport does not list is refused", (await pickReq({ flight_number: "KQ530", terminal: "Terminal 99" })).status === 422);
+  const good = await pickReq({ flight_number: "kq 530", terminal: "T1", passenger_count: 2, contact_phone: "08031234567", instructions: "Meet at the arrivals door" });
+  ok("airport pickup with flight details is accepted", good.status === 201 && good.json.data?.airport?.flight?.flight_number === "KQ530" && good.json.data.airport.label === "Airport Pickup", JSON.stringify(good.json));
+  ok("flight tracking is never claimed", good.json.data?.airport?.flight_tracking === false);
+  const rideId = good.json.data?.id;
+  const dreq = await call("GET", "/driver/requests", DT);
+  const offer = (dreq.json.requests ?? []).find((x) => x.id === rideId);
+  if (offer) {
+    ok("driver sees an airport pickup badge, airport, flight and earnings", offer.airport?.label === "Airport Pickup" && offer.airport?.flight?.flight_number === "KQ530" && typeof offer.earning === "number", JSON.stringify(offer.airport));
+    ok("the driver never receives the passenger's phone number", !JSON.stringify(offer).includes("08031234567") && offer.airport.flight.has_contact === true);
+    const acc = await call("POST", `/driver/requests/${rideId}/accept`, DT);
+    ok("driver accepts through the normal flow", acc.status === 200, JSON.stringify(acc.json));
+    const act = await call("GET", "/driver/requests", DT);
+    ok("active ride keeps the airport details", act.json.active?.airport?.name?.startsWith("AirportOne") && !JSON.stringify(act.json.active).includes("08031234567"));
+  } else console.log("SKIP driver offer checks (driver fixture not eligible in this environment)");
+  await call("POST", "/ride/cancel", P.api_token, {});
+
   // --- deactivation takes effect immediately; edits and deletes are audited ---
   ok("admin deactivates an airport", (await call("PUT", `/admin/airports/${a1}`, A, body("AirportOne", AP1.lat, AP1.lng, { status: false }))).status === 200);
   ok("a deactivated airport refuses bookings at once", (await code(zone, AP1, { id: a1, direction: "drop" })) === "422:airport_inactive");

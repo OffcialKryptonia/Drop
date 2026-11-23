@@ -31,7 +31,6 @@ import 'package:drop/driver/utils/Extensions/extension.dart';
 import 'package:drop/driver/utils/Extensions/int_extensions.dart';
 import 'package:drop/driver/utils/Images.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'FlightTrackingPage.dart';
 import '../../drop/design/drop_theme.dart';
 
 class ScheduleRideListScreen extends StatefulWidget {
@@ -357,12 +356,6 @@ class _ScheduleRideListScreenState extends State<ScheduleRideListScreen> {
                                                         TextButton(
                                                           onPressed: () => Navigator.of(context).pop(),
                                                           child: Text('${language.cancel}'),
-                                                        ),
-                                                        ElevatedButton(
-                                                          onPressed: () {
-                                                            launchScreen(context, FlightTrackingScreen(flightNumber: data.flight_number ?? ''), pageRouteAnimation: PageRouteAnimation.Slide, isNewTask: false);
-                                                          },
-                                                          child: Text('${language.track}'),
                                                         ),
                                                       ],
                                                     ),
