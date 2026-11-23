@@ -403,7 +403,7 @@ class _DropAirportScreenState extends State<DropAirportScreen> {
                             ]),
                           ),
                         if (_quote != null) _fares(),
-                        if (_message != null) Padding(padding: const EdgeInsets.only(bottom: 12), child: Text(_message!, style: const TextStyle(color: Color(0xFFD93025), fontWeight: FontWeight.w600))),
+                        if (_message != null) Padding(padding: const EdgeInsets.only(bottom: 12), child: Text(_message!, style: TextStyle(color: Theme.of(context).colorScheme.error, fontWeight: FontWeight.w600))),
                         if (_quote == null)
                           DropPrimaryButton(label: 'See airport fares', loading: _busy, onPressed: _seeFares)
                         else
