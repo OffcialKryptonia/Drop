@@ -343,7 +343,7 @@ class _DropAirportScreenState extends State<DropAirportScreen> {
     final t = _type;
     final methods = (t['payment_methods'] as List?)?.map((e) => e.toString()).toList() ?? [];
     final bd = t['fare_breakdown'];
-    final surcharge = bd is Map ? DropMoney.toNum(bd['airport_surcharge']) : 0.0;
+    final surcharge = bd is Map ? (num.tryParse('${bd['airport_surcharge']}') ?? 0).toDouble() : 0.0;
     return _section(
       'Choose a ride',
       Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

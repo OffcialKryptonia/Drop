@@ -357,12 +357,6 @@ class _ScheduleRideListScreenState extends State<ScheduleRideListScreen> {
                                                           onPressed: () => Navigator.of(context).pop(),
                                                           child: Text('${language.cancel}'),
                                                         ),
-                                                        ElevatedButton(
-                                                          onPressed: () {
-                                                            launchScreen(context, FlightTrackingScreen(flightNumber: data.flight_number ?? ''), pageRouteAnimation: PageRouteAnimation.Slide, isNewTask: false);
-                                                          },
-                                                          child: Text('${language.track}'),
-                                                        ),
                                                       ],
                                                     ),
                                                   );
