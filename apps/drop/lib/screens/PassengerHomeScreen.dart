@@ -22,6 +22,9 @@ import '../drop/screens/drop_chat_screen.dart';
 import '../drop/widgets/drop_bid_ui.dart' show dropAskFare, dropBidSymbol;
 import '../drop/widgets/drop_call_button.dart';
 import '../drop/screens/drop_route_screen.dart';
+import '../drop/screens/drop_airport_screen.dart';
+import '../drop/widgets/drop_airport_banner.dart';
+import '../service/AirportTransfer.dart';
 import '../drop/widgets/drop_ride_type_strip.dart';
 import '../drop/widgets/drop_sos_sheet.dart';
 import '../drop/widgets/drop_ride_ui.dart';
@@ -112,6 +115,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
     PushService.askPermission(); // the person is signed in here, so this is a good moment to ask
     _checkTransfers();
     _checkExtras();
+    _checkAirports();
     _transferTimer = Timer.periodic(const Duration(seconds: 25), (_) {
       _checkTransfers();
       _checkExtras();
@@ -119,6 +123,29 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
   }
 
   Timer? _transferTimer;
+
+  // Airport transfers: the entry point shows only while the admin has at least one airport switched on.
+  bool _airportsOn = false;
+
+  Future<void> _checkAirports() async {
+    try {
+      final c = AirportConfig.fromApi(await RideApi.airports());
+      if (mounted && c.airports.isNotEmpty != _airportsOn) setState(() => _airportsOn = c.airports.isNotEmpty);
+    } catch (_) {
+      // no airports entry when we cannot tell; ordinary rides are unaffected
+    }
+  }
+
+  Future<void> _openAirport() async {
+    if (pickup == null) {
+      await _locate();
+      if (pickup == null) return;
+    }
+    final r = await Navigator.of(context).push<Map<String, dynamic>>(
+      MaterialPageRoute(builder: (_) => DropAirportScreen(pickup: pickup!, pickupAddress: pickupAddress, recents: recents)),
+    );
+    if (r != null && mounted) _setRide(r); // from here the booking is an ordinary ride: same tracking, OTP, wallet and receipts
+  }
   int _lastTransferId = -1; // -1: not read yet, so the first look never rings for old transfers
 
   bool _extraOpen = false;
@@ -1116,6 +1143,26 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
                     ),
                   ),
                 ),
+                if (_airportsOn) ...[
+                  const SizedBox(height: 10),
+                  Material(
+                    color: DropTheme.cardAlt,
+                    borderRadius: BorderRadius.circular(14),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(14),
+                      onTap: _openAirport,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        child: Row(children: [
+                          Icon(Icons.flight, color: primaryColor),
+                          const SizedBox(width: 14),
+                          const Expanded(child: Text('Airport transfers', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700))),
+                          Icon(Icons.chevron_right, color: DropTheme.muted),
+                        ]),
+                      ),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 6),
                 for (final r in recents) _recentTile(r, onTap: () => _goToRecent(r)),
               ],
@@ -1323,6 +1370,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
         Text(_money(r['fare'], r['currency']), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
       ]),
       if (sub.isNotEmpty) Padding(padding: EdgeInsets.only(top: 4), child: Text(sub, style: TextStyle(color: DropTheme.muted))),
+      if (r['airport'] is Map) Padding(padding: const EdgeInsets.only(top: 10), child: DropAirportBanner(airport: _m(r['airport']))),
       DropStopTimeline(pickup: (_m(r['pickup'])['address'] ?? '').toString(), dropoff: (_m(r['dropoff'])['address'] ?? '').toString(), stops: tripStops, activeStop: activeTimelineStop),
       if (r['eta'] is Map) ...[
         const SizedBox(height: 10),

@@ -5,6 +5,7 @@ import 'package:drop/service/DriverApplicationApi.dart';
 import 'package:drop/service/net/connectivity_service.dart';
 import 'package:drop/service/net/net_policy.dart';
 import 'package:drop/drop/design/drop_design.dart';
+import 'package:drop/drop/widgets/drop_airport_banner.dart';
 import 'package:drop/drop/widgets/drop_bid_ui.dart';
 import 'package:drop/drop/widgets/drop_eta.dart';
 import 'package:drop/drop/widgets/drop_extras.dart';
@@ -804,6 +805,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
           DropFactChip(icon: Icons.my_location, text: '${_num(r['pickup_distance_km']).toStringAsFixed(1)} km${eta != null ? ' · $eta min' : ''} to pickup'),
           DropFactChip(icon: Icons.route, text: 'Trip ${_num(r['distance']).toStringAsFixed(1)} $unit · $tripMin min'),
         ]),
+        if (r['airport'] is Map) ...[const SizedBox(height: 10), DropAirportBanner(airport: _asMap(r['airport']))],
         const SizedBox(height: 14),
         DropStopTimeline(pickup: (pickup['address'] ?? '').toString(), dropoff: (drop['address'] ?? '').toString(), stops: _stops(r)),
         const SizedBox(height: 10),
@@ -849,6 +851,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> with WidgetsBinding
           DropFactChip(icon: cash ? Icons.payments_outlined : Icons.account_balance_wallet_outlined, text: cash ? 'Passenger pays cash' : 'Paid from wallet'),
           DropFactChip(icon: Icons.trending_up, text: 'You earn ${DropMoney.format(a['earning'])}', color: DropColors.success),
         ]),
+        if (a['airport'] is Map) ...[const SizedBox(height: 10), DropAirportBanner(airport: _asMap(a['airport']))],
         if (name.isNotEmpty) ...[
           const SizedBox(height: 14),
           Row(children: [
