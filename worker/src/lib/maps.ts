@@ -59,6 +59,8 @@ export async function mapSettings(db: Client, env: Bindings) {
     mapbox_public_token_masked: token ? "••••" + token.slice(-4) : "",
     mapbox_public_token: active === "mapbox" ? token : null,
     mapbox_style_uri: await text(db, "mapbox_style_uri", DEFAULT_MAPBOX_STYLE),
+    // Optional night style. Empty = the app picks the matching official dark style (streets/outdoors/light -> dark-v11).
+    mapbox_dark_style_uri: await text(db, "mapbox_dark_style_uri", ""),
     mapbox_region_bordering_enabled: regionBorderingEnabled,
     mapbox_last_verified_at: verifiedAt || null,
     mapbox_last_updated_at: await text(db, "mapbox_config_updated_at", ""),

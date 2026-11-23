@@ -9,6 +9,7 @@ import 'package:latlong2/latlong.dart' as ll;
 import 'package:maplibre_gl/maplibre_gl.dart' as ml;
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart' as mb;
 
+import 'MapTheme.dart';
 import 'VehicleIcons.dart';
 import '../drop/design/drop_theme.dart';
 
@@ -36,6 +37,8 @@ class DropMap extends StatefulWidget {
   final String attribution;
   final String styleUrl;
   final String mapboxStyleUri;
+  final String darkStyleUrl;
+  final String mapboxDarkStyleUri;
   final bool showRegionBorders;
   final List<List<ll.LatLng>> regionBoundaries;
   final ll.LatLng initialCenter;
@@ -62,6 +65,8 @@ class DropMap extends StatefulWidget {
     this.attribution = '© OpenStreetMap contributors',
     this.styleUrl = 'https://tiles.openfreemap.org/styles/liberty',
     this.mapboxStyleUri = 'mapbox://styles/mapbox/streets-v12',
+    this.darkStyleUrl = '',
+    this.mapboxDarkStyleUri = '',
     this.showRegionBorders = false,
     this.regionBoundaries = const [],
     this.initialZoom = 17,
@@ -214,8 +219,24 @@ class _DropMapState extends State<DropMap> {
   bool get _dark => DropTheme.isDark;
 
   /// Light/dark map style. Only the default style of each provider is swapped; a custom style chosen in Admin is respected.
-  String get _mapboxStyle => _dark && widget.mapboxStyleUri == 'mapbox://styles/mapbox/streets-v12' ? 'mapbox://styles/mapbox/dark-v11' : widget.mapboxStyleUri;
-  String get _libreStyle => _dark && widget.styleUrl == 'https://tiles.openfreemap.org/styles/liberty' ? 'https://tiles.openfreemap.org/styles/dark' : widget.styleUrl;
+  String get _mapboxStyle => MapTheme.mapbox(dark: _dark, lightUri: widget.mapboxStyleUri, darkUri: widget.mapboxDarkStyleUri);
+  String get _libreStyle => MapTheme.maplibre(dark: _dark, lightUrl: widget.styleUrl, darkUrl: widget.darkStyleUrl);
+
+  /// Style the MapLibre view was created with. Later changes go through setStyle so the camera is never reset.
+  late final String _libreInitialStyle = _libreStyle;
+  String? _libreAppliedStyle;
+
+  void _syncLibreStyle() {
+    final ctl = _mapLibre;
+    final want = _libreStyle;
+    if (ctl == null || !_mapLibreReady) return;
+    _libreAppliedStyle ??= _libreInitialStyle;
+    if (_libreAppliedStyle == want) return;
+    _libreAppliedStyle = want;
+    _mapLibreStyleReady = false;
+    _mlImages.clear();
+    try { ctl.setStyle(want); } catch (_) {}
+  }
 
   double _top(BuildContext c) => MediaQuery.paddingOf(c).top + widget.topInset;
   double _bottom(BuildContext c) => MediaQuery.paddingOf(c).bottom + widget.bottomInset + 8;
@@ -242,7 +263,20 @@ class _DropMapState extends State<DropMap> {
     if (map == null || _lastMapboxStyle == null || _lastMapboxStyle == want) return;
     _lastMapboxStyle = want;
     _mapboxStyleReady = false;
+    // Style reload drops annotation layers; they are recreated in onStyleLoaded.
     map.style.setStyleURI(want).catchError((_) {});
+  }
+
+  Future<void> _recreateMapboxAnnotations() async {
+    final map = _mapbox;
+    if (map == null) return;
+    try {
+      _mbPolygons = await map.annotations.createPolygonAnnotationManager();
+      _mbLines = await map.annotations.createPolylineAnnotationManager();
+      _mbCircles = await map.annotations.createCircleAnnotationManager();
+      _mbPoints = await map.annotations.createPointAnnotationManager();
+    } catch (_) {}
+    await _syncMapboxAnnotations();
   }
 
   @override
@@ -251,11 +285,13 @@ class _DropMapState extends State<DropMap> {
     // Re-place ornaments when safe-area / sheet insets change, and restyle when Light/Dark flips.
     _applyMapboxOrnaments();
     _syncMapboxStyle();
+    _syncLibreStyle();
   }
 
   @override
   Widget build(BuildContext context) {
     _syncMapboxStyle();
+    _syncLibreStyle();
     if (_isGoogle) return _googleMap();
     if (_isMapLibre) return _mapLibreMap();
     if (widget.provider == 'mapbox') {
@@ -347,7 +383,11 @@ class _DropMapState extends State<DropMap> {
     key: ValueKey('drop-mapbox-${widget.mapboxStyleUri}'),
     styleUri: _mapboxStyle,
     onMapCreated: _onMapboxCreated,
-    onStyleLoadedListener: (_) { _mapboxStyleReady = true; _syncMapboxAnnotations(); },
+    onStyleLoadedListener: (_) {
+      final first = _mbPoints == null;
+      _mapboxStyleReady = true;
+      if (first) { _syncMapboxAnnotations(); } else { _recreateMapboxAnnotations(); }
+    },
     onCameraChangeListener: (event) {
       final c = event.cameraState.center.coordinates;
       _moved(ll.LatLng(c.lat.toDouble(), c.lng.toDouble()));
@@ -381,7 +421,7 @@ class _DropMapState extends State<DropMap> {
   }
 
   Widget _mapLibreMap() => ml.MapLibreMap(
-    styleString: _libreStyle,
+    styleString: _libreInitialStyle,
     compassEnabled: true,
     compassViewPosition: ml.CompassViewPosition.topRight,
     compassViewMargins: math.Point<num>(12, _top(context)),
@@ -389,7 +429,7 @@ class _DropMapState extends State<DropMap> {
     attributionButtonMargins: math.Point<num>(8, _bottom(context)),
     initialCameraPosition: ml.CameraPosition(target: ml.LatLng(widget.initialCenter.latitude, widget.initialCenter.longitude), zoom: widget.initialZoom),
     trackCameraPosition: true,
-    onMapCreated: (controller) { _mapLibre = controller; _mapLibreReady = true; },
+    onMapCreated: (controller) { _mapLibre = controller; _mapLibreReady = true; _libreAppliedStyle = _libreInitialStyle; _syncLibreStyle(); },
     onStyleLoadedCallback: () { _mapLibreStyleReady = true; _mlImages.clear(); _syncMapLibreMarkers(); },
     onCameraMove: (position) => _moved(ll.LatLng(position.target.latitude, position.target.longitude)),
     onCameraIdle: () => widget.onIdle?.call(_center),

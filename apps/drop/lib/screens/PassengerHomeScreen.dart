@@ -968,7 +968,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> with WidgetsB
             provider: mapConfig.provider,
             tileUrl: mapConfig.tileUrl,
             attribution: mapConfig.attribution,
-            mapboxStyleUri: mapConfig.mapboxStyleUri,
+            mapboxStyleUri: mapConfig.mapboxStyleUri, darkStyleUrl: mapConfig.darkStyleUrl, mapboxDarkStyleUri: mapConfig.mapboxDarkStyleUri,
             showRegionBorders: mapConfig.mapboxRegionBorderingEnabled,
             regionBoundaries: regionBoundaries,
             initialCenter: pickup ?? center,

@@ -4,6 +4,7 @@ import { computeFare, type FareBreakdown } from "./fare";
 import { MILE_PER_KM, routeBetween, type LatLng, type Route } from "./routing";
 import { iconKeyFor } from "../routes/map-icons";
 import { getSetting } from "./driver-application";
+import { activeRules, airportFare, pickPriceRule, resolveAirportTrip, type Airport, type AirportDirection, type AirportFareBreakdown, type PriceRule } from "./airports";
 
 const POINT = (latParam: number, lngParam: number) => `extensions.st_setsrid(extensions.st_makepoint($${lngParam}, $${latParam}), 4326)::extensions.geography`;
 
@@ -20,13 +21,13 @@ export type RideTypeQuote = {
   payment_methods: string[];
   cancellation_fee: number;
   fare: number;
-  fare_breakdown: FareBreakdown;
+  fare_breakdown: FareBreakdown | AirportFareBreakdown;
   drivers_nearby: number;
   pickup_eta_minutes: number | null;
 };
 
 export type Quote =
-  | { ok: false; code: "outside_service_area" | "dropoff_outside_area" | "same_place"; message: string }
+  | { ok: false; code: string; message: string }
   | {
       ok: true;
       region: { id: number; name: string | null; distance_unit: "km" | "mile"; timezone: string; currency: string };
@@ -34,6 +35,7 @@ export type Quote =
       distance: number;
       options: { id: number; name: string; price: number }[];
       ride_types: RideTypeQuote[];
+      airport: { airport: Airport; direction: AirportDirection; rules: PriceRule[] } | null;
     };
 
 export async function regionAt(db: Client, p: LatLng) {
@@ -49,15 +51,25 @@ export async function regionAt(db: Client, p: LatLng) {
 }
 
 /** Everything the app needs to show prices for a trip, all from admin data. The server is the only place fares are computed. */
-export async function quoteRide(db: Client, env: Bindings, pickup: LatLng, dropoff: LatLng, stops: LatLng[] = []): Promise<Quote> {
-  const region = await regionAt(db, pickup);
+export async function quoteRide(db: Client, env: Bindings, pickup: LatLng, dropoff: LatLng, stops: LatLng[] = [], airportReq?: { id: number; direction: unknown }): Promise<Quote> {
+  // Airport booking: the server decides which end is the airport and that the other end is in the airport's active zone.
+  let airportCtx: { airport: Airport; direction: AirportDirection; rules: PriceRule[] } | null = null;
+  if (airportReq) {
+    const trip = await resolveAirportTrip(db, { airportId: airportReq.id, direction: airportReq.direction, pickup, dropoff });
+    if (!trip.ok) return { ok: false, code: trip.code, message: trip.message };
+    airportCtx = { airport: trip.airport, direction: trip.direction, rules: await activeRules(db, trip.airport.id) };
+  }
+  // The zone end of an airport trip defines the region; the airport end lies inside the same region by validation.
+  const regionPoint = airportCtx ? (airportCtx.direction === "drop" ? pickup : dropoff) : pickup;
+  const region = await regionAt(db, regionPoint);
   if (!region) return { ok: false, code: "outside_service_area", message: "DROP is not available at your pickup location yet." };
   const routePoints = [pickup, ...stops, dropoff];
+  if (airportCtx && stops.length) return { ok: false, code: "airport_no_stops", message: "Additional stops are not available on airport rides." };
   for (const stop of stops) {
     const stopRegion = await regionAt(db, stop);
     if (!stopRegion || stopRegion.id !== region.id) return { ok: false, code: "dropoff_outside_area", message: "Every route stop must be inside the same service area as your pickup." };
   }
-  const dropRegion = await regionAt(db, dropoff);
+  const dropRegion = airportCtx ? region : await regionAt(db, dropoff);
   if (!dropRegion || dropRegion.id !== region.id) return { ok: false, code: "dropoff_outside_area", message: "That drop-off is outside our service area." };
 
   const legs: Route[] = [];
@@ -78,13 +90,13 @@ export async function quoteRide(db: Client, env: Bindings, pickup: LatLng, dropo
       `select id, name, name_i18n, category, icon_url, photo_url, capacity, badge, description, payment_methods, cancellation_fee,
               base_fare, minimum_fare, minimum_distance, per_distance, per_minute_drive
          from app.services s
-        where s.region_id = $1 and s.status and s.deleted_at is null and 'now' = any(s.booking_modes)
+        where s.region_id = $1 and s.status and s.deleted_at is null and $3 = any(s.booking_modes)
           and (s.working_hours is null or case
                 when (s.working_hours->>'from')::time <= (s.working_hours->>'to')::time
                   then (now() at time zone $2)::time between (s.working_hours->>'from')::time and (s.working_hours->>'to')::time
                 else (now() at time zone $2)::time >= (s.working_hours->>'from')::time or (now() at time zone $2)::time <= (s.working_hours->>'to')::time end)
         order by s.sort_order, s.id`,
-      [region.id, region.timezone],
+      [region.id, region.timezone, airportCtx ? "airport" : "now"],
     )
   ).rows;
 
@@ -109,7 +121,9 @@ export async function quoteRide(db: Client, env: Bindings, pickup: LatLng, dropo
   }));
 
   const ride_types: RideTypeQuote[] = services.map((s) => {
-    const breakdown = computeFare(s, distance, route.duration_minutes);
+    const breakdown = airportCtx
+      ? airportFare(s, distance, route.duration_minutes, 0, pickPriceRule(airportCtx.rules, Number(s.id), airportCtx.direction), airportCtx.airport.default_surcharge)
+      : computeFare(s, distance, route.duration_minutes);
     const nb = nearBy.get(Number(s.id));
     return {
       id: Number(s.id),
@@ -130,7 +144,7 @@ export async function quoteRide(db: Client, env: Bindings, pickup: LatLng, dropo
     };
   });
 
-  return { ok: true, region: { id: Number(region.id), name: region.name, distance_unit: region.distance_unit, timezone: region.timezone, currency: String(region.currency).trim() }, route, distance, options, ride_types };
+  return { ok: true, region: { id: Number(region.id), name: region.name, distance_unit: region.distance_unit, timezone: region.timezone, currency: String(region.currency).trim() }, route, distance, options, ride_types, airport: airportCtx };
 }
 
 /** Ride types open at a pickup point, with nearby driver counts, for the home screen strip (no destination yet, so no fares). */

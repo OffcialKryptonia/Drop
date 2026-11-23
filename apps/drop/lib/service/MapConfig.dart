@@ -14,6 +14,8 @@ class MapConfig {
   final String attribution;
   final String styleUrl;
   final String mapboxStyleUri;
+  final String darkStyleUrl;
+  final String mapboxDarkStyleUri;
   final String mapboxPublicToken;
   final bool mapboxRegionBorderingEnabled;
   final String? fallbackReason;
@@ -24,6 +26,8 @@ class MapConfig {
     this.attribution = '© OpenStreetMap contributors',
     this.styleUrl = defaultStyleUrl,
     this.mapboxStyleUri = defaultMapboxStyleUri,
+    this.darkStyleUrl = '',
+    this.mapboxDarkStyleUri = '',
     this.mapboxPublicToken = '',
     this.mapboxRegionBorderingEnabled = false,
     this.fallbackReason,
@@ -52,6 +56,8 @@ class MapConfig {
       attribution: body['attribution']?.toString() ?? '© OpenStreetMap contributors',
       styleUrl: body['maplibre_style_url']?.toString().startsWith('https://') == true ? body['maplibre_style_url'].toString() : defaultStyleUrl,
       mapboxStyleUri: body['mapbox_style_uri']?.toString().startsWith('mapbox://styles/') == true ? body['mapbox_style_uri'].toString() : defaultMapboxStyleUri,
+      darkStyleUrl: body['maplibre_dark_style_url']?.toString().startsWith('https://') == true ? body['maplibre_dark_style_url'].toString() : '',
+      mapboxDarkStyleUri: body['mapbox_dark_style_uri']?.toString().startsWith('mapbox://styles/') == true ? body['mapbox_dark_style_uri'].toString() : '',
       mapboxPublicToken: provider == 'mapbox' ? token : '',
       mapboxRegionBorderingEnabled: body['mapbox_region_bordering_enabled'] == true,
       fallbackReason: body['mapbox_fallback_reason']?.toString(),

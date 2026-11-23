@@ -216,7 +216,7 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
             tileUrl: widget.mapConfig.tileUrl,
             attribution: widget.mapConfig.attribution,
             styleUrl: widget.mapConfig.styleUrl,
-            mapboxStyleUri: widget.mapConfig.mapboxStyleUri,
+            mapboxStyleUri: widget.mapConfig.mapboxStyleUri, darkStyleUrl: widget.mapConfig.darkStyleUrl, mapboxDarkStyleUri: widget.mapConfig.mapboxDarkStyleUri,
             initialCenter: _position ?? widget.destination,
             initialZoom: 16,
             controller: _map,

@@ -101,6 +101,7 @@
     { id: "route-stops", label: "Route stops", group: "Operations", perm: "ride_order list", render: pageRouteStops },
     { id: "push", label: "Push notifications", group: "System", perm: "push_settings list", render: pagePush },
     { id: "regions", label: "Regions", group: "Operations", perm: "region list", render: pageRegions },
+    { id: "airports", label: "Airports", group: "Operations", perm: "airport list", render: pageAirports },
     { id: "ride-options", label: "Ride options", group: "Operations", perm: "service_option list", render: pageOptions },
     { id: "payment-methods", label: "Payment methods", group: "Financial", perm: "payment_gateway list", render: pagePayments },
     { id: "transfers", label: "Wallet transfers", group: "Financial", perm: "wallet_transfer list", render: pageTransfers },
@@ -193,7 +194,7 @@
   // ---------- Ride types ----------
   var rt = { region: "", regions: [] };
   var CATEGORIES = [["car", "Car"], ["bike", "Bike"], ["tricycle", "Tricycle"], ["bus", "Bus or van"], ["van", "Van"], ["delivery", "Delivery"], ["other", "Other"]];
-  var BOOKING = [["now", "Book now"], ["scheduled", "Scheduled"], ["multi_drop", "Multi-drop"], ["bidding", "Bidding"], ["for_other", "For someone else"]];
+  var BOOKING = [["now", "Book now"], ["scheduled", "Scheduled"], ["multi_drop", "Multi-drop"], ["bidding", "Bidding"], ["for_other", "For someone else"], ["airport", "Airport rides"]];
   var PAYMENTS = [["cash", "Cash"], ["wallet", "Wallet"], ["card", "Card"], ["virtual_account", "Virtual account"]];
 
   function pageRideTypes(root) {
@@ -574,6 +575,113 @@
     syncInfo();
   }
 
+
+  // ---------- Airports: every detail is entered and verified here; nothing is built in ----------
+  function pageAirports(root) {
+    loading(root);
+    Promise.all([api("GET", "/admin/airports"), api("GET", "/admin/regions")]).then(function (res) {
+      var list = (res[0].body && res[0].body.data) || [], regions = (res[1].body && res[1].body.data) || [];
+      root.textContent = "";
+      root.appendChild(head("Airports", "Airports riders can book to and from. An airport only appears in the app when it is switched on and has a location and a geofence or radius. Live flight tracking is not enabled.", can("airport add") ? h("button", { text: "Add airport", on: { click: function () { airportForm(root, null, regions); } } }) : null));
+      var card = h("div", { class: "card" });
+      if (!list.length) card.appendChild(h("div", { class: "empty", text: "No airports yet. Add one and enter its verified details." }));
+      list.forEach(function (a) {
+        var acts = h("div", { class: "acts" });
+        if (can("airport edit")) {
+          acts.appendChild(h("button", { class: "ghost small", text: "Edit", on: { click: function () { airportForm(root, a, regions); } } }));
+          acts.appendChild(h("button", { class: "ghost small", text: "Pricing", on: { click: function () { airportPrices(root, a); } } }));
+        }
+        if (can("airport delete")) acts.appendChild(h("button", { class: "danger small", text: "Delete", on: { click: function () {
+          confirmDo("Delete airport " + a.name + "?", function () { api("DELETE", "/admin/airports/" + a.id).then(function (x) { toast(x.ok ? "Deleted" : errText(x), !x.ok); if (x.ok) pageAirports(root); }); });
+        } } }));
+        card.appendChild(h("div", { class: "item" },
+          h("div", { class: "main" }, h("div", { class: "t", text: a.name + (a.iata_code ? " (" + a.iata_code + ")" : "") }),
+            h("div", { class: "s", text: (a.region_name || "Region " + a.region_id) + " · " + (a.geofence_coordinates ? "geofence drawn" : a.radius_m ? "radius " + a.radius_m + " m" : "no boundary set") + " · " + ((a.terminals || []).length) + " terminal(s)" }),
+            h("div", { style: "margin-top:8px" }, acts)),
+          h("span", { class: "pill " + (a.status ? "on" : ""), text: a.status ? "On" : "Off" })));
+      });
+      root.appendChild(card);
+    });
+  }
+
+  function airportForm(root, a, regions) {
+    a = a || {};
+    root.textContent = "";
+    root.appendChild(head(a.id ? "Edit airport" : "Add airport", "Enter only details you have verified. Leave unknown fields empty."));
+    var card = h("div", { class: "card" });
+    var f = {
+      region: select(regions.map(function (g) { return [g.id, g.name || "Region " + g.id]; }), a.region_id || (regions[0] && regions[0].id)),
+      name: text(a.name), iata: text(a.iata_code, "e.g. 3 letters, optional"), icao: text(a.icao_code, "optional"),
+      lat: num(a.latitude), lng: num(a.longitude), radius: num(a.radius_m, "metres, 100 to 20000"),
+      poly: h("textarea", { rows: 5, placeholder: "One point per line: latitude, longitude (3 or more). Optional if you set a radius." }),
+      terms: h("textarea", { rows: 4, placeholder: "One terminal per line: Name | pickup instructions (optional)" }),
+      instr: text(a.pickup_instructions), surcharge: num(a.default_surcharge == null ? 0 : a.default_surcharge), status: h("input", { type: "checkbox", checked: !!a.status })
+    };
+    f.poly.value = (a.geofence_coordinates || []).map(function (p) { return p.lat + ", " + p.lng; }).join("\n");
+    f.terms.value = (a.terminals || []).map(function (t) { return t.name + (t.pickup_instructions ? " | " + t.pickup_instructions : ""); }).join("\n");
+    var out = h("p", { class: "msg" });
+    card.appendChild(field("Service region", f.region, "The airport and the other end of every airport trip must be in this region."));
+    card.appendChild(field("Airport name", f.name));
+    card.appendChild(h("div", { class: "grid2" }, field("IATA code", f.iata), field("ICAO code", f.icao)));
+    card.appendChild(h("div", { class: "grid2" }, field("Latitude", f.lat), field("Longitude", f.lng)));
+    card.appendChild(field("Radius (metres)", f.radius, "Used when no geofence polygon is given."));
+    card.appendChild(field("Geofence points", f.poly));
+    card.appendChild(field("Terminals", f.terms));
+    card.appendChild(field("General pickup instructions", f.instr));
+    card.appendChild(field("Default airport surcharge", f.surcharge, "Added to airport fares that have no specific price rule."));
+    card.appendChild(h("div", { class: "row" }, h("div", { text: "Airport is active (visible to riders)" }), h("label", { class: "switch" }, f.status, h("span"))));
+    card.appendChild(out);
+    var save = h("button", { text: "Save", style: "width:100%;margin-top:14px" });
+    save.addEventListener("click", function () {
+      var pts = [], bad = false;
+      f.poly.value.split("\n").forEach(function (line) { if (!line.trim()) return; var p = line.split(","); var la = Number(p[0]), ln = Number(p[1]); if (p.length !== 2 || !isFinite(la) || !isFinite(ln)) bad = true; else pts.push({ lat: la, lng: ln }); });
+      if (bad) return msg(out, "Each geofence line must be: latitude, longitude.");
+      var terms = f.terms.value.split("\n").map(function (l) { return l.trim(); }).filter(Boolean).map(function (l) { var p = l.split("|"); var t = { name: p[0].trim() }; if (p[1] && p[1].trim()) t.pickup_instructions = p.slice(1).join("|").trim(); return t; });
+      var code = function (el) { return el.value.trim() || null; };
+      save.disabled = true; msg(out, "");
+      api(a.id ? "PUT" : "POST", "/admin/airports" + (a.id ? "/" + a.id : ""), {
+        region_id: Number(f.region.value), name: f.name.value.trim(), iata_code: code(f.iata), icao_code: code(f.icao), latitude: nn(f.lat), longitude: nn(f.lng), radius_m: nn(f.radius),
+        geofence_coordinates: pts.length ? pts : null, terminals: terms, pickup_instructions: code(f.instr), default_surcharge: Number(f.surcharge.value || 0), status: f.status.checked
+      }).then(function (r) { save.disabled = false; if (r.ok) { toast("Saved"); pageAirports(root); } else msg(out, errText(r)); });
+    });
+    card.appendChild(save); card.appendChild(h("button", { class: "ghost", text: "Back", style: "width:100%;margin-top:8px", on: { click: function () { pageAirports(root); } } }));
+    root.appendChild(card);
+  }
+
+  function airportPrices(root, a) {
+    loading(root);
+    Promise.all([api("GET", "/admin/airports/" + a.id + "/prices"), api("GET", "/admin/services?region_id=" + a.region_id)]).then(function (res) {
+      var rules = (res[0].body && res[0].body.data) || [], services = (res[1].body && res[1].body.data) || [];
+      root.textContent = "";
+      root.appendChild(head("Pricing: " + a.name, "Most specific rule wins: ride type + direction, then ride type, then direction, then any. Without a rule the normal fare plus the default surcharge applies. Only ride types with Airport rides ticked are offered."));
+      var card = h("div", { class: "card" });
+      rules.forEach(function (r) {
+        card.appendChild(h("div", { class: "item" }, h("div", { class: "main" },
+          h("div", { class: "t", text: (r.service_name || "Any ride type") + " · " + (r.direction === "drop" ? "Airport Drop" : r.direction === "pickup" ? "Airport Pickup" : "Both directions") }),
+          h("div", { class: "s", text: (r.mode === "fixed" ? "Fixed " + r.fixed_price : "Standard fare") + " + surcharge " + r.surcharge + (r.status ? "" : " (off)") }),
+          can("airport delete") ? h("button", { class: "danger small", text: "Delete", on: { click: function () { api("DELETE", "/admin/airport-prices/" + r.id).then(function (x) { toast(x.ok ? "Deleted" : errText(x), !x.ok); airportPrices(root, a); }); } } }) : null)));
+      });
+      if (!rules.length) card.appendChild(h("div", { class: "empty", text: "No rules yet." }));
+      var f = {
+        svc: select([["", "Any ride type"]].concat(services.map(function (s) { return [s.id, s.name]; })), ""),
+        dir: select([["", "Both directions"], ["drop", "Airport Drop (zone to airport)"], ["pickup", "Airport Pickup (airport to zone)"]], ""),
+        mode: select([["standard", "Standard fare"], ["fixed", "Fixed price"]], "standard"), fixed: num(null), sur: num(0)
+      };
+      var out = h("p", { class: "msg" });
+      var add = h("div", { class: "card" }, h("div", { class: "t", text: "Add a rule" }), field("Ride type", f.svc), field("Direction", f.dir), field("Pricing", f.mode), field("Fixed price (fixed only)", f.fixed), field("Surcharge", f.sur), out);
+      var go = h("button", { text: "Add rule", style: "width:100%;margin-top:10px" });
+      go.addEventListener("click", function () {
+        go.disabled = true;
+        api("POST", "/admin/airports/" + a.id + "/prices", { service_id: f.svc.value ? Number(f.svc.value) : null, direction: f.dir.value || null, mode: f.mode.value, fixed_price: f.mode.value === "fixed" ? nn(f.fixed) : null, surcharge: Number(f.sur.value || 0), status: true })
+          .then(function (r) { go.disabled = false; if (r.ok) { toast("Added"); airportPrices(root, a); } else msg(out, errText(r)); });
+      });
+      add.appendChild(go);
+      root.appendChild(card);
+      if (can("airport edit")) root.appendChild(add);
+      root.appendChild(h("button", { class: "ghost", text: "Back", on: { click: function () { pageAirports(root); } } }));
+    });
+  }
+
   // ---------- Ride options ----------
   // ---------- Extra charges: master switch, limits and the list of charge types (Extra charges page) ----------
   function extrasCard(root) {
@@ -800,6 +908,8 @@
         Array.from(provider.options).forEach(function (option) { if (option.value === "mapbox") option.disabled = !enabled.checked || !d.mapbox_configured; });
       });
       var style = text(d.mapbox_style_uri || "mapbox://styles/mapbox/streets-v12");
+      var darkStyle = text(d.mapbox_dark_style_uri || "");
+      darkStyle.placeholder = "Automatic (mapbox://styles/mapbox/dark-v11)";
       var token = h("input", { type: "password", autocomplete: "new-password", placeholder: d.mapbox_public_token_masked || "pk...." });
       var show = h("button", { class: "ghost small", type: "button", text: "Show" });
       show.addEventListener("click", function () { token.type = token.type === "password" ? "text" : "password"; show.textContent = token.type === "password" ? "Show" : "Hide"; });
@@ -824,10 +934,11 @@
           } } })),
         tokenStatus,
         field("Mapbox style URI (optional)", style, "Default: mapbox://styles/mapbox/streets-v12. You may use a Mapbox Studio style."),
+        field("Mapbox dark style URI (optional)", darkStyle, "Used in dark mode. Leave empty to use the matching official Mapbox dark style. Needed only if the style above is a custom Studio style."),
         h("div", { class: "row" }, h("span", { text: "Use Mapbox for Region Bordering" }), h("label", { class: "switch" }, borders, h("span"))),
         h("p", { class: "muted", text: "When enabled, existing service-region polygons are supplied as GeoJSON for Mapbox-compatible point-in-polygon and boundary-proximity checks, regardless of the selected map renderer. If Mapbox is selected, the same polygons are also drawn as fill/outline layers. Region membership, ride eligibility and switching remain controlled by the Worker/PostGIS backend." }));
       function saveMapSettings(extra, after) {
-        var body = Object.assign({ provider: provider.value, osm_tile_url: tiles.value.trim(), osm_routing_url: routing.value.trim(), mapbox_enabled: enabled.checked, mapbox_region_bordering_enabled: borders.checked, mapbox_style_uri: style.value.trim() }, extra || {});
+        var body = Object.assign({ provider: provider.value, osm_tile_url: tiles.value.trim(), osm_routing_url: routing.value.trim(), mapbox_enabled: enabled.checked, mapbox_region_bordering_enabled: borders.checked, mapbox_style_uri: style.value.trim(), mapbox_dark_style_uri: darkStyle.value.trim() }, extra || {});
         if (!Object.prototype.hasOwnProperty.call(extra || {}, "mapbox_public_token") && token.value.trim()) body.mapbox_public_token = token.value.trim();
         api("PUT", "/admin/map-settings", body).then(function (x) {
           if (x.ok) { if (after) after(); else { toast("Saved"); pageMaps(root); } }

@@ -128,7 +128,7 @@ adminCatalogRoutes.delete("/admin/regions/:id", ...guard("region delete"), async
 // ---------------------------------------------------------------------------
 const money = z.coerce.number().min(0).max(100_000_000);
 const i18n = z.record(z.string().min(2).max(10), z.string().max(200));
-const BOOKING = ["now", "scheduled", "multi_drop", "bidding", "for_other"] as const;
+const BOOKING = ["now", "scheduled", "multi_drop", "bidding", "for_other", "airport"] as const;
 const PAYMENTS = ["cash", "wallet", "card", "virtual_account"] as const;
 
 const serviceSchema = z.object({
