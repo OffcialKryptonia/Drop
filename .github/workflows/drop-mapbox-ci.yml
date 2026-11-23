@@ -2,7 +2,7 @@ name: Drop Mapbox integration checks
 
 on:
   push:
-    branches: [feat/flutter-multi-stop-routes, feat/ride-chat, feat/ride-calls, feat/optional-fare-bidding, feat/instant-offline-first, feat/theme-light-dark-compass, feat/airport-infrastructure]
+    branches: [feat/flutter-multi-stop-routes, feat/ride-chat, feat/ride-calls, feat/optional-fare-bidding, feat/instant-offline-first, feat/theme-light-dark-compass, feat/airport-infrastructure, feat/airport-booking-driver]
   pull_request:
     branches: [main]
     paths:
