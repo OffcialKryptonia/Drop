@@ -100,6 +100,7 @@
     { id: "order-ride", label: "Order Ride", group: "Operations", perm: "ride_order list", render: pageOrderRide },
     { id: "route-stops", label: "Route stops", group: "Operations", perm: "ride_order list", render: pageRouteStops },
     { id: "push", label: "Push notifications", group: "System", perm: "push_settings list", render: pagePush },
+    { id: "push-templates", label: "Push templates", group: "System", perm: "push_template list", render: pagePushTemplates },
     { id: "regions", label: "Regions", group: "Operations", perm: "region list", render: pageRegions },
     { id: "airports", label: "Airports", group: "Operations", perm: "airport list", render: pageAirports },
     { id: "ride-options", label: "Ride options", group: "Operations", perm: "service_option list", render: pageOptions },
@@ -575,6 +576,233 @@
     syncInfo();
   }
 
+
+  // ---------- Push templates: the text of every notification, edited here, with a delivery log ----------
+  var PT = { q: "", category: "", audience: "", status: "", page: 1, meta: null };
+
+  function ptMeta() {
+    if (PT.meta) return Promise.resolve(PT.meta);
+    return api("GET", "/admin/push-templates/meta").then(function (r) { PT.meta = r.body || { variables: [], categories: [], link_hosts: [] }; return PT.meta; });
+  }
+  function ptLabel(id) { var c = ((PT.meta && PT.meta.categories) || []).filter(function (x) { return x.id === id; })[0]; return c ? c.label : id; }
+  function ptWho(a) { return a === "passenger" ? "Passengers" : a === "driver" ? "Drivers" : "Everyone"; }
+  function ptTabs(root, active) {
+    var tabs = [["list", "Templates", pagePushTemplates], ["log", "Delivery log", pushDeliveryLog], ["stats", "Statistics", pushDeliveryStats]];
+    var row = h("div", { class: "acts", style: "margin-bottom:12px" });
+    tabs.forEach(function (t) { row.appendChild(h("button", { class: "small" + (t[0] === active ? "" : " ghost"), text: t[1], on: { click: function () { t[2](root); } } })); });
+    return row;
+  }
+
+  function pagePushTemplates(root) {
+    loading(root);
+    ptMeta().then(function () {
+      var qs = "?page=" + PT.page + (PT.q ? "&q=" + encodeURIComponent(PT.q) : "") + (PT.category ? "&category=" + PT.category : "") + (PT.audience ? "&audience=" + PT.audience : "") + (PT.status ? "&status=" + PT.status : "");
+      return api("GET", "/admin/push-templates" + qs);
+    }).then(function (r) {
+      var list = (r.body && r.body.data) || [], total = (r.body && r.body.total) || 0, per = (r.body && r.body.per_page) || 50;
+      root.textContent = "";
+      root.appendChild(head("Push templates", "The wording of every notification DROP sends. Changes apply to the next notification. Switching a template off stops that notification completely.",
+        can("push_template add") ? h("button", { text: "New template", on: { click: function () { pushTemplateForm(root, null); } } }) : null));
+      root.appendChild(ptTabs(root, "list"));
+      var f = {
+        q: text(PT.q, "Search key, name or wording"),
+        cat: select([["", "All categories"]].concat(PT.meta.categories.map(function (c) { return [c.id, c.label]; })), PT.category),
+        aud: select([["", "Everyone"], ["passenger", "Passengers"], ["driver", "Drivers"], ["all", "Both"]], PT.audience),
+        st: select([["", "Active and off"], ["active", "Active"], ["inactive", "Switched off"], ["archived", "Archived"], ["all", "All"]], PT.status)
+      };
+      var go = function () { PT.q = f.q.value.trim(); PT.category = f.cat.value; PT.audience = f.aud.value; PT.status = f.st.value; PT.page = 1; pagePushTemplates(root); };
+      f.q.addEventListener("keydown", function (e) { if (e.key === "Enter") go(); });
+      [f.cat, f.aud, f.st].forEach(function (el) { el.addEventListener("change", go); });
+      root.appendChild(h("div", { class: "card" }, f.q, h("div", { class: "grid2", style: "margin-top:8px" }, f.cat, f.aud), h("div", { style: "margin-top:8px" }, f.st),
+        h("button", { class: "small", text: "Search", style: "margin-top:8px", on: { click: go } })));
+      var card = h("div", { class: "card" });
+      if (!list.length) card.appendChild(h("div", { class: "empty", text: "No templates match." }));
+      list.forEach(function (t) {
+        var acts = h("div", { class: "acts" });
+        if (can("push_template edit")) {
+          acts.appendChild(h("button", { class: "ghost small", text: "Edit", on: { click: function () { pushTemplateForm(root, t.id); } } }));
+          if (t.status !== "archived") acts.appendChild(h("button", { class: "ghost small", text: t.status === "active" ? "Switch off" : "Switch on", on: { click: function () {
+            api("POST", "/admin/push-templates/" + t.id + "/status", { status: t.status === "active" ? "inactive" : "active" }).then(function (x) { toast(x.ok ? (x.body && x.body.message) || "Saved" : errText(x), !x.ok); if (x.ok) pagePushTemplates(root); });
+          } } }));
+          acts.appendChild(h("button", { class: "ghost small", text: t.status === "archived" ? "Restore" : "Archive", on: { click: function () {
+            api("POST", "/admin/push-templates/" + t.id + "/status", { status: t.status === "archived" ? "inactive" : "archived" }).then(function (x) { toast(x.ok ? (x.body && x.body.message) || "Saved" : errText(x), !x.ok); if (x.ok) pagePushTemplates(root); });
+          } } }));
+        }
+        if (can("push_template add")) acts.appendChild(h("button", { class: "ghost small", text: "Duplicate", on: { click: function () {
+          api("POST", "/admin/push-templates/" + t.id + "/duplicate").then(function (x) { toast(x.ok ? (x.body && x.body.message) || "Duplicated" : errText(x), !x.ok); if (x.ok) pagePushTemplates(root); });
+        } } }));
+        if (can("push_template delete") && !t.is_system) acts.appendChild(h("button", { class: "danger small", text: "Delete", on: { click: function () {
+          confirmDo("Delete template " + t.name + "? Its delivery history is kept.", function () { api("DELETE", "/admin/push-templates/" + t.id).then(function (x) { toast(x.ok ? "Deleted" : errText(x), !x.ok); if (x.ok) pagePushTemplates(root); }); });
+        } } }));
+        card.appendChild(h("div", { class: "item" },
+          h("div", { class: "main" },
+            h("div", { class: "t", text: t.name }),
+            h("div", { class: "s", text: t.key + " · " + ptLabel(t.category) + " · " + ptWho(t.audience) + (t.is_system ? " · Built in" : " · Custom") }),
+            h("div", { class: "s", text: "“" + t.title + "” — " + t.body }),
+            t.connected ? null : h("div", { class: "hint", text: t.connection_note || "Nothing sends this yet." }),
+            h("div", { style: "margin-top:8px" }, acts)),
+          h("div", {}, h("span", { class: "pill " + (t.status === "active" ? "on" : t.status === "archived" ? "warn" : ""), text: t.status === "active" ? "On" : t.status === "archived" ? "Archived" : "Off" }))));
+      });
+      root.appendChild(card);
+      if (total > per) {
+        var pg = h("div", { class: "acts" });
+        if (PT.page > 1) pg.appendChild(h("button", { class: "ghost small", text: "Previous", on: { click: function () { PT.page--; pagePushTemplates(root); } } }));
+        pg.appendChild(h("span", { class: "muted", text: "Page " + PT.page + " of " + Math.ceil(total / per) }));
+        if (PT.page * per < total) pg.appendChild(h("button", { class: "ghost small", text: "Next", on: { click: function () { PT.page++; pagePushTemplates(root); } } }));
+        root.appendChild(pg);
+      }
+    });
+  }
+
+  function pushTemplateForm(root, id) {
+    loading(root);
+    Promise.all([ptMeta(), id ? api("GET", "/admin/push-templates/" + id) : Promise.resolve(null)]).then(function (res) {
+      var meta = res[0], got = res[1], t = (got && got.body && got.body.data) || {}, versions = (got && got.body && got.body.versions) || [];
+      if (id && !t.id) { root.textContent = ""; root.appendChild(h("div", { class: "empty", text: "Template not found." })); return; }
+      root.textContent = "";
+      root.appendChild(head(id ? "Edit template" : "New template", id ? t.key : "Write the wording, add placeholders, and check the preview. A new template starts switched off."));
+      var card = h("div", { class: "card" });
+      var f = {
+        name: text(t.name), key: text(t.key, "e.g. passenger.promo_weekend"),
+        cat: select(meta.categories.map(function (c) { return [c.id, c.label]; }), t.category || "ride"),
+        aud: select([["passenger", "Passengers"], ["driver", "Drivers"], ["all", "Both"]], t.audience || "passenger"),
+        title: text(t.title), body: h("textarea", { rows: 4 }),
+        img: text(t.image_url, "https://… (optional)"), link: text(t.deep_link, "drop://… (optional)"), act: text(t.action_label, "optional, up to 30 characters")
+      };
+      f.body.value = t.body || "";
+      var locked = !!t.is_system;
+      if (id) f.key.disabled = true;
+      if (locked) { f.cat.disabled = true; f.aud.disabled = true; }
+      var out = h("p", { class: "msg" });
+      card.appendChild(field("Name", f.name));
+      card.appendChild(field("Key", f.key, id ? "The key cannot change. It is how DROP finds this template." : "Lowercase words joined by dots. Must be unique."));
+      card.appendChild(h("div", { class: "grid2" }, field("Category", f.cat), field("Who receives it", f.aud)));
+      if (locked && t.connection_note) card.appendChild(h("div", { class: "hint", text: t.connection_note }));
+      card.appendChild(field("Title", f.title, "Up to 80 characters."));
+      card.appendChild(field("Message", f.body, "Up to 300 characters. Pickup codes and wallet balances can show on a locked screen, so use them with care."));
+      var chips = h("div", { class: "checks" });
+      meta.variables.forEach(function (v) {
+        chips.appendChild(h("button", { class: "ghost small", type: "button", title: v.label + (v.sensitive ? " (sensitive)" : ""), text: "{{" + v.name + "}}", on: { click: function () {
+          var el = document.activeElement === f.title ? f.title : f.body; var s = el.selectionStart == null ? el.value.length : el.selectionStart;
+          el.value = el.value.slice(0, s) + "{{" + v.name + "}}" + el.value.slice(el.selectionEnd == null ? s : el.selectionEnd); el.focus(); refresh();
+        } } }));
+      });
+      card.appendChild(h("div", { class: "hint", text: "Tap a placeholder to insert it where the cursor is. Only these are accepted; nothing else is ever run." }));
+      card.appendChild(chips);
+      card.appendChild(field("Image link", f.img, "A plain https link. Optional."));
+      card.appendChild(field("Deep link", f.link, "drop://… opens inside the app" + (meta.link_hosts.length ? ", or an https link to: " + meta.link_hosts.join(", ") : ". Links to websites need a host in Settings.") + " Optional. Check that the app handles a link before you rely on it."));
+      card.appendChild(field("Action label", f.act, "Sent with the notification for the app; the phone does not show it as a button yet."));
+      var prev = h("div", { class: "card", style: "background:var(--bg,transparent)" });
+      card.appendChild(h("div", { class: "t", text: "Preview with sample values", style: "margin-top:12px" }));
+      card.appendChild(prev);
+      card.appendChild(out);
+      var timer = null, n = 0;
+      function refresh() {
+        clearTimeout(timer);
+        timer = setTimeout(function () {
+          var mine = ++n;
+          api("POST", "/admin/push-templates/preview", { title: f.title.value, body: f.body.value, image_url: f.img.value, deep_link: f.link.value, action_label: f.act.value }).then(function (r) {
+            if (mine !== n || !r.body) return;
+            prev.textContent = "";
+            prev.appendChild(h("div", { class: "t", text: r.body.title || "(no title)" }));
+            prev.appendChild(h("div", { text: r.body.body || "(no message)" }));
+            if (r.body.deep_link) prev.appendChild(h("div", { class: "hint", text: "Opens: " + r.body.deep_link }));
+            if (r.body.uses_sensitive) prev.appendChild(h("div", { class: "hint", text: "This text contains a sensitive value. It is hidden in the delivery log and never retried." }));
+            var errs = r.body.errors || {}, lines = [];
+            Object.keys(errs).forEach(function (k) { errs[k].forEach(function (m) { lines.push(m); }); });
+            msg(out, lines.join(" "));
+          });
+        }, 350);
+      }
+      [f.title, f.body, f.img, f.link, f.act].forEach(function (el) { el.addEventListener("input", refresh); });
+      refresh();
+      var save = h("button", { text: "Save", style: "width:100%;margin-top:14px" });
+      save.addEventListener("click", function () {
+        save.disabled = true; msg(out, "");
+        api(id ? "PUT" : "POST", "/admin/push-templates" + (id ? "/" + id : ""), {
+          key: f.key.value.trim(), name: f.name.value.trim(), category: f.cat.value, audience: f.aud.value, title: f.title.value, body: f.body.value,
+          image_url: ns(f.img), deep_link: ns(f.link), action_label: ns(f.act)
+        }).then(function (r) { save.disabled = false; if (r.ok) { toast((r.body && r.body.message) || "Saved"); pagePushTemplates(root); } else msg(out, errText(r)); });
+      });
+      card.appendChild(save);
+      root.appendChild(card);
+      if (id && can("push_template send")) {
+        var em = text("", "Email of a person with the new app");
+        var tout = h("p", { class: "msg" });
+        var send = h("button", { class: "ghost", text: "Send test", style: "width:100%;margin-top:8px" });
+        send.addEventListener("click", function () {
+          send.disabled = true; msg(tout, "");
+          api("POST", "/admin/push-templates/" + id + "/test", { email: em.value.trim() }).then(function (r) { send.disabled = false; msg(tout, r.ok ? (r.body && r.body.message) || "Sent" : errText(r), r.ok); });
+        });
+        root.appendChild(h("div", { class: "card" }, h("div", { class: "t", text: "Send a test" }), h("div", { class: "hint", text: "Sends the saved wording with sample values to one person, even if the template is switched off. Save first to test your latest edit. Limit: 20 an hour." }), em, tout, send));
+      }
+      if (versions.length) {
+        var vl = h("div", { class: "card" }, h("div", { class: "t", text: "History" }));
+        versions.forEach(function (v) { vl.appendChild(h("div", { class: "item" }, h("div", { class: "main" }, h("div", { class: "t", text: "Version " + v.version + " · " + (v.note || "") }), h("div", { class: "s", text: new Date(v.created_at).toLocaleString() + " · “" + (v.snapshot && v.snapshot.title) + "” — " + (v.snapshot && v.snapshot.body) })))); });
+        root.appendChild(vl);
+      }
+      root.appendChild(h("button", { class: "ghost", text: "Back", style: "width:100%;margin-top:8px", on: { click: function () { pagePushTemplates(root); } } }));
+    });
+  }
+
+  var PL = { status: "", key: "", q: "", tests: "", page: 1 };
+  function pushDeliveryLog(root) {
+    loading(root);
+    var qs = "?page=" + PL.page + (PL.status ? "&status=" + PL.status : "") + (PL.key ? "&template_key=" + encodeURIComponent(PL.key) : "") + (PL.q ? "&q=" + encodeURIComponent(PL.q) : "") + (PL.tests ? "&tests=" + PL.tests : "");
+    api("GET", "/admin/push-deliveries" + qs).then(function (r) {
+      var list = (r.body && r.body.data) || [], total = (r.body && r.body.total) || 0, per = (r.body && r.body.per_page) || 50;
+      root.textContent = "";
+      root.appendChild(head("Delivery log", "Every notification, one line per person. Sent means OneSignal accepted it, not that the phone showed it."));
+      root.appendChild(ptTabs(root, "log"));
+      var f = { st: select([["", "Any result"], ["sent", "Sent"], ["failed", "Failed"], ["skipped", "Skipped"], ["queued", "Waiting"]], PL.status), key: text(PL.key, "Template key"), q: text(PL.q, "Recipient email"), t: select([["", "Without tests"], ["include", "With tests"], ["only", "Tests only"]], PL.tests) };
+      var go = function () { PL.status = f.st.value; PL.key = f.key.value.trim(); PL.q = f.q.value.trim(); PL.tests = f.t.value; PL.page = 1; pushDeliveryLog(root); };
+      root.appendChild(h("div", { class: "card" }, h("div", { class: "grid2" }, f.st, f.t), h("div", { class: "grid2", style: "margin-top:8px" }, f.key, f.q), h("button", { class: "small", text: "Filter", style: "margin-top:8px", on: { click: go } })));
+      var card = h("div", { class: "card" });
+      if (!list.length) card.appendChild(h("div", { class: "empty", text: "Nothing logged yet." }));
+      list.forEach(function (d) {
+        card.appendChild(h("div", { class: "item" },
+          h("div", { class: "main" },
+            h("div", { class: "t", text: d.title }), h("div", { class: "s", text: d.body }),
+            h("div", { class: "s", text: new Date(d.created_at).toLocaleString() + " · " + d.template_key + " · " + (d.email || "deleted user") + (d.ride_id ? " · ride " + d.ride_id : "") + (d.is_test ? " · test" : "") }),
+            d.reason ? h("div", { class: "hint", text: d.reason + (d.status === "failed" ? (d.retryable ? " · will retry (attempt " + d.attempts + " of 3)" : " · not retried") : "") }) : null),
+          h("span", { class: "pill " + (d.status === "sent" ? "on" : d.status === "failed" ? "warn" : ""), text: d.status === "queued" ? "Waiting" : d.status.charAt(0).toUpperCase() + d.status.slice(1) })));
+      });
+      root.appendChild(card);
+      var pg = h("div", { class: "acts" });
+      if (PL.page > 1) pg.appendChild(h("button", { class: "ghost small", text: "Newer", on: { click: function () { PL.page--; pushDeliveryLog(root); } } }));
+      if (PL.page * per < total) pg.appendChild(h("button", { class: "ghost small", text: "Older", on: { click: function () { PL.page++; pushDeliveryLog(root); } } }));
+      root.appendChild(pg);
+    });
+  }
+
+  var PS = { days: "7" };
+  function pushDeliveryStats(root) {
+    loading(root);
+    api("GET", "/admin/push-deliveries/stats?days=" + PS.days).then(function (r) {
+      var s = (r.body) || {}, t = s.totals || {};
+      root.textContent = "";
+      root.appendChild(head("Delivery statistics", s.note || ""));
+      root.appendChild(ptTabs(root, "stats"));
+      var days = select([["1", "Last day"], ["7", "Last 7 days"], ["30", "Last 30 days"], ["90", "Last 90 days"]], PS.days);
+      days.addEventListener("change", function () { PS.days = days.value; pushDeliveryStats(root); });
+      root.appendChild(h("div", { class: "card" }, days,
+        h("div", { class: "grid2", style: "margin-top:10px" }, h("div", {}, h("div", { class: "t", text: String(t.sent || 0) }), h("div", { class: "muted", text: "Sent" })), h("div", {}, h("div", { class: "t", text: String(t.failed || 0) }), h("div", { class: "muted", text: "Failed" }))),
+        h("div", { class: "grid2", style: "margin-top:10px" }, h("div", {}, h("div", { class: "t", text: String(t.skipped || 0) }), h("div", { class: "muted", text: "Skipped (no phone, switched off, or repeat)" })), h("div", {}, h("div", { class: "t", text: String(t.queued || 0) }), h("div", { class: "muted", text: "Waiting" })))));
+      var byT = h("div", { class: "card" }, h("div", { class: "t", text: "By template" }));
+      if (!(s.by_template || []).length) byT.appendChild(h("div", { class: "empty", text: "No notifications in this period." }));
+      (s.by_template || []).forEach(function (x) {
+        byT.appendChild(h("div", { class: "item" }, h("div", { class: "main" }, h("div", { class: "t", text: x.template_key }), h("div", { class: "s", text: x.sent + " sent · " + x.failed + " failed · " + x.skipped + " skipped" })), h("span", { class: "pill", text: String(x.total) })));
+      });
+      root.appendChild(byT);
+      var rs = h("div", { class: "card" }, h("div", { class: "t", text: "Why notifications failed or were skipped" }));
+      if (!(s.reasons || []).length) rs.appendChild(h("div", { class: "empty", text: "None." }));
+      (s.reasons || []).forEach(function (x) { rs.appendChild(h("div", { class: "item" }, h("div", { class: "main" }, h("div", { class: "s", text: x.reason })), h("span", { class: "pill warn", text: String(x.n) }))); });
+      root.appendChild(rs);
+      var dd = h("div", { class: "card" }, h("div", { class: "t", text: "By day" }));
+      (s.by_day || []).forEach(function (x) { dd.appendChild(h("div", { class: "item" }, h("div", { class: "main" }, h("div", { class: "s", text: x.day + " · " + x.sent + " sent · " + x.failed + " failed · " + x.skipped + " skipped" })))); });
+      root.appendChild(dd);
+    });
+  }
 
   // ---------- Airports: every detail is entered and verified here; nothing is built in ----------
   function pageAirports(root) {

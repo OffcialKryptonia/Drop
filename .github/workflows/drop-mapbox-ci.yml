@@ -2,7 +2,7 @@ name: Drop Mapbox integration checks
 
 on:
   push:
-    branches: [feat/flutter-multi-stop-routes, feat/ride-chat, feat/ride-calls, feat/optional-fare-bidding, feat/instant-offline-first, feat/theme-light-dark-compass, feat/airport-infrastructure, feat/airport-booking-driver]
+    branches: [feat/flutter-multi-stop-routes, feat/ride-chat, feat/ride-calls, feat/optional-fare-bidding, feat/instant-offline-first, feat/theme-light-dark-compass, feat/airport-infrastructure, feat/airport-booking-driver, feat/push-templates]
   pull_request:
     branches: [main]
     paths:
@@ -94,5 +94,8 @@ jobs:
         run: npx --yes tsx test/bidding.test.ts
       - name: Admin light/dark theme checks
         run: npx --yes tsx test/admin-theme.test.ts
+      - name: Push template unit tests
+        working-directory: worker
+        run: npx --yes tsx test/push-templates.test.ts
       - name: Ride-flow smoke test syntax
         run: node --check test/rides-trip-smoke.mjs

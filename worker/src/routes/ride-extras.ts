@@ -8,7 +8,8 @@ import { readBody, validationFailed } from "../lib/legacy";
 import { requireApprovedDriver } from "../lib/roles";
 import { closeExtra, reverseExtra, extraName, extraTypes, extraView, extrasSettings, payExtra, proposeExtra, typeView } from "../lib/extras";
 import { currencyInfo } from "../lib/currency";
-import { pushLater, sendPush } from "../lib/push";
+import { pushLater } from "../lib/push";
+import { notify } from "../lib/push-delivery";
 
 export const rideExtraRoutes = new Hono<AppEnv>();
 type C = Context<AppEnv>;
@@ -51,10 +52,9 @@ rideExtraRoutes.post("/driver/rides/:id/extras", ...driverMw, async (c) => {
   const r = await proposeExtra(db, { rideId, driverId: c.get("user").id, typeId, amount: Math.round(p.data.amount * 100) / 100, note: p.data.note });
   if (!r.ok) return c.json({ status: false, code: r.code, message: r.message, remaining: r.remaining ?? null }, 422);
   const e = r.extra;
-  pushLater(c, sendPush(db, c.env, [r.rider_id], {
-    title: "Extra charge from your driver",
-    body: `${extraName(e)} · ${money(e.amount, e.currency)}. Open DROP to approve or decline.`,
-    data: { type: "extra_charge", extra_id: String(e.id), ride_id: String(rideId) },
+  pushLater(c, notify(db, c.env, {
+    key: "passenger.extra_charge_requested", userIds: [Number(r.rider_id)], rideId, vars: { extra_name: extraName(e), amount: money(e.amount, e.currency) },
+    data: { type: "extra_charge", extra_id: String(e.id), ride_id: String(rideId) }, dedupe: `passenger.extra_charge_requested:extra${e.id}`,
   }));
   return c.json({ status: true, data: extraView(e) }, 201);
 });
@@ -106,10 +106,10 @@ rideExtraRoutes.post("/ride/extras/:id/pay", ...riderMw, async (c) => {
   const r = await payExtra(db, id, c.get("user").id, p.data.method);
   if (!r.ok) return c.json({ status: false, code: r.code, message: r.message }, r.code === "not_found" ? 404 : 422);
   const e = r.extra;
-  pushLater(c, sendPush(db, c.env, [Number(e.driver_id)], {
-    title: e.paid_with === "wallet" ? "Extra charge paid" : "Collect cash for the extra charge",
-    body: e.paid_with === "wallet" ? `${money(e.amount, e.currency)} was added to your wallet.` : `The passenger will pay ${money(e.amount, e.currency)} in cash.`,
-    data: { type: "extra_charge_paid", extra_id: String(e.id), ride_id: String(e.ride_request_id) },
+  pushLater(c, notify(db, c.env, {
+    key: e.paid_with === "wallet" ? "driver.extra_charge_paid" : "driver.extra_charge_cash_due", userIds: [Number(e.driver_id)], rideId: Number(e.ride_request_id),
+    vars: { amount: money(e.amount, e.currency), extra_name: extraName(e) },
+    data: { type: "extra_charge_paid", extra_id: String(e.id), ride_id: String(e.ride_request_id) }, dedupe: `extra_paid:extra${e.id}`,
   }));
   return c.json({ status: true, data: extraView(e) });
 });
@@ -119,9 +119,10 @@ rideExtraRoutes.post("/ride/extras/:id/decline", ...riderMw, async (c) => {
   const db = c.get("db");
   const row = id ? await closeExtra(db, id, { riderId: c.get("user").id }, "declined") : null;
   if (!row) return c.json({ status: false, message: "This extra charge has already been answered." }, 409);
-  pushLater(c, sendPush(db, c.env, [Number(row.driver_id)], {
-    title: "Extra charge declined", body: `The passenger declined the ${extraName(row).toLowerCase()} of ${money(row.amount, row.currency)}.`,
-    data: { type: "extra_charge_declined", extra_id: String(row.id), ride_id: String(row.ride_request_id) },
+  pushLater(c, notify(db, c.env, {
+    key: "driver.extra_charge_declined", userIds: [Number(row.driver_id)], rideId: Number(row.ride_request_id),
+    vars: { extra_name: extraName(row).toLowerCase(), amount: money(row.amount, row.currency) },
+    data: { type: "extra_charge_declined", extra_id: String(row.id), ride_id: String(row.ride_request_id) }, dedupe: `extra_declined:extra${row.id}`,
   }));
   return c.json({ status: true });
 });
@@ -172,9 +173,10 @@ rideExtraRoutes.post("/admin/extras/:id/refund", ...guard("ride_extra edit"), as
     await reverseExtra(db, e);
     await db.query("commit");
     await audit(c, "extra.refund", `extra:${id}`, { status: e.status, paid_with: e.paid_with, amount: Number(e.amount) });
-    pushLater(c, sendPush(db, c.env, [Number(e.rider_id)], {
-      title: e.status === "paid" && e.paid_with === "wallet" ? "Extra charge refunded" : "Extra charge cancelled",
-      body: `${extraName(e)} · ${money(e.amount, e.currency)}`, data: { type: "extra_charge_refunded", extra_id: String(id), ride_id: String(e.ride_request_id) },
+    pushLater(c, notify(db, c.env, {
+      key: e.status === "paid" && e.paid_with === "wallet" ? "passenger.extra_charge_refunded" : "passenger.extra_charge_cancelled",
+      userIds: [Number(e.rider_id)], rideId: Number(e.ride_request_id), vars: { extra_name: extraName(e), amount: money(e.amount, e.currency) },
+      data: { type: "extra_charge_refunded", extra_id: String(id), ride_id: String(e.ride_request_id) }, dedupe: `extra_refund:extra${id}`,
     }));
     return c.json({ status: true, message: e.status === "paid" && e.paid_with === "wallet" ? "Refunded to the passenger's wallet." : "Extra charge cancelled." });
   } catch (err) { await db.query("rollback").catch(() => {}); throw err; }

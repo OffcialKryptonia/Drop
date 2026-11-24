@@ -2,7 +2,7 @@ name: Backend ride-flow integration
 
 on:
   push:
-    branches: [feat/flutter-multi-stop-routes, feat/ride-chat, feat/ride-calls, feat/optional-fare-bidding, feat/airport-infrastructure, feat/airport-booking-driver]
+    branches: [feat/flutter-multi-stop-routes, feat/ride-chat, feat/ride-calls, feat/optional-fare-bidding, feat/airport-infrastructure, feat/airport-booking-driver, feat/push-templates]
   pull_request:
     branches: [main]
     paths:
@@ -114,6 +114,10 @@ jobs:
       - name: Run airport booking integration test
         working-directory: worker
         run: node test/airport-smoke.mjs
+
+      - name: Run push template integration test
+        working-directory: worker
+        run: node test/push-templates-smoke.mjs
 
       - name: Worker logs on failure
         if: failure()
