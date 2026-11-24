@@ -20,6 +20,7 @@ import { computeFare } from "../lib/fare";
 import { getSetting } from "../lib/driver-application";
 import { chargeCancellationFee } from "../lib/ride-settlement";
 import { pushLater, pushNearbyDrivers, pushRideEvent } from "../lib/push";
+import { notify } from "../lib/push-delivery";
 
 export const rideRoutes = new Hono<AppEnv>();
 type C = Context<AppEnv>;
@@ -216,6 +217,11 @@ rideRoutes.post("/ride/request", ...mw, async (c) => {
     await db.query("commit");
     const row = (await db.query(`${RIDE_SELECT} where r.id = $1`, [rideId])).rows[0];
     pushLater(c, pushNearbyDrivers(db, c.env, rideId));
+    // Confirmation to the passenger. Airport bookings have their own templates. Both start switched off (see ensureSystemTemplates).
+    pushLater(c, notify(db, c.env, {
+      key: !q.airport ? "passenger.ride_requested" : q.airport.direction === "pickup" ? "passenger.airport_pickup_confirmed" : "passenger.airport_drop_confirmed",
+      userIds: [me.id], rideId, data: { type: "ride", event: "requested", ride_id: String(rideId) },
+    }));
     return c.json({ status: true, data: ride(row) }, 201);
   } catch (e) {
     await db.query("rollback").catch(() => undefined);

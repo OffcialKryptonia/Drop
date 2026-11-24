@@ -5,7 +5,8 @@ import { withDb } from "../db";
 import { requireAuth } from "../auth/middleware";
 import { guard, audit } from "../lib/permissions";
 import { readBody, validationFailed } from "../lib/legacy";
-import { pushLater, sendPush } from "../lib/push";
+import { pushLater } from "../lib/push";
+import { notify } from "../lib/push-delivery";
 import { chatRide } from "../lib/chat";
 import { callSettings, callView, joinInfo, newRoom, pickProvider, readyProviders, saveSecret, secretSaved, sweepCalls } from "../lib/calls";
 
@@ -83,7 +84,7 @@ rideCallRoutes.post("/ride/:id/call", ...mw, async (c) => {
     throw e;
   }
   const myName = await nameOf(c, me);
-  pushLater(c, sendPush(db, c.env, [ride.peerId], { title: "Incoming call", body: `${myName} is calling you on Drop.`, data: { type: "call_incoming", ride_id: String(ride.id), call_id: String(call.id) } }));
+  pushLater(c, notify(db, c.env, { key: "ride.call_incoming", userIds: [ride.peerId], rideId: Number(ride.id), vars: { caller_name: myName }, data: { type: "call_incoming", ride_id: String(ride.id), call_id: String(call.id) }, dedupe: `ride.call_incoming:call${call.id}` }));
   const join = await joinInfo(db, c.env, { id: Number(call.id), provider, room: call.room }, me, myName, TOKEN_SECONDS);
   return c.json({ status: true, data: { call: callView(call, me), join, peer: { name: ride.peerName } } });
 });
@@ -153,7 +154,7 @@ async function finish(c: C, who: "decline" | "cancel" | "end") {
   const row = upd ?? (await db.query("select * from app.ride_calls where id = $1", [call.id])).rows[0];
   if (upd && next === "cancelled") {
     const name = await nameOf(c, me);
-    pushLater(c, sendPush(db, c.env, [Number(call.callee_id)], { title: "Missed call", body: `${name} tried to call you.`, data: { type: "call_missed", ride_id: String(call.ride_request_id), call_id: String(call.id) } }));
+    pushLater(c, notify(db, c.env, { key: "ride.call_missed", userIds: [Number(call.callee_id)], rideId: Number(call.ride_request_id), vars: { caller_name: name }, data: { type: "call_missed", ride_id: String(call.ride_request_id), call_id: String(call.id) }, dedupe: `ride.call_missed:call${call.id}` }));
   }
   return c.json({ status: true, data: callView(row, me) });
 }

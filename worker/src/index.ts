@@ -29,6 +29,8 @@ import { driverExtraRoutes } from "./routes/driver-extras";
 import { placeRoutes } from "./routes/places";
 import { regionRoutes } from "./routes/region";
 import { pushRoutes } from "./routes/push";
+import { adminPushTemplateRoutes } from "./routes/admin-push-templates";
+import { retryPushes } from "./lib/push-delivery";
 import { mapIconRoutes, adminMapIconRoutes, serviceIconRoutes, adminServiceIconRoutes } from "./routes/map-icons";
 import { safetyRoutes, adminSafetyRoutes } from "./routes/safety";
 import { rideRoutes } from "./routes/rides";
@@ -94,6 +96,7 @@ app.route("/api", driverExtraRoutes);
 app.route("/api", placeRoutes);
 app.route("/api", regionRoutes);
 app.route("/api", pushRoutes);
+app.route("/api", adminPushTemplateRoutes);
 app.route("/api", mapIconRoutes);
 app.route("/api", adminMapIconRoutes);
 app.route("/api", serviceIconRoutes);
@@ -149,7 +152,7 @@ export default {
       (async () => {
         const db = await connectDb(env.HYPERDRIVE.connectionString);
         try {
-          console.log("ride sweep", JSON.stringify(await sweepRides(db)), "chat purged", await purgeOldChat(db, env), "calls closed", await sweepCalls(db, env), "bids closed", JSON.stringify(await sweepBids(db, env)));
+          console.log("ride sweep", JSON.stringify(await sweepRides(db)), "chat purged", await purgeOldChat(db, env), "calls closed", await sweepCalls(db, env), "bids closed", JSON.stringify(await sweepBids(db, env)), "pushes retried", await retryPushes(db, env));
         } finally {
           await db.end();
         }

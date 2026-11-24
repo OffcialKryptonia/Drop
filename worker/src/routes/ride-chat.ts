@@ -5,7 +5,8 @@ import { withDb } from "../db";
 import { requireAuth } from "../auth/middleware";
 import { guard, audit } from "../lib/permissions";
 import { readBody, validationFailed } from "../lib/legacy";
-import { pushLater, sendPush } from "../lib/push";
+import { pushLater } from "../lib/push";
+import { notify } from "../lib/push-delivery";
 import { MAX_AUDIO_BYTES, audioToken, audioTokenValid, chatRide, chatSettings, messageView, sniffAudio } from "../lib/chat";
 
 /**
@@ -99,10 +100,10 @@ async function announce(c: C, ride: Ctx, kind: "text" | "voice") {
   const seen = (await db.query("select 1 from app.ride_chat_presence where ride_request_id = $1 and user_id = $2 and seen_at > now() - interval '12 seconds'", [ride.id, ride.peerId])).rowCount;
   if (seen) return; // they are looking at the chat right now
   // No message text in the notification: it can show on a locked screen.
-  pushLater(c, sendPush(db, c.env, [ride.peerId], {
-    title: kind === "voice" ? "New voice message" : "New message",
-    body: `${ride.mine === "rider" ? "Your passenger" : "Your driver"} sent you a message. Open DROP to read it.`,
-    data: { type: "chat_message", ride_id: String(ride.id) },
+  pushLater(c, notify(db, c.env, {
+    key: kind === "voice" ? "ride.voice_message" : "ride.chat_message", userIds: [ride.peerId], rideId: ride.id,
+    vars: { sender: ride.mine === "rider" ? "Your passenger" : "Your driver" },
+    data: { type: "chat_message", ride_id: String(ride.id) }, dedupe: null,
   }));
 }
 

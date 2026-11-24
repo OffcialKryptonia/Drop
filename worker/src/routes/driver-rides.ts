@@ -13,6 +13,7 @@ import { chatUnread } from "../lib/chat";
 import { driverPickupFlags, issuePickupCode, pickupSettings, startAllowedSql, verifyPickup } from "../lib/pickup";
 import { completeRide } from "../lib/ride-settlement";
 import { pushLater, pushRideEvent } from "../lib/push";
+import { notify } from "../lib/push-delivery";
 import { driverBidList, driverPreferences } from "./ride-bids";
 import { AIRPORT_COLS, AIRPORT_JOIN, airportView } from "../lib/airports";
 
@@ -162,6 +163,11 @@ driverRideRoutes.post("/driver/requests/:id/accept", ...mw, async (c) => {
     await issuePickupCode(db, c.env.SETTINGS_ENCRYPTION_KEY, id);
     await db.query("commit");
     pushLater(c, pushRideEvent(db, c.env, Number(r.rows[0].rider_id), "accepted", id));
+    // Airport rides: confirm the airport, terminal and pickup to the driver who took the job (switched off until an admin enables it).
+    pushLater(c, (async () => {
+      const a = (await db.query("select airport_id from app.ride_requests where id = $1", [id])).rows[0];
+      if (a?.airport_id) await notify(db, c.env, { key: "driver.airport_booking_assigned", userIds: [me.id], rideId: id, data: { type: "ride", event: "airport_assigned", ride_id: String(id) } });
+    })());
   } catch (e) {
     await db.query("rollback").catch(() => {});
     if ((e as { code?: string }).code === "23505") return c.json({ status: false, code: "already_on_ride", message: "Finish your current ride first." }, 409);
@@ -252,6 +258,10 @@ driverRideRoutes.post("/driver/rides/:id/stops/:stopId/complete", ...mw, async (
     [stopId, rideId, driverId],
   );
   if (!result.rowCount) return c.json({ status:false, code:"stop_out_of_order", message:"Arrive at the current stop after completing the previous stop." },409);
+  pushLater(c, (async () => {
+    const rider = (await db.query("select rider_id from app.ride_requests where id = $1", [rideId])).rows[0];
+    if (rider) await notify(db, c.env, { key: "passenger.stop_completed", userIds: [Number(rider.rider_id)], rideId, vars: {}, data: { type: "ride", event: "stop_completed", ride_id: String(rideId) }, dedupe: `passenger.stop_completed:stop${stopId}` });
+  })());
   const active = await activeOf(c);
   return c.json({ status: true, data: active ? await shapeActive(c, active) : null });
 });

@@ -9,7 +9,8 @@ import { userCurrency } from "../lib/currency";
 import { getSetting } from "../lib/driver-application";
 import { chargeCancellationFee } from "../lib/ride-settlement";
 import { overridePickup, pickupSettings } from "../lib/pickup";
-import { pushLater, pushNearbyDrivers, sendPush } from "../lib/push";
+import { pushLater, pushNearbyDrivers } from "../lib/push";
+import { notify } from "../lib/push-delivery";
 
 export const adminRideRoutes = new Hono<AppEnv>();
 
@@ -154,7 +155,7 @@ adminRideRoutes.post("/admin/order-ride", ...guard("ride_order add"), async (c) 
   const row = (await db.query(`${SELECT} where r.id = $1`, [rideId])).rows[0];
   pushLater(c, Promise.all([
     pushNearbyDrivers(db, c.env, rideId),
-    sendPush(db, c.env, [d.passenger_id], { title: "Ride booked by Drop Support", body: "Drop Support has placed a ride request on your behalf.", data: { type: "ride", event: "admin_booked", ride_id: String(rideId) } }),
+    notify(db, c.env, { key: "passenger.ride_booked_by_support", userIds: [Number(d.passenger_id)], rideId, data: { type: "ride", event: "admin_booked", ride_id: String(rideId) } }),
   ]));
   return c.json({ status: true, data: shape(row) }, 201);
 });
@@ -193,10 +194,10 @@ adminRideRoutes.post("/admin/order-rides/:id/cancel", ...guard("ride_order edit"
   if (changed.rows[0].driver_id) {
     fee = await chargeCancellationFee(db, { ...before, status_before: before.status }, await getSetting(db, "ride_cancel_grace_seconds", 120));
     await db.query("update app.users set is_available=true where id=$1 and is_online", [changed.rows[0].driver_id]);
-    pushLater(c, sendPush(db, c.env, [Number(changed.rows[0].driver_id)], { title: "Ride cancelled by Drop Support", body: "Drop Support cancelled this booking. You can accept other requests.", data: { type: "ride", event: "admin_cancelled", ride_id: String(id) } }));
+    pushLater(c, notify(db, c.env, { key: "driver.ride_cancelled_by_admin", userIds: [Number(changed.rows[0].driver_id)], rideId: id, data: { type: "ride", event: "admin_cancelled", ride_id: String(id) } }));
   }
   await audit(c, "admin_ride_cancelled", String(id), { passenger_id: Number(before.rider_id), reason, cancellation_fee: fee });
-  pushLater(c, sendPush(db, c.env, [Number(before.rider_id)], { title: "Ride cancelled by Drop Support", body: "Drop Support cancelled the ride booked on your behalf.", data: { type: "ride", event: "admin_cancelled", ride_id: String(id) } }));
+  pushLater(c, notify(db, c.env, { key: "passenger.ride_cancelled_by_admin", userIds: [Number(before.rider_id)], rideId: id, data: { type: "ride", event: "admin_cancelled", ride_id: String(id) } }));
   return c.json({ status: true, id, cancellation_fee: fee });
 });
 
@@ -238,6 +239,6 @@ adminRideRoutes.post("/admin/pickup-rides/:id/override", ...guard("pickup_code e
   if (!(await overridePickup(db, id, c.get("user").id))) return c.json({ status: false, message: "This ride has no pending pickup code to override." }, 409);
   await audit(c, "pickup.override", `ride:${id}`, {});
   const r = (await db.query("select driver_id from app.ride_requests where id = $1", [id])).rows[0];
-  if (r?.driver_id) pushLater(c, sendPush(db, c.env, [Number(r.driver_id)], { title: "Pickup authorised", body: "DROP authorised the trip. You can start it now.", data: { type: "pickup_override", ride_id: String(id) } }));
+  if (r?.driver_id) pushLater(c, notify(db, c.env, { key: "driver.pickup_authorised", userIds: [Number(r.driver_id)], rideId: id, data: { type: "pickup_override", ride_id: String(id) } }));
   return c.json({ status: true, message: "The driver can now start the trip without the code." });
 });

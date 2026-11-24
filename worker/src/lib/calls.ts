@@ -2,7 +2,7 @@ import type { Client } from "pg";
 import type { Bindings } from "../env";
 import { decryptValue, encryptValue } from "./crypto";
 import { agoraToken, livekitToken } from "./call-tokens";
-import { sendPush } from "./push";
+import { notify } from "./push-delivery";
 
 export type Provider = "livekit" | "agora";
 export const LIVE = ["ringing", "active"] as const;
@@ -113,7 +113,7 @@ export async function sweepCalls(db: Client, env: Bindings, onlyRide?: number): 
       returning c.id, c.ride_request_id, c.caller_id, c.callee_id`, onlyRide ? [s.ring_seconds, onlyRide] : [s.ring_seconds])).rows;
   for (const m of missed) {
     const who = (await db.query("select coalesce(nullif(trim(concat_ws(' ', first_name, last_name)), ''), 'Someone') as n from app.users where id = $1", [m.caller_id])).rows[0]?.n ?? "Someone";
-    await sendPush(db, env, [Number(m.callee_id)], { title: "Missed call", body: `${who} tried to call you.`, data: { type: "call_missed", ride_id: String(m.ride_request_id), call_id: String(m.id) } });
+    await notify(db, env, { key: "ride.call_missed", userIds: [Number(m.callee_id)], rideId: Number(m.ride_request_id), vars: { caller_name: who }, data: { type: "call_missed", ride_id: String(m.ride_request_id), call_id: String(m.id) }, dedupe: `ride.call_missed:call${m.id}` });
   }
 
   const ended = (await db.query(

@@ -2,7 +2,7 @@ import type { Client } from "pg";
 import type { Bindings } from "../env";
 import { currencyInfo } from "./currency";
 import { getSetting } from "./driver-application";
-import { sendPush } from "./push";
+import { notify } from "./push-delivery";
 
 type Row = Record<string, unknown>;
 
@@ -198,26 +198,23 @@ export type BidEvent =
   | "new_bid" | "driver_accepted" | "driver_counteroffered" | "rider_accepted_counter" | "rider_revised" | "bid_raised"
   | "bid_expired" | "bid_cancelled" | "driver_selected" | "selection_lost" | "response_expired" | "driver_withdrew" | "counter_rejected";
 
-/** One short push. The push never carries authority: the apps re-read the bid from the server. */
+const BID_KEY: Record<BidEvent, string> = {
+  new_bid: "driver.new_bid", driver_accepted: "passenger.bid_driver_accepted", driver_counteroffered: "passenger.bid_counteroffer",
+  rider_accepted_counter: "driver.bid_counter_accepted", rider_revised: "driver.bid_revised", bid_raised: "driver.bid_raised",
+  bid_expired: "passenger.bid_expired", bid_cancelled: "driver.bid_cancelled", driver_selected: "driver.bid_selected",
+  selection_lost: "driver.bid_selection_lost", response_expired: "driver.bid_response_expired", driver_withdrew: "passenger.bid_driver_withdrew",
+  counter_rejected: "driver.bid_counter_declined",
+};
+
+/** One short push, from the template for that bid event. The push never carries authority: the apps re-read the bid from the server. */
 export async function pushBidEvent(db: Client, env: Bindings, userIds: number[], event: BidEvent, bidId: number, extra?: { amount?: unknown; currency?: unknown; place?: unknown }): Promise<void> {
   if (!userIds.length) return;
-  const amt = extra?.amount != null ? fmtMoney(extra.amount, extra.currency) : "";
-  const text: Record<BidEvent, [string, string]> = {
-    new_bid: ["New passenger bid", `${amt}${extra?.place ? ` · ${String(extra.place).slice(0, 80)}` : ""}`],
-    driver_accepted: ["A driver accepted your offer", `${amt}. Open DROP to choose your driver.`],
-    driver_counteroffered: ["A driver sent a counteroffer", `${amt}. Open DROP to answer.`],
-    rider_accepted_counter: ["Passenger accepted your counteroffer", `${amt}. They may pick you next.`],
-    rider_revised: ["Passenger revised their offer", `${amt}. Open DROP to answer.`],
-    bid_raised: ["Passenger raised their offer", `${amt}. Take another look.`],
-    bid_expired: ["Your bid expired", "No driver was chosen in time. You can try again or book a standard ride."],
-    bid_cancelled: ["Bid cancelled", "The passenger cancelled this bid."],
-    driver_selected: ["You were chosen", `${amt} fare confirmed. Head to the pickup point.`],
-    selection_lost: ["Passenger chose another driver", "That bid is no longer available."],
-    response_expired: ["Your bid response expired", "The passenger did not answer in time."],
-    driver_withdrew: ["A driver pulled out", "Choose another driver or try again."],
-    counter_rejected: ["Counteroffer declined", "The passenger declined your counteroffer."],
-  };
-  await sendPush(db, env, userIds, { title: text[event][0], body: text[event][1], data: { type: "bid", event, bid_id: String(bidId) } });
+  await notify(db, env, {
+    key: BID_KEY[event], userIds,
+    vars: { amount: extra?.amount != null ? fmtMoney(extra.amount, extra.currency) : "", pickup_location: extra?.place != null ? String(extra.place) : "" },
+    data: { type: "bid", event, bid_id: String(bidId) },
+    dedupe: `${BID_KEY[event]}:bid${bidId}`,
+  });
 }
 
 /** Tells eligible drivers a bid is waiting. Never throws. */
