@@ -127,7 +127,7 @@ try {
   ok("the delivery log filters and shows the failure", dl.status === 200 && dl.json.total >= 1 && dl.json.data[0].reason && dl.json.data[0].email === P.email, JSON.stringify(dl.json).slice(0, 200));
   ok("tests are hidden from the log by default", (await call("GET", "/admin/push-deliveries?q=" + encodeURIComponent(P.email), A)).json.total === 0);
   const st = await call("GET", "/admin/push-deliveries/stats?days=7", A);
-  ok("statistics have the expected shape and leave tests out", st.status === 200 && st.json.totals && typeof st.json.totals.sent === "number" && Array.isArray(st.json.by_template) && !st.json.by_template.some((x) => x.template_key === `passenger.smoke_otp_${s}`));
+  ok("statistics have the expected shape and leave tests out", st.status === 200 && st.json.totals && typeof st.json.totals.sent === "number" && Array.isArray(st.json.by_template) && !st.json.by_template.some((x) => x.template_key === `passenger.smoke_otp_${s}`), st.status + " " + JSON.stringify(st.json).slice(0, 300));
 
   // ---- a retryable failure is retried by the sweep logic (simulated row), and gives up after 3 tries
   const idem = crypto.randomUUID();
