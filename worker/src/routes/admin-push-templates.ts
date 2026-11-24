@@ -195,7 +195,7 @@ adminPushTemplateRoutes.post("/admin/push-templates/:id/test", ...guard("push_te
   if (!t) return notFound(c);
   const u = (await db.query("select id, player_id from app.users where lower(email) = lower($1) and deleted_at is null", [p.data.email])).rows[0];
   if (!u) return c.json({ message: "No account has that email.", status: 404 }, 404);
-  const recent = Number((await db.query("select count(*)::int n from app.push_deliveries where is_test and sent_by = $1 and created_at > now() - interval '1 hour'", [me])).rows[0].n);
+  const recent = Number((await db.query("select count(*)::int as n from app.push_deliveries where is_test and sent_by = $1 and created_at > now() - interval '1 hour'", [me])).rows[0].n);
   if (recent >= 20) return c.json({ message: "You have sent 20 test notifications in the last hour. Try again later.", status: 429 }, 429);
   if (!u.player_id) return c.json({ message: "That person has not allowed notifications on a phone with the new app yet.", status: 409 }, 409);
   const r = await notify(db, c.env, { key: t.key, userIds: [Number(u.id)], test: { adminId: me }, data: { type: "test" } });
@@ -226,15 +226,15 @@ adminPushTemplateRoutes.get("/admin/push-deliveries/stats", ...guard("push_templ
   const db = c.get("db");
   const days = num(c.req.query("days"), 7, 1, 90);
   const win = "d.created_at > now() - make_interval(days => $1::int) and not d.is_test";
-  const totals = (await db.query(`select d.status, count(*)::int n from app.push_deliveries d where ${win} group by d.status`, [days])).rows;
+  const totals = (await db.query(`select d.status, count(*)::int as n from app.push_deliveries d where ${win} group by d.status`, [days])).rows;
   const byTemplate = (await db.query(
-    `select d.template_key, count(*)::int total, count(*) filter (where d.status='sent')::int sent, count(*) filter (where d.status='failed')::int failed, count(*) filter (where d.status='skipped')::int skipped
+    `select d.template_key, count(*)::int as total, (count(*) filter (where d.status='sent'))::int as sent, (count(*) filter (where d.status='failed'))::int as failed, (count(*) filter (where d.status='skipped'))::int as skipped
        from app.push_deliveries d where ${win} group by d.template_key order by total desc limit 25`, [days])).rows;
   const byDay = (await db.query(
-    `select to_char(date_trunc('day', d.created_at), 'YYYY-MM-DD') day, count(*) filter (where d.status='sent')::int sent, count(*) filter (where d.status='failed')::int failed, count(*) filter (where d.status='skipped')::int skipped
+    `select to_char(date_trunc('day', d.created_at), 'YYYY-MM-DD') as day, (count(*) filter (where d.status='sent'))::int as sent, (count(*) filter (where d.status='failed'))::int as failed, (count(*) filter (where d.status='skipped'))::int as skipped
        from app.push_deliveries d where ${win} group by 1 order by 1`, [days])).rows;
   const reasons = (await db.query(
-    `select d.reason, count(*)::int n from app.push_deliveries d where ${win} and d.status in ('failed','skipped') and d.reason is not null group by d.reason order by n desc limit 10`, [days])).rows;
+    `select d.reason, count(*)::int as n from app.push_deliveries d where ${win} and d.status in ('failed','skipped') and d.reason is not null group by d.reason order by n desc limit 10`, [days])).rows;
   const t: Record<string, number> = { sent: 0, failed: 0, skipped: 0, queued: 0 };
   for (const r of totals) t[String(r.status)] = r.n;
   return c.json({
