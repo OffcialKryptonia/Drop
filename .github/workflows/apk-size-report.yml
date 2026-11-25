@@ -55,7 +55,19 @@ jobs:
           keytool -genkeypair -keystore "$RUNNER_TEMP/size.jks" -storepass sizepass -keypass sizepass -alias size -keyalg RSA -keysize 2048 -validity 2 -dname "CN=size" >/dev/null 2>&1
           printf 'storeFile=%s\nstorePassword=sizepass\nkeyPassword=sizepass\nkeyAlias=size\n' "$RUNNER_TEMP/size.jks" > android/key.properties
       - name: Release build (arm64) with size analysis
-        run: flutter build apk --release --target-platform android-arm64 --analyze-size
+        run: |
+          # Retry only when the download of build tools failed (Maven 429 / network); a real build error stops at once.
+          for attempt in 1 2 3 4; do
+            if flutter build apk --release --target-platform android-arm64 --analyze-size 2>&1 | tee "$RUNNER_TEMP/build.log"; then
+              [ "${PIPESTATUS[0]}" -eq 0 ] && exit 0
+            fi
+            if grep -qE "status code 429|Could not GET|Could not resolve" "$RUNNER_TEMP/build.log"; then
+              echo "::warning::Download problem on attempt $attempt; retrying after a pause"; sleep $((attempt * 60))
+            else
+              exit 1
+            fi
+          done
+          exit 1
       - name: Report
         if: success()
         run: |
