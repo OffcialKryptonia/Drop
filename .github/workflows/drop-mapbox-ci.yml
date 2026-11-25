@@ -69,7 +69,16 @@ jobs:
           df -h / | tail -1
       - name: Android debug APK build
         if: ${{ env.GOOGLE_SERVICES_JSON != '' }}
-        run: flutter build apk --debug --target-platform android-arm64  # one ABI keeps the runner within disk limits now that calling adds large native libraries
+        # One ABI keeps the runner within disk limits now that calling adds large native libraries.
+        # Maven Central sometimes answers "429 Too Many Requests" while Gradle downloads plugins; that is a network
+        # hiccup, not a code error, so try up to 3 times with a pause before failing.
+        run: |
+          for attempt in 1 2 3; do
+            if flutter build apk --debug --target-platform android-arm64; then exit 0; fi
+            echo "::warning::Android build attempt $attempt failed; retrying after a pause"
+            sleep $((attempt * 45))
+          done
+          exit 1
       - name: Disk and memory after the Android build
         if: ${{ always() && env.GOOGLE_SERVICES_JSON != '' }}
         run: df -h / | tail -1; free -m | head -2

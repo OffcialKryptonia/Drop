@@ -55,7 +55,13 @@ jobs:
           keytool -genkeypair -keystore "$RUNNER_TEMP/size.jks" -storepass sizepass -keypass sizepass -alias size -keyalg RSA -keysize 2048 -validity 2 -dname "CN=size" >/dev/null 2>&1
           printf 'storeFile=%s\nstorePassword=sizepass\nkeyPassword=sizepass\nkeyAlias=size\n' "$RUNNER_TEMP/size.jks" > android/key.properties
       - name: Release build (arm64) with size analysis
-        run: flutter build apk --release --target-platform android-arm64 --analyze-size
+        run: |
+          for attempt in 1 2 3; do
+            if flutter build apk --release --target-platform android-arm64 --analyze-size; then exit 0; fi
+            echo "::warning::Release build attempt $attempt failed; retrying after a pause"
+            sleep $((attempt * 45))
+          done
+          exit 1
       - name: Report
         run: |
           APK=build/app/outputs/flutter-apk/app-release.apk
