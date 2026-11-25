@@ -31,5 +31,3 @@
 -dontwarn androidx.window.sidecar.**
 # R8 stops with "EnclosingMethod requires InnerClasses attribute" unless both are kept
 -keepattributes InnerClasses,EnclosingMethod,Signature,*Annotation*
-# TEMPORARY diagnostic: writes the merged R8 configuration so the failing rule can be found
--printconfiguration r8-merged-config.txt
