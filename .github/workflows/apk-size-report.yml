@@ -55,14 +55,9 @@ jobs:
           keytool -genkeypair -keystore "$RUNNER_TEMP/size.jks" -storepass sizepass -keypass sizepass -alias size -keyalg RSA -keysize 2048 -validity 2 -dname "CN=size" >/dev/null 2>&1
           printf 'storeFile=%s\nstorePassword=sizepass\nkeyPassword=sizepass\nkeyAlias=size\n' "$RUNNER_TEMP/size.jks" > android/key.properties
       - name: Release build (arm64) with size analysis
-        run: |
-          for attempt in 1 2 3; do
-            if flutter build apk --release --target-platform android-arm64 --analyze-size; then exit 0; fi
-            echo "::warning::Release build attempt $attempt failed; retrying after a pause"
-            sleep $((attempt * 45))
-          done
-          exit 1
+        run: flutter build apk --release --target-platform android-arm64 --analyze-size
       - name: Report
+        if: success()
         run: |
           APK=build/app/outputs/flutter-apk/app-release.apk
           {
@@ -86,9 +81,11 @@ jobs:
             echo '```'
           } | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: size-analysis
           path: |
-            ${{ env.HOME }}/.flutter-devtools/*code-size-analysis*.json
-            apps/drop/build/app/outputs/flutter-apk/app-release.apk.sha1
+            apps/drop/android/app/r8-merged-config.txt
+            apps/drop/build/app/outputs/mapping/release/*.txt
+            ~/.flutter-devtools/*code-size-analysis*.json
           if-no-files-found: ignore
