@@ -67,13 +67,9 @@ dependencies:
   internet_file: ^1.2.0
   #FIREBASE
   firebase_core: ^4.1.1
-  firebase_analytics: ^12.0.2
   firebase_crashlytics: ^5.0.2
   cloud_firestore: ^6.0.2
-  firebase_storage: ^13.0.2
-  firebase_messaging: ^16.0.2
   firebase_auth: ^6.1.0
-  firebase_database: ^12.0.2
   paginate_firestore:
     git:
       url: https://github.com/Gosplex/paginate_firestore.git
@@ -90,7 +86,6 @@ dependencies:
   sign_in_with_apple: ^7.0.1
   crypto: any
   # DOWNLOAD INVOICE PDF
-  pdf: ^3.11.1
   pdfx: 2.6.0
   path_provider: ^2.1.4
   open_file: ^3.5.3
@@ -99,7 +94,6 @@ dependencies:
   mighty_core: ^10.0.1
   # DRIVER MODE (merged from the former driver app)
   audioplayers:
-  bottom_picker: ^2.8.0
   date_time_picker: ^2.1.0
   file_picker: ^8.0.6
   flutter_background_service: ^5.1.0
@@ -108,13 +102,8 @@ dependencies:
   flutter_polyline_points:
     git:
       url: https://github.com/appmeetmighty/flutter_polyline_points.git
-  flutter_ringtone_player: ^4.0.0+3
   flutter_widget_from_html: ^0.15.2
-  location: ^7.0.0
   map_launcher: ^3.5.0
-  rebuild_detector: ^1.0.2
-  rxdart: ^0.28.0
-  sliding_up_panel: ^2.0.0+1
   syncfusion_flutter_charts: ^26.2.11
 
   flutter_localizations:

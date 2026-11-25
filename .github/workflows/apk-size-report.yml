@@ -1,0 +1,88 @@
+name: APK size report
+
+# Manual only: Actions tab > "APK size report" > Run workflow (choose a branch).
+# Builds a RELEASE APK for one phone architecture (the kind people actually install) and reports where the bytes go.
+# Debug APKs are several times bigger and are not a fair measure. The signing key made here is thrown away.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  size:
+    name: Release APK size
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/drop
+    env:
+      GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+      GOOGLE_MAPS_ANDROID_KEY: ${{ secrets.GOOGLE_MAPS_ANDROID_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stop if the Firebase secret is missing
+        run: |
+          if [ -z "$GOOGLE_SERVICES_JSON" ]; then echo "::error::GOOGLE_SERVICES_JSON is not configured, so an Android build is not possible."; exit 1; fi
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.x
+          cache: true
+      - run: flutter pub get
+      - name: Free runner disk space
+        working-directory: .
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /opt/hostedtoolcache/CodeQL "$AGENT_TOOLSDIRECTORY/CodeQL" 2>/dev/null || true
+          df -h / | tail -1
+      - name: Install NDK
+        run: |
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER="$(command -v sdkmanager || find "$SDK_ROOT" -type f -name sdkmanager -path '*cmdline-tools*' 2>/dev/null | head -n 1)"
+          yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses > /dev/null || true
+          "$SDKMANAGER" --sdk_root="$SDK_ROOT" "ndk;29.0.13113456"
+      - name: Configure Firebase, maps key and a throwaway signing key
+        run: |
+          printf '%s' "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
+          if [ -n "$GOOGLE_MAPS_ANDROID_KEY" ]; then
+            sed -i "s|ADD_YOUR_GOOGLE_MAP_KEY_ANDROID_HERE|$GOOGLE_MAPS_ANDROID_KEY|" android/app/src/main/AndroidManifest.xml
+          fi
+          keytool -genkeypair -keystore "$RUNNER_TEMP/size.jks" -storepass sizepass -keypass sizepass -alias size -keyalg RSA -keysize 2048 -validity 2 -dname "CN=size" >/dev/null 2>&1
+          printf 'storeFile=%s\nstorePassword=sizepass\nkeyPassword=sizepass\nkeyAlias=size\n' "$RUNNER_TEMP/size.jks" > android/key.properties
+      - name: Release build (arm64) with size analysis
+        run: flutter build apk --release --target-platform android-arm64 --analyze-size
+      - name: Report
+        run: |
+          APK=build/app/outputs/flutter-apk/app-release.apk
+          {
+            echo "## Release APK (arm64)"
+            echo
+            echo "Total: **$(du -h $APK | cut -f1)** ($(stat -c%s $APK) bytes)"
+            echo
+            echo "### Biggest files inside the APK (compressed size)"
+            echo '```'
+            unzip -lv $APK | awk 'NR>3 && $1 ~ /^[0-9]+$/ {printf "%10d  %s\n", $3, $8}' | sort -rn | head -30
+            echo '```'
+            echo
+            echo "### Native libraries"
+            echo '```'
+            unzip -lv $APK | awk '$8 ~ /^lib\// {printf "%10d  %s\n", $3, $8}' | sort -rn | head -30
+            echo '```'
+            echo
+            echo "### By top-level folder"
+            echo '```'
+            unzip -lv $APK | awk 'NR>3 && $1 ~ /^[0-9]+$/ {split($8,a,"/"); t[a[1]]+=$3} END {for (k in t) printf "%10d  %s\n", t[k], k}' | sort -rn
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: size-analysis
+          path: |
+            ${{ env.HOME }}/.flutter-devtools/*code-size-analysis*.json
+            apps/drop/build/app/outputs/flutter-apk/app-release.apk.sha1
+          if-no-files-found: ignore

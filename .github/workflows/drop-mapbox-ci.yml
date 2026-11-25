@@ -2,7 +2,7 @@ name: Drop Mapbox integration checks
 
 on:
   push:
-    branches: [feat/flutter-multi-stop-routes, feat/ride-chat, feat/ride-calls, feat/optional-fare-bidding, feat/instant-offline-first, feat/theme-light-dark-compass, feat/airport-infrastructure, feat/airport-booking-driver, feat/push-templates]
+    branches: [feat/flutter-multi-stop-routes, feat/ride-chat, feat/ride-calls, feat/optional-fare-bidding, feat/instant-offline-first, feat/theme-light-dark-compass, feat/airport-infrastructure, feat/airport-booking-driver, feat/push-templates, chore/apk-size-and-legacy-driver]
   pull_request:
     branches: [main]
     paths:
@@ -60,9 +60,19 @@ jobs:
           if [ -n "$GOOGLE_MAPS_ANDROID_KEY" ]; then
             sed -i "s|ADD_YOUR_GOOGLE_MAP_KEY_ANDROID_HERE|$GOOGLE_MAPS_ANDROID_KEY|" android/app/src/main/AndroidManifest.xml
           fi
+      - name: Free runner disk space before the Android build
+        if: ${{ env.GOOGLE_SERVICES_JSON != '' }}
+        working-directory: .
+        run: |
+          df -h / | tail -1
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /opt/hostedtoolcache/CodeQL "$AGENT_TOOLSDIRECTORY/CodeQL" 2>/dev/null || true
+          df -h / | tail -1
       - name: Android debug APK build
         if: ${{ env.GOOGLE_SERVICES_JSON != '' }}
         run: flutter build apk --debug --target-platform android-arm64  # one ABI keeps the runner within disk limits now that calling adds large native libraries
+      - name: Disk and memory after the Android build
+        if: ${{ always() && env.GOOGLE_SERVICES_JSON != '' }}
+        run: df -h / | tail -1; free -m | head -2
       - name: Android build skipped (Firebase secret not configured)
         if: ${{ env.GOOGLE_SERVICES_JSON == '' }}
         run: echo "GOOGLE_SERVICES_JSON is not configured; Flutter analysis and tests ran, but Android APK build was skipped."
