@@ -26,3 +26,6 @@
 -keep class org.webrtc.** { *; }
 -keep class io.livekit.** { *; }
 -dontwarn org.webrtc.**
+# androidx.window looks for optional vendor classes (foldables) that only exist on some phones; R8 must not fail on them
+-dontwarn androidx.window.extensions.**
+-dontwarn androidx.window.sidecar.**
