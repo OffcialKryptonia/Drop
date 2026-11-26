@@ -2,7 +2,7 @@ name: Backend ride-flow integration
 
 on:
   push:
-    branches: [feat/flutter-multi-stop-routes, feat/ride-chat, feat/ride-calls, feat/optional-fare-bidding, feat/airport-infrastructure, feat/airport-booking-driver, feat/push-templates]
+    branches: [feat/flutter-multi-stop-routes, feat/ride-chat, feat/ride-calls, feat/optional-fare-bidding, feat/airport-infrastructure, feat/airport-booking-driver, feat/push-templates, feat/email-templates]
   pull_request:
     branches: [main]
     paths:
@@ -118,6 +118,10 @@ jobs:
       - name: Run push template integration test
         working-directory: worker
         run: node test/push-templates-smoke.mjs
+
+      - name: Run email template integration test
+        working-directory: worker
+        run: node test/email-templates-smoke.mjs
 
       - name: Worker logs on failure
         if: failure()

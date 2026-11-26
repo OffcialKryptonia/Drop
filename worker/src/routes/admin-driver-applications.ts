@@ -7,6 +7,7 @@ import { EDITABLE, documentsFor } from "../lib/driver-application";
 import { serveFile } from "./driver-application";
 import { pushLater } from "../lib/push";
 import { notify } from "../lib/push-delivery";
+import { notifyEmail } from "../lib/email-delivery";
 
 export const adminDriverApplicationRoutes = new Hono<AppEnv>();
 type C = Context<AppEnv>;
@@ -196,6 +197,11 @@ adminDriverApplicationRoutes.post("/admin/driver-applications/:id/review", ...gu
       approve: "driver.application_approved", reject: "driver.application_rejected", needs_changes: "driver.application_needs_changes",
       suspend: "driver.account_suspended", reinstate: "driver.account_reinstated",
     };
+    const emailFor: Record<string, string> = {
+      approve: "email.driver.application_approved", reject: "email.driver.application_rejected",
+      suspend: "email.driver.suspension", reinstate: "email.driver.account_activated",
+    };
+    if (emailFor[action]) pushLater(c, notifyEmail(db, c.env, { key: emailFor[action], userIds: [id], vars: { note: note ?? "" }, dedupe: null }));
     if (templateFor[action]) pushLater(c, notify(db, c.env, { key: templateFor[action], userIds: [id], vars: { note: note ?? "" }, data: { type: "application" }, dedupe: null }));
     return c.json({ message: "Saved", status: next });
   } catch (e) {

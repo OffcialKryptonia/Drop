@@ -5,7 +5,7 @@ import { hashPassword, verifyPassword } from "../auth/password";
 import { requireAuth } from "../auth/middleware";
 import { UNIQUE_VIOLATION } from "../db";
 import { readBody, validationFailed } from "../lib/legacy";
-import { sendEmail } from "../lib/email";
+import { notifyEmail } from "../lib/email-delivery";
 
 export const passwordResetRoutes = new Hono<AppEnv>();
 
@@ -46,11 +46,9 @@ passwordResetRoutes.post("/forgot-password", withDb, async (c) => {
       await db.query("delete from app.password_reset_tokens where email = $1 and expires_at < now()", [u.email]);
       await db.query("insert into app.password_reset_tokens (email, token_hash) values ($1, $2)", [u.email, await sha256(`${u.email}:${code}`)]);
       const name = (u.first_name ?? "").trim() || "there";
-      const sent = await sendEmail(db, c.env.SETTINGS_ENCRYPTION_KEY, {
-        to: u.email, subject: "Your DROP password reset code",
-        html: `<p>Hi ${name.replace(/[<>&]/g, "")},</p><p>Your DROP password reset code is:</p><p style="font-size:28px;font-weight:800;letter-spacing:4px">${code}</p><p>It is valid for 15 minutes. If you did not ask for this, you can ignore this email; your password has not changed.</p>`,
-      });
-      if (!sent) console.error("password reset email not sent for user", u.id);
+      // The wording comes from the "email.passenger.password_reset" template (Admin > Email templates). The code is never stored in the delivery log.
+      const sent = await notifyEmail(db, c.env, { key: "email.passenger.password_reset", userIds: [u.id], vars: { code, expires_in: "15 minutes", recipient_name: name }, dedupe: null });
+      if (!sent.sent) console.error("password reset email not sent for user", u.id, sent.error ?? "");
     }
   }
   return c.json({ message: GENERIC });
@@ -86,6 +84,8 @@ passwordResetRoutes.post("/reset-password", withDb, async (c) => {
     await db.query("rollback").catch(() => undefined);
     throw e;
   }
+  // Tell the owner their password changed (switched off until an admin enables it; never blocks the reset).
+  try { c.executionCtx.waitUntil(notifyEmail(db, c.env, { key: "email.system.security_notice", userIds: [u.id], vars: { recipient_name: (u.first_name ?? "").trim() || "there" }, dedupe: null })); } catch { /* no execution context */ }
   return c.json({ message: "Password changed. Log in with your new password." });
 });
 
