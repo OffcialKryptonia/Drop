@@ -149,7 +149,7 @@ try {
   // ---- delivery log, inspection, statistics
   const log = await call("GET", "/admin/email-deliveries?limit=100", A);
   ok("the log hides tests by default", log.status === 200 && !log.json.data.some((r) => r.is_test));
-  ok("the log shows tests when asked", (await call("GET", "/admin/email-deliveries?tests=only&limit=100", A)).json.data.some((r) => r.id === dt.id));
+  ok("the log shows tests when asked", (await call("GET", "/admin/email-deliveries?tests=only&limit=100", A)).json.data.some((r) => String(r.id) === String(dt.id)));
   ok("the log filters by result, template and recipient", (await call("GET", "/admin/email-deliveries?status=failed&template_key=email.passenger.password_reset&limit=100", A)).json.data.every((r) => r.status === "failed" && r.template_key === "email.passenger.password_reset")
     && (await call("GET", `/admin/email-deliveries?q=${encodeURIComponent("em" + s)}&tests=include&limit=100`, A)).json.data.length >= 1);
   const det = await call("GET", `/admin/email-deliveries/${d0.id}`, A);
