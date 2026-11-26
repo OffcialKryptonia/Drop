@@ -3,6 +3,7 @@ import type { Bindings } from "../env";
 import { getSetting } from "./driver-application";
 import { deliverPush, pushConfig, type PushMessage } from "./push-core";
 import { notify } from "./push-delivery";
+import { notifyEmail } from "./email-delivery";
 import { money } from "./push-templates";
 
 export { pushConfig };
@@ -82,5 +83,6 @@ export async function pushWalletCredit(db: Client, env: Bindings, userId: number
       key: u?.user_type === "driver" ? "driver.wallet_credited" : "passenger.wallet_credited", userIds: [userId],
       vars: { amount: money(amount, cur), reason: why }, data: { type: "wallet" }, dedupe: null,
     });
+    if (u?.user_type !== "driver") await notifyEmail(db, env, { key: "email.passenger.wallet_update", userIds: [userId], vars: { amount: money(amount, cur), reason: why }, dedupe: null });
   } catch (e) { console.error("push wallet credit", (e as Error).message); }
 }

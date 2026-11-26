@@ -29,6 +29,7 @@ export const MODULES: { key: string; label: string; actions: string[] }[] = [
   { key: "ride_order", label: "Order Ride", actions: ["list", "add", "edit"] },
   { key: "push_settings", label: "Push notifications", actions: ["list", "edit"] },
   { key: "push_template", label: "Push templates and delivery log", actions: ["list", "add", "edit", "delete", "send"] },
+  { key: "email_template", label: "Email templates and delivery log", actions: ["list", "add", "edit", "delete", "send"] },
   { key: "role", label: "Roles", actions: ["list", "add", "edit", "delete"] },
   { key: "subadmin", label: "Sub-admins", actions: ["list", "add", "edit", "delete"] },
 ];

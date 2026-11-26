@@ -13,6 +13,7 @@ import { chatUnread } from "../lib/chat";
 import { driverPickupFlags, issuePickupCode, pickupSettings, startAllowedSql, verifyPickup } from "../lib/pickup";
 import { completeRide } from "../lib/ride-settlement";
 import { pushLater, pushRideEvent } from "../lib/push";
+import { notifyEmail } from "../lib/email-delivery";
 import { notify } from "../lib/push-delivery";
 import { driverBidList, driverPreferences } from "./ride-bids";
 import { AIRPORT_COLS, AIRPORT_JOIN, airportView } from "../lib/airports";
@@ -163,6 +164,7 @@ driverRideRoutes.post("/driver/requests/:id/accept", ...mw, async (c) => {
     await issuePickupCode(db, c.env.SETTINGS_ENCRYPTION_KEY, id);
     await db.query("commit");
     pushLater(c, pushRideEvent(db, c.env, Number(r.rows[0].rider_id), "accepted", id));
+    pushLater(c, notifyEmail(db, c.env, { key: "email.passenger.driver_assigned", userIds: [Number(r.rows[0].rider_id)], rideId: id }));
     // Airport rides: confirm the airport, terminal and pickup to the driver who took the job (switched off until an admin enables it).
     pushLater(c, (async () => {
       const a = (await db.query("select airport_id from app.ride_requests where id = $1", [id])).rows[0];
@@ -277,6 +279,7 @@ driverRideRoutes.post("/driver/rides/:id/complete", ...mw, async (c) => {
     [idOf(c)],
   )).rows;
   pushLater(c, pushRideEvent(c.get("db"), c.env, Number(done.rider_id), "completed", Number(done.id), { fare: done.fare, currency: done.currency }));
+  pushLater(c, notifyEmail(c.get("db"), c.env, { key: "email.passenger.ride_receipt", userIds: [Number(done.rider_id)], rideId: Number(done.id) }));
   return c.json({ status: true, data: { id: Number(done.id), status: done.status, fare: Number(done.fare), commission: Number(done.commission), earning: Math.round((Number(done.fare) - Number(done.commission)) * 100) / 100, paid_with: done.paid_with, collect_cash: done.paid_with === "cash", stops } });
 });
 

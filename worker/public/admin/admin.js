@@ -101,6 +101,7 @@
     { id: "route-stops", label: "Route stops", group: "Operations", perm: "ride_order list", render: pageRouteStops },
     { id: "push", label: "Push notifications", group: "System", perm: "push_settings list", render: pagePush },
     { id: "push-templates", label: "Push templates", group: "System", perm: "push_template list", render: pagePushTemplates },
+    { id: "email-templates", label: "Email templates", group: "System", perm: "email_template list", render: pageEmailTemplates },
     { id: "regions", label: "Regions", group: "Operations", perm: "region list", render: pageRegions },
     { id: "airports", label: "Airports", group: "Operations", perm: "airport list", render: pageAirports },
     { id: "ride-options", label: "Ride options", group: "Operations", perm: "service_option list", render: pageOptions },
@@ -795,6 +796,295 @@
       });
       root.appendChild(byT);
       var rs = h("div", { class: "card" }, h("div", { class: "t", text: "Why notifications failed or were skipped" }));
+      if (!(s.reasons || []).length) rs.appendChild(h("div", { class: "empty", text: "None." }));
+      (s.reasons || []).forEach(function (x) { rs.appendChild(h("div", { class: "item" }, h("div", { class: "main" }, h("div", { class: "s", text: x.reason })), h("span", { class: "pill warn", text: String(x.n) }))); });
+      root.appendChild(rs);
+      var dd = h("div", { class: "card" }, h("div", { class: "t", text: "By day" }));
+      (s.by_day || []).forEach(function (x) { dd.appendChild(h("div", { class: "item" }, h("div", { class: "main" }, h("div", { class: "s", text: x.day + " · " + x.sent + " sent · " + x.failed + " failed · " + x.skipped + " skipped" })))); });
+      root.appendChild(dd);
+    });
+  }
+
+  // ---------- Email templates: the wording and look of every email, edited here, with branding and a delivery log ----------
+  var ET = { q: "", category: "", audience: "", status: "", page: 1, meta: null };
+
+  function etMeta() {
+    if (ET.meta) return Promise.resolve(ET.meta);
+    return api("GET", "/admin/email-templates/meta").then(function (r) { ET.meta = r.body || { variables: [], categories: [], audiences: [], brand: {} }; return ET.meta; });
+  }
+  function etLabel(id) { var c = ((ET.meta && ET.meta.categories) || []).filter(function (x) { return x.id === id; })[0]; return c ? c.label : id; }
+  function etWho(a) { return a === "passenger" ? "Passengers" : a === "driver" ? "Drivers" : "Everyone (system)"; }
+  function etTabs(root, active) {
+    var tabs = [["list", "Templates", pageEmailTemplates], ["brand", "Branding", emailBranding], ["log", "Delivery log", emailDeliveryLog], ["stats", "Statistics", emailDeliveryStats]];
+    var row = h("div", { class: "acts", style: "margin-bottom:12px" });
+    tabs.forEach(function (t) { row.appendChild(h("button", { class: "small" + (t[0] === active ? "" : " ghost"), text: t[1], on: { click: function () { t[2](root); } } })); });
+    return row;
+  }
+
+  function pageEmailTemplates(root) {
+    loading(root);
+    etMeta().then(function () {
+      var qs = "?page=" + ET.page + (ET.q ? "&q=" + encodeURIComponent(ET.q) : "") + (ET.category ? "&category=" + ET.category : "") + (ET.audience ? "&audience=" + ET.audience : "") + (ET.status ? "&status=" + ET.status : "");
+      return api("GET", "/admin/email-templates" + qs);
+    }).then(function (r) {
+      var list = (r.body && r.body.data) || [], total = (r.body && r.body.total) || 0, per = (r.body && r.body.per_page) || 50;
+      root.textContent = "";
+      root.appendChild(head("Email templates", "The wording and look of every email DROP sends. Changes apply to the next email. Switching a template off stops that email completely.",
+        can("email_template add") ? h("button", { text: "New template", on: { click: function () { emailTemplateForm(root, null); } } }) : null));
+      root.appendChild(etTabs(root, "list"));
+      var f = {
+        q: text(ET.q, "Search key, name, subject or wording"),
+        cat: select([["", "All categories"]].concat(ET.meta.categories.map(function (c) { return [c.id, c.label]; })), ET.category),
+        aud: select([["", "Everyone"], ["passenger", "Passengers"], ["driver", "Drivers"], ["system", "System"]], ET.audience),
+        st: select([["", "Active and off"], ["active", "Active"], ["inactive", "Switched off"], ["archived", "Archived"], ["all", "All"]], ET.status)
+      };
+      var go = function () { ET.q = f.q.value.trim(); ET.category = f.cat.value; ET.audience = f.aud.value; ET.status = f.st.value; ET.page = 1; pageEmailTemplates(root); };
+      f.q.addEventListener("keydown", function (e) { if (e.key === "Enter") go(); });
+      [f.cat, f.aud, f.st].forEach(function (el) { el.addEventListener("change", go); });
+      root.appendChild(h("div", { class: "card" }, f.q, h("div", { class: "grid2", style: "margin-top:8px" }, f.cat, f.aud), h("div", { style: "margin-top:8px" }, f.st),
+        h("button", { class: "small", text: "Search", style: "margin-top:8px", on: { click: go } })));
+      var card = h("div", { class: "card" });
+      if (!list.length) card.appendChild(h("div", { class: "empty", text: "No templates match." }));
+      list.forEach(function (t) {
+        var acts = h("div", { class: "acts" });
+        if (can("email_template edit")) {
+          acts.appendChild(h("button", { class: "ghost small", text: "Edit", on: { click: function () { emailTemplateForm(root, t.id); } } }));
+          if (t.status !== "archived" && !t.locked) acts.appendChild(h("button", { class: "ghost small", text: t.status === "active" ? "Switch off" : "Switch on", on: { click: function () {
+            api("POST", "/admin/email-templates/" + t.id + "/status", { status: t.status === "active" ? "inactive" : "active" }).then(function (x) { toast(x.ok ? (x.body && x.body.message) || "Saved" : errText(x), !x.ok); if (x.ok) pageEmailTemplates(root); });
+          } } }));
+          if (!t.locked) acts.appendChild(h("button", { class: "ghost small", text: t.status === "archived" ? "Restore" : "Archive", on: { click: function () {
+            api("POST", "/admin/email-templates/" + t.id + "/status", { status: t.status === "archived" ? "inactive" : "archived" }).then(function (x) { toast(x.ok ? (x.body && x.body.message) || "Saved" : errText(x), !x.ok); if (x.ok) pageEmailTemplates(root); });
+          } } }));
+        }
+        if (can("email_template add")) acts.appendChild(h("button", { class: "ghost small", text: "Duplicate", on: { click: function () {
+          api("POST", "/admin/email-templates/" + t.id + "/duplicate").then(function (x) { toast(x.ok ? (x.body && x.body.message) || "Duplicated" : errText(x), !x.ok); if (x.ok) pageEmailTemplates(root); });
+        } } }));
+        if (can("email_template delete") && !t.is_system) acts.appendChild(h("button", { class: "danger small", text: "Delete", on: { click: function () {
+          confirmDo("Delete template " + t.name + "? Its delivery history is kept.", function () { api("DELETE", "/admin/email-templates/" + t.id).then(function (x) { toast(x.ok ? "Deleted" : errText(x), !x.ok); if (x.ok) pageEmailTemplates(root); }); });
+        } } }));
+        card.appendChild(h("div", { class: "item" },
+          h("div", { class: "main" },
+            h("div", { class: "t", text: t.name }),
+            h("div", { class: "s", text: t.key + " · " + etLabel(t.category) + " · " + etWho(t.audience) + (t.is_system ? " · Built in" : " · Custom") + " · v" + t.version }),
+            h("div", { class: "s", text: "Subject: " + t.subject }),
+            t.connected ? null : h("div", { class: "hint", text: t.connection_note || "Nothing sends this yet." }),
+            t.locked ? h("div", { class: "hint", text: t.connection_note }) : null,
+            h("div", { style: "margin-top:8px" }, acts)),
+          h("div", {}, h("span", { class: "pill " + (t.status === "active" ? "on" : t.status === "archived" ? "warn" : ""), text: t.status === "active" ? "On" : t.status === "archived" ? "Archived" : "Off" }))));
+      });
+      root.appendChild(card);
+      if (total > per) {
+        var pg = h("div", { class: "acts" });
+        if (ET.page > 1) pg.appendChild(h("button", { class: "ghost small", text: "Previous", on: { click: function () { ET.page--; pageEmailTemplates(root); } } }));
+        pg.appendChild(h("span", { class: "muted", text: "Page " + ET.page + " of " + Math.ceil(total / per) }));
+        if (ET.page * per < total) pg.appendChild(h("button", { class: "ghost small", text: "Next", on: { click: function () { ET.page++; pageEmailTemplates(root); } } }));
+        root.appendChild(pg);
+      }
+    });
+  }
+
+  function emailTemplateForm(root, id) {
+    loading(root);
+    Promise.all([etMeta(), id ? api("GET", "/admin/email-templates/" + id) : Promise.resolve(null)]).then(function (res) {
+      var meta = res[0], got = res[1], t = (got && got.body && got.body.data) || {}, versions = (got && got.body && got.body.versions) || [];
+      if (id && !t.id) { root.textContent = ""; root.appendChild(h("div", { class: "empty", text: "Template not found." })); return; }
+      root.textContent = "";
+      root.appendChild(head(id ? "Edit email template" : "New email template", id ? t.key : "Write the subject and body, add placeholders, and check the preview. A new template starts switched off."));
+      var card = h("div", { class: "card" });
+      var f = {
+        name: text(t.name), key: text(t.key, "e.g. email.passenger.promo_weekend"),
+        cat: select(meta.categories.map(function (c) { return [c.id, c.label]; }), t.category || "ride"),
+        aud: select([["passenger", "Passengers"], ["driver", "Drivers"], ["system", "System"]], t.audience || "passenger"),
+        subject: text(t.subject), pre: text(t.preheader, "Preview line shown after the subject (optional)"),
+        html: h("textarea", { rows: 14, style: "font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px" }), txt: h("textarea", { rows: 8 })
+      };
+      f.html.value = t.html_body || "<h1 style=\"margin:0 0 16px;font-size:22px\">Hello {{recipient_name}}</h1>\n<p style=\"margin:0 0 14px\">Write your message here.</p>";
+      f.txt.value = t.text_body || "Hello {{recipient_name}}\n\nWrite your message here.";
+      var locked = !!t.is_system;
+      if (id) f.key.disabled = true;
+      if (locked) { f.cat.disabled = true; f.aud.disabled = true; }
+      var out = h("p", { class: "msg" });
+      card.appendChild(field("Name", f.name));
+      card.appendChild(field("Key", f.key, id ? "The key cannot change. It is how DROP finds this template." : "Lowercase words joined by dots. Must be unique."));
+      card.appendChild(h("div", { class: "grid2" }, field("Category", f.cat), field("Who receives it", f.aud)));
+      if (t.connection_note) card.appendChild(h("div", { class: "hint", text: t.connection_note }));
+      card.appendChild(field("Subject", f.subject, "One line of plain text, up to 150 characters. It shows on lock screens, so it cannot contain a code or secure link."));
+      card.appendChild(field("Preview line", f.pre, "The grey text many inboxes show after the subject. Optional."));
+      card.appendChild(field("Email body (HTML)", f.html, "Only the message itself: DROP adds the logo, colours, footer and mobile layout. Allowed: " + meta.allowed_html));
+      card.appendChild(field("Plain-text version", f.txt, "Shown by email apps that do not show HTML, and used by spam filters. Keep it in step with the HTML."));
+      var chips = h("div", { class: "checks" });
+      meta.variables.forEach(function (v) {
+        chips.appendChild(h("button", { class: "ghost small", type: "button", title: v.label + (v.sensitive ? " (sensitive)" : "") + (v.link ? " (link)" : ""), text: "{{" + v.name + "}}", on: { click: function () {
+          var el = [f.subject, f.pre, f.html, f.txt].indexOf(document.activeElement) >= 0 ? document.activeElement : f.html; var s = el.selectionStart == null ? el.value.length : el.selectionStart;
+          el.value = el.value.slice(0, s) + "{{" + v.name + "}}" + el.value.slice(el.selectionEnd == null ? s : el.selectionEnd); el.focus(); refresh();
+        } } }));
+      });
+      card.appendChild(h("div", { class: "hint", text: "Tap a placeholder to insert it where the cursor is. Only these are accepted; values are escaped and nothing is ever run. Links can only use {{action_url}}." }));
+      card.appendChild(chips);
+      var modes = h("div", { class: "acts", style: "margin-top:12px" });
+      var mode = "light", showText = false, last = null;
+      var frame = h("iframe", { sandbox: "", title: "Email preview", style: "width:100%;height:520px;border:1px solid var(--line,#ccc);border-radius:10px;background:#fff" });
+      var plain = h("pre", { style: "white-space:pre-wrap;font-size:13px;display:none;margin:0" });
+      var ptn = [["light", "Light"], ["dark", "Dark"], ["text", "Plain text"]], btns = {};
+      ptn.forEach(function (p) { btns[p[0]] = h("button", { class: "small ghost", type: "button", text: p[1], on: { click: function () { if (p[0] === "text") showText = true; else { showText = false; mode = p[0]; } refresh(); } } }); modes.appendChild(btns[p[0]]); });
+      card.appendChild(h("div", { class: "t", text: "Preview with sample values", style: "margin-top:12px" }));
+      card.appendChild(modes);
+      var subj = h("div", { class: "t", style: "margin:8px 0" });
+      card.appendChild(subj); card.appendChild(frame); card.appendChild(plain);
+      var note = h("div", { class: "hint" });
+      card.appendChild(note); card.appendChild(out);
+      var timer = null, n = 0;
+      function refresh() {
+        clearTimeout(timer);
+        timer = setTimeout(function () {
+          var mine = ++n;
+          api("POST", "/admin/email-templates/preview", { subject: f.subject.value, preheader: f.pre.value, html_body: f.html.value, text_body: f.txt.value, scheme: mode }).then(function (r) {
+            if (mine !== n || !r.body) return;
+            last = r.body;
+            subj.textContent = r.body.subject ? "Subject: " + r.body.subject : "";
+            frame.style.display = showText ? "none" : ""; plain.style.display = showText ? "" : "none";
+            if (r.body.html) frame.setAttribute("srcdoc", r.body.html); else frame.setAttribute("srcdoc", "<p style=\"font-family:sans-serif;padding:16px\">Fix the problems below to see the preview.</p>");
+            plain.textContent = r.body.text || "";
+            Object.keys(btns).forEach(function (k) { btns[k].className = "small" + ((showText ? k === "text" : k === mode) ? "" : " ghost"); });
+            note.textContent = (r.body.uses_sensitive ? "This email contains a code or secure link. It is hidden in the delivery log, its body is not kept, and it is never retried. " : "") + (r.body.note || "");
+            var errs = r.body.errors || {}, lines = [];
+            Object.keys(errs).forEach(function (k) { errs[k].forEach(function (m) { lines.push(m); }); });
+            msg(out, lines.join(" "));
+          });
+        }, 400);
+      }
+      [f.subject, f.pre, f.html, f.txt].forEach(function (el) { el.addEventListener("input", refresh); });
+      refresh();
+      var save = h("button", { text: "Save", style: "width:100%;margin-top:14px" });
+      save.addEventListener("click", function () {
+        save.disabled = true; msg(out, "");
+        api(id ? "PUT" : "POST", "/admin/email-templates" + (id ? "/" + id : ""), {
+          key: f.key.value.trim(), name: f.name.value.trim(), category: f.cat.value, audience: f.aud.value, subject: f.subject.value, preheader: ns(f.pre), html_body: f.html.value, text_body: f.txt.value
+        }).then(function (r) { save.disabled = false; if (r.ok) { toast((r.body && r.body.message) || "Saved"); pageEmailTemplates(root); } else msg(out, errText(r)); });
+      });
+      card.appendChild(save);
+      root.appendChild(card);
+      if (id && can("email_template send")) {
+        var em = text("", "Email of a DROP account (yours is fine)");
+        var tout = h("p", { class: "msg" });
+        var send = h("button", { class: "ghost", text: "Send test", style: "width:100%;margin-top:8px" });
+        send.addEventListener("click", function () {
+          send.disabled = true; msg(tout, "");
+          api("POST", "/admin/email-templates/" + id + "/test", { email: em.value.trim() }).then(function (r) { send.disabled = false; msg(tout, r.ok ? (r.body && r.body.message) || "Sent" : errText(r), r.ok); });
+        });
+        root.appendChild(h("div", { class: "card" }, h("div", { class: "t", text: "Send a test" }), h("div", { class: "hint", text: "Sends the saved template with sample values to one DROP account, even if the template is switched off. Save first to test your latest edit. Check it in both light and dark mode on your phone. Limit: 20 an hour." }), em, tout, send));
+      }
+      if (versions.length) {
+        var vl = h("div", { class: "card" }, h("div", { class: "t", text: "History" }));
+        versions.forEach(function (v) {
+          var row = h("div", { class: "item" }, h("div", { class: "main" }, h("div", { class: "t", text: "Version " + v.version + " · " + (v.note || "") }), h("div", { class: "s", text: new Date(v.created_at).toLocaleString() + " · “" + ((v.snapshot && v.snapshot.subject) || "") + "”" })));
+          if (id && can("email_template edit") && v.version !== t.version) row.appendChild(h("button", { class: "ghost small", text: "Restore", on: { click: function () {
+            confirmDo("Put version " + v.version + " back as the current wording? It is saved as a new version.", function () { api("POST", "/admin/email-templates/" + id + "/restore", { version: v.version }).then(function (x) { toast(x.ok ? (x.body && x.body.message) || "Restored" : errText(x), !x.ok); if (x.ok) emailTemplateForm(root, id); }); });
+          } } }));
+          vl.appendChild(row);
+        });
+        root.appendChild(vl);
+      }
+      root.appendChild(h("button", { class: "ghost", text: "Back", style: "width:100%;margin-top:8px", on: { click: function () { pageEmailTemplates(root); } } }));
+    });
+  }
+
+  function emailBranding(root) {
+    loading(root);
+    api("GET", "/admin/email-branding").then(function (r) {
+      var b = (r.body && r.body.data) || {};
+      root.textContent = "";
+      root.appendChild(head("Email branding", "The logo, colour and footer wrapped around every email. Applies to the next email sent."));
+      root.appendChild(etTabs(root, "brand"));
+      var f = { name: text(b.brand_name), logo: text(b.logo_url, "https://… plain https link to a PNG or JPG (optional)"), accent: text(b.accent, "#FF8A00"), foot: text(b.footer_note), sup: text(b.support_email, "support@yourdomain.com"), addr: text(b.address, "Company address (optional)") };
+      var out = h("p", { class: "msg" });
+      var card = h("div", { class: "card" });
+      card.appendChild(field("Brand name", f.name)); card.appendChild(field("Logo link", f.logo, "Use a PNG with a solid or light background so it stays readable when an email app switches to dark mode. Without a logo the brand name is shown."));
+      card.appendChild(field("Button and accent colour", f.accent, "A hex colour like #FF8A00. The button text switches between dark and white so it stays readable.")); card.appendChild(field("Footer note", f.foot));
+      card.appendChild(field("Support email", f.sup, "Shown in the footer and available as {{support_email}}.")); card.appendChild(field("Address", f.addr));
+      var save = h("button", { text: "Save branding", style: "width:100%;margin-top:14px" });
+      save.addEventListener("click", function () {
+        save.disabled = true; msg(out, "");
+        api("PUT", "/admin/email-branding", { brand_name: f.name.value.trim(), logo_url: ns(f.logo), accent: ns(f.accent), footer_note: f.foot.value.trim(), support_email: ns(f.sup), address: f.addr.value.trim() }).then(function (x) {
+          save.disabled = false; if (x.ok) { ET.meta = null; msg(out, (x.body && x.body.message) || "Saved", true); } else msg(out, errText(x));
+        });
+      });
+      if (can("email_template edit")) { card.appendChild(out); card.appendChild(save); } else card.appendChild(h("div", { class: "hint", text: "You can view branding but not change it." }));
+      root.appendChild(card);
+    });
+  }
+
+  var EL = { status: "", key: "", q: "", tests: "", page: 1 };
+  function emailDeliveryLog(root) {
+    loading(root);
+    var qs = "?page=" + EL.page + (EL.status ? "&status=" + EL.status : "") + (EL.key ? "&template_key=" + encodeURIComponent(EL.key) : "") + (EL.q ? "&q=" + encodeURIComponent(EL.q) : "") + (EL.tests ? "&tests=" + EL.tests : "");
+    api("GET", "/admin/email-deliveries" + qs).then(function (r) {
+      var list = (r.body && r.body.data) || [], total = (r.body && r.body.total) || 0, per = (r.body && r.body.per_page) || 50;
+      root.textContent = "";
+      root.appendChild(head("Email delivery log", "Every email, one line per person. Sent means the email provider accepted it, not that it reached the inbox. Tap an email to inspect it."));
+      root.appendChild(etTabs(root, "log"));
+      var f = { st: select([["", "Any result"], ["sent", "Sent"], ["failed", "Failed"], ["skipped", "Skipped"], ["queued", "Waiting"]], EL.status), key: text(EL.key, "Template key"), q: text(EL.q, "Recipient email"), t: select([["", "Without tests"], ["include", "With tests"], ["only", "Tests only"]], EL.tests) };
+      var go = function () { EL.status = f.st.value; EL.key = f.key.value.trim(); EL.q = f.q.value.trim(); EL.tests = f.t.value; EL.page = 1; emailDeliveryLog(root); };
+      root.appendChild(h("div", { class: "card" }, h("div", { class: "grid2" }, f.st, f.t), h("div", { class: "grid2", style: "margin-top:8px" }, f.key, f.q), h("button", { class: "small", text: "Filter", style: "margin-top:8px", on: { click: go } })));
+      var card = h("div", { class: "card" });
+      if (!list.length) card.appendChild(h("div", { class: "empty", text: "Nothing logged yet." }));
+      list.forEach(function (d) {
+        card.appendChild(h("div", { class: "item", style: "cursor:pointer", on: { click: function () { emailDeliveryDetail(root, d.id); } } },
+          h("div", { class: "main" },
+            h("div", { class: "t", text: d.subject }),
+            h("div", { class: "s", text: new Date(d.created_at).toLocaleString() + " · " + d.template_key + " · " + d.to_email + (d.ride_id ? " · ride " + d.ride_id : "") + (d.is_test ? " · test" : "") }),
+            d.reason ? h("div", { class: "hint", text: d.reason + (d.status === "failed" ? (d.retryable ? " · will retry (attempt " + d.attempts + " of 3)" : " · not retried") : "") }) : null),
+          h("span", { class: "pill " + (d.status === "sent" ? "on" : d.status === "failed" ? "warn" : ""), text: d.status === "queued" ? "Waiting" : d.status.charAt(0).toUpperCase() + d.status.slice(1) })));
+      });
+      root.appendChild(card);
+      var pg = h("div", { class: "acts" });
+      if (EL.page > 1) pg.appendChild(h("button", { class: "ghost small", text: "Newer", on: { click: function () { EL.page--; emailDeliveryLog(root); } } }));
+      if (EL.page * per < total) pg.appendChild(h("button", { class: "ghost small", text: "Older", on: { click: function () { EL.page++; emailDeliveryLog(root); } } }));
+      root.appendChild(pg);
+    });
+  }
+
+  function emailDeliveryDetail(root, id) {
+    loading(root);
+    api("GET", "/admin/email-deliveries/" + id).then(function (r) {
+      var d = r.body && r.body.data;
+      root.textContent = "";
+      if (!d) { root.appendChild(h("div", { class: "empty", text: "Not found." })); return; }
+      root.appendChild(head("Email " + d.id, d.template_key));
+      var card = h("div", { class: "card" });
+      var line = function (k, v) { if (v !== null && v !== undefined && v !== "") card.appendChild(h("div", { class: "s", text: k + ": " + v })); };
+      line("Result", d.status); line("To", d.to_email); line("Subject", d.subject); line("Created", new Date(d.created_at).toLocaleString());
+      line("Sent", d.sent_at ? new Date(d.sent_at).toLocaleString() : ""); line("Attempts", d.attempts); line("Provider answered with status", d.provider_status);
+      line("Provider message id", d.provider_id); line("Ride", d.ride_id); line("Test send", d.is_test ? "yes" : ""); line("Next retry", d.next_retry_at ? new Date(d.next_retry_at).toLocaleString() : "");
+      if (d.reason) card.appendChild(h("div", { class: "hint", text: "Reason: " + d.reason }));
+      if (r.body.explanation) card.appendChild(h("div", { class: "hint", text: r.body.explanation }));
+      if (r.body.body_note) card.appendChild(h("div", { class: "hint", text: r.body.body_note }));
+      root.appendChild(card);
+      if (d.html_body) root.appendChild(h("div", { class: "card" }, h("div", { class: "t", text: "What was sent" }), h("iframe", { sandbox: "", title: "Sent email", srcdoc: d.html_body, style: "width:100%;height:460px;border:1px solid var(--line,#ccc);border-radius:10px;background:#fff;margin-top:8px" })));
+      root.appendChild(h("button", { class: "ghost", text: "Back", style: "width:100%;margin-top:8px", on: { click: function () { emailDeliveryLog(root); } } }));
+    });
+  }
+
+  var ES = { days: "7" };
+  function emailDeliveryStats(root) {
+    loading(root);
+    api("GET", "/admin/email-deliveries/stats?days=" + ES.days).then(function (r) {
+      var s = (r.body) || {}, t = s.totals || {};
+      root.textContent = "";
+      root.appendChild(head("Email statistics", s.note || ""));
+      root.appendChild(etTabs(root, "stats"));
+      var days = select([["1", "Last day"], ["7", "Last 7 days"], ["30", "Last 30 days"], ["90", "Last 90 days"]], ES.days);
+      days.addEventListener("change", function () { ES.days = days.value; emailDeliveryStats(root); });
+      root.appendChild(h("div", { class: "card" }, days,
+        h("div", { class: "grid2", style: "margin-top:10px" }, h("div", {}, h("div", { class: "t", text: String(t.sent || 0) }), h("div", { class: "muted", text: "Sent" })), h("div", {}, h("div", { class: "t", text: String(t.failed || 0) }), h("div", { class: "muted", text: "Failed" }))),
+        h("div", { class: "grid2", style: "margin-top:10px" }, h("div", {}, h("div", { class: "t", text: String(t.skipped || 0) }), h("div", { class: "muted", text: "Skipped (no address, switched off, or repeat)" })), h("div", {}, h("div", { class: "t", text: String(t.queued || 0) }), h("div", { class: "muted", text: "Waiting" })))));
+      var byT = h("div", { class: "card" }, h("div", { class: "t", text: "By template" }));
+      if (!(s.by_template || []).length) byT.appendChild(h("div", { class: "empty", text: "No emails in this period." }));
+      (s.by_template || []).forEach(function (x) {
+        byT.appendChild(h("div", { class: "item" }, h("div", { class: "main" }, h("div", { class: "t", text: x.template_key }), h("div", { class: "s", text: x.sent + " sent · " + x.failed + " failed · " + x.skipped + " skipped" })), h("span", { class: "pill", text: String(x.total) })));
+      });
+      root.appendChild(byT);
+      var rs = h("div", { class: "card" }, h("div", { class: "t", text: "Why emails failed or were skipped" }));
       if (!(s.reasons || []).length) rs.appendChild(h("div", { class: "empty", text: "None." }));
       (s.reasons || []).forEach(function (x) { rs.appendChild(h("div", { class: "item" }, h("div", { class: "main" }, h("div", { class: "s", text: x.reason })), h("span", { class: "pill warn", text: String(x.n) }))); });
       root.appendChild(rs);
