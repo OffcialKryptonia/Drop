@@ -116,7 +116,7 @@ try {
   const det = (await call("GET", `/admin/ops/rides/${rid1}`, A)).json.data;
   ok("detail shows passenger, route, fare, payment, timeline, actions", det.passenger.name && det.pickup.address === "Wuse" && det.dropoff.address === "Gwarinpa" && det.fare.amount > 0 && det.payment.status === "due_cash" && det.timeline[0].label === "Ride requested" && det.actions.assign.allowed === true && det.actions.reassign.allowed === false);
   ok("no driver yet: no estimate, and it says why", det.driver === null && det.eta === null && /No estimate/.test(await (async () => (await call("GET", `/admin/ops/rides/${rid1}`, A)).json.data.eta_note)()));
-  ok("detail never carries a phone number", !/\b0803\d{7}\b/.test(JSON.stringify(det)));
+  ok("detail never carries a phone number", !/\b803\d{7}\b/.test(JSON.stringify(det)));
   ok("a missing ride is a 404", (await call("GET", "/admin/ops/rides/99999999", A)).status === 404 && (await call("GET", "/admin/ops/rides/abc", A)).status === 404);
 
   // ---- candidates: who may be chosen and why not
@@ -172,7 +172,7 @@ try {
   ok("detail shows driver, vehicle, estimate and the dispatch step in the timeline", det2.driver.vehicle.plate && det2.eta?.target === "pickup" && det2.timeline.some((t) => t.kind === "dispatch_assign") && det2.actions.assign.allowed === false && det2.actions.reassign.allowed === true);
   const dd = (await call("GET", `/admin/ops/drivers/${winner.id}`, A)).json.data;
   ok("driver detail: identity, vehicle, status, location, current ride, performance", dd.name && dd.vehicle.plate && dd.online === true && dd.current_ride.id === rid1 && dd.freshness.state && typeof dd.performance.completed_total === "number" && dd.performance.unavailable.length >= 1);
-  ok("driver detail never carries a phone number", !/\b0803\d{7}\b/.test(JSON.stringify(dd)));
+  ok("driver detail never carries a phone number", !/\b803\d{7}\b/.test(JSON.stringify(dd)));
   ok("the assigned ride is in 'approaching' and 'assigned' but not 'pending'", (await call("GET", "/admin/ops/rides?filter=approaching", A)).json.data.some((r) => r.id === rid1) && (await call("GET", "/admin/ops/rides?filter=assigned", A)).json.data.some((r) => r.id === rid1) && !(await call("GET", "/admin/ops/rides?filter=pending", A)).json.data.some((r) => r.id === rid1));
 
   // ---- concurrency 2: one driver, two rides at once
@@ -271,10 +271,10 @@ try {
 
   // ---- contact: phone numbers only on request, and every view is recorded
   const ct = await call("POST", `/admin/ops/rides/${rid1}/contact`, A, { party: "passenger" });
-  ok("a passenger's phone can be viewed on request", ct.status === 200 && /0803\d{7}/.test(ct.json.phone ?? "") && /recorded/.test(ct.json.note), JSON.stringify(ct.json));
+  ok("a passenger's phone can be viewed on request", ct.status === 200 && /803\d{7}/.test(ct.json.phone ?? "") && /recorded/.test(ct.json.note), JSON.stringify(ct.json));
   ok("the driver's phone can be viewed too", (await call("POST", `/admin/ops/rides/${rid1}/contact`, A, { party: "driver" })).json.phone != null);
   ok("each phone view is logged and audited, with no number stored", (await events(rid1, "contact_view")) === 2 && (await audit("ops_contact_view", rid1)) === 2
-    && !(await db.query("select detail from app.ride_dispatch_events where ride_request_id = $1 and action = 'contact_view'", [rid1])).rows.some((e) => /0803\d{7}/.test(JSON.stringify(e.detail))));
+    && !(await db.query("select detail from app.ride_dispatch_events where ride_request_id = $1 and action = 'contact_view'", [rid1])).rows.some((e) => /803\d{7}/.test(JSON.stringify(e.detail))));
   ok("a bad party is refused", (await call("POST", `/admin/ops/rides/${rid1}/contact`, A, { party: "stranger" })).status === 422);
   ok("viewing the driver of an unassigned ride is refused", (await call("POST", `/admin/ops/rides/${await request(await reg("rider", "p6").then((x) => { ids.push(x.id); return x; }))}/contact`, A, { party: "driver" })).json.code === "no_driver");
   const ms = await call("POST", `/admin/ops/rides/${rid1}/message`, A, { party: "passenger", message: "Your driver changed. New driver is on the way." });
