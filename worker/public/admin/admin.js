@@ -93,6 +93,10 @@
 
   // ---------- shell ----------
   var PAGES = [
+    { id: "ops-dashboard", label: "Command center", group: "Live operations", perm: "ops_dashboard list", render: pageOpsDashboard },
+    { id: "ops-fleet", label: "Fleet map", group: "Live operations", perm: "fleet list", render: pageOpsFleet },
+    { id: "ops-rides", label: "Live rides", group: "Live operations", perm: "ops_ride list", render: pageOpsRides },
+    { id: "ops-dispatch", label: "Dispatch", group: "Live operations", perm: "ops_ride list", render: pageOpsDispatch },
     { id: "documents", label: "Document types", group: "People", perm: "document list", render: pageDocuments },
     { id: "driver-applications", label: "Driver applications", group: "People", perm: "driver_application list", render: pageDriverApplications },
     { id: "ride-types", label: "Ride types", group: "Operations", perm: "service list", render: pageRideTypes },
@@ -1092,6 +1096,448 @@
       (s.by_day || []).forEach(function (x) { dd.appendChild(h("div", { class: "item" }, h("div", { class: "main" }, h("div", { class: "s", text: x.day + " · " + x.sent + " sent · " + x.failed + " failed · " + x.skipped + " skipped" })))); });
       root.appendChild(dd);
     });
+  }
+
+  // ---------- Live operations: command center, fleet map, live rides and the dispatcher console ----------
+  // Everything here reads live data. A figure the server cannot read is shown as "Not available", never as 0.
+  var OPS = { focusRide: null, fleetFilter: "all", ridesFilter: "all_live", region: "" };
+  var OPS_STATES = {
+    available: ["Available", "#22A06B"], approaching_pickup: ["Heading to pickup", "#F59E0B"], arrived: ["Arrived at pickup", "#8B5CF6"],
+    on_trip: ["On a trip", "#2563EB"], multi_stop: ["Multi-stop trip", "#0891B2"], unavailable: ["Online, unavailable", "#6B7280"]
+  };
+  var OPS_RIDE_STATUS = { searching: "Waiting for a driver", accepted: "Driver assigned", arrived: "Driver arrived", in_progress: "In progress", completed: "Completed", cancelled: "Cancelled", expired: "Expired" };
+  var OPS_FILTERS = [["all_live", "All live"], ["pending", "Pending"], ["unassigned", "Unassigned"], ["assigned", "Assigned"], ["approaching", "Driver approaching"], ["arrived", "Driver arrived"], ["in_progress", "In progress"], ["multi_stop", "Multi-stop"], ["airport_pickup", "Airport Pickup"], ["airport_drop", "Airport Drop"], ["completed", "Completed"], ["cancelled", "Cancelled"], ["expired", "Expired"]];
+  var OPS_FILTER_HELP = {
+    pending: "Waiting for any driver to accept.", unassigned: "Waiting longer than the unassigned limit: needs a dispatcher.", assigned: "Has a driver and is not finished.",
+    approaching: "A driver accepted and is on the way to the pickup.", arrived: "The driver is at the pickup.", in_progress: "The trip has started.",
+    multi_stop: "Rides with one or more extra stops.", airport_pickup: "Airport Pickup bookings.", airport_drop: "Airport Drop bookings.",
+    completed: "Finished today (or in the window you chose).", cancelled: "Cancelled today (or in the window you chose).", expired: "Nobody accepted in time."
+  };
+  var OPS_CANCEL = [["passenger_request", "Passenger asked to cancel (cancellation fee rules apply)"], ["no_driver_available", "No driver available"], ["driver_unreachable", "Driver unreachable"], ["passenger_unreachable", "Passenger unreachable"], ["safety", "Safety concern"], ["duplicate", "Duplicate booking"], ["operational_issue", "Operational issue"], ["other", "Other"]];
+  var OPS_ESC = [["delay", "Delay"], ["driver_unreachable", "Driver unreachable"], ["passenger_unreachable", "Passenger unreachable"], ["payment", "Payment problem"], ["safety", "Safety"], ["vehicle", "Vehicle problem"], ["other", "Other"]];
+  var OPS_DELAY = { waiting_for_driver: "Still waiting for a driver", slow_pickup: "Driver has not reached the pickup", overlong_trip: "Trip is taking much longer than quoted", driver_location_stale: "Driver's location is out of date" };
+
+  function opsEvery(root, ms, fn) {
+    var t = setInterval(function () { if (!root.isConnected) { clearInterval(t); return; } if (!document.hidden) fn(); }, ms);
+  }
+  function opsDur(sec) {
+    if (sec == null) return "";
+    if (sec < 60) return sec + " s";
+    if (sec < 3600) return Math.round(sec / 60) + " min";
+    return Math.floor(sec / 3600) + " h " + Math.round((sec % 3600) / 60) + " min";
+  }
+  function opsTime(iso) { return iso ? new Date(iso).toLocaleString("en-NG", { hour: "2-digit", minute: "2-digit", second: "2-digit", day: "2-digit", month: "short" }) : "-"; }
+  function opsFresh(f) {
+    if (!f || f.state === "unknown") return h("span", { class: "pill warn", text: "No location" });
+    var t = opsDur(f.age_seconds) + " ago";
+    if (f.state === "fresh") return h("span", { class: "pill on", text: "Live · " + t });
+    return h("span", { class: "pill warn", text: (f.state === "delayed" ? "Delayed · " : "Out of date · ") + t });
+  }
+  function opsMoney(list) {
+    if (!list || !list.length) return "0";
+    return list.map(function (m) { return (m.currency === "NGN" || !m.currency ? "₦" : m.currency + " ") + Number(m.amount).toLocaleString("en-NG", { maximumFractionDigits: 2 }); }).join(" + ");
+  }
+  function opsKv(k, v) { return h("div", { class: "kv" }, h("span", { class: "k", text: k }), h("span", { text: v == null || v === "" ? "-" : String(v), style: "text-align:right;min-width:0;overflow-wrap:anywhere" })); }
+  function opsGoRide(id) { OPS.focusRide = id; if (location.hash === "#/ops-rides") route(); else location.hash = "#/ops-rides"; }
+  function opsChips(opts, cur, on) {
+    var box = h("div", { class: "tabs wrap" });
+    opts.forEach(function (o) { box.appendChild(h("button", { class: cur === o[0] ? "active" : "", text: o[1], on: { click: function () { on(o[0]); } } })); });
+    return box;
+  }
+
+  // ---- Command center ----
+  var OPS_TILES = [
+    ["rides_today", "Rides today", "ops-rides"], ["completed_today", "Completed today", null], ["active_rides", "Active rides", "ops-rides"], ["pending_rides", "Pending rides", "ops-dispatch"],
+    ["cancelled_today", "Cancelled today", null], ["expired_today", "Expired today", null], ["online_drivers", "Online drivers", "ops-fleet"], ["available_drivers", "Available drivers", "ops-fleet"],
+    ["drivers_on_trips", "Drivers on trips", "ops-fleet"], ["pending_driver_applications", "Pending driver applications", "driver-applications"], ["airport_bookings_today", "Airport bookings today", null],
+    ["gross_ride_value_today", "Gross ride value today", null], ["platform_revenue_today", "Platform revenue today", null], ["driver_earnings_today", "Driver earnings today", null],
+    ["pending_payouts", "Pending payouts", "payouts"], ["sos_incidents", "SOS incidents", "sos"], ["open_escalations", "Open escalations", null]
+  ];
+  function opsTileValue(key, m) {
+    if (!m || !m.available) return null;
+    var v = m.value;
+    if (key === "pending_payouts") return v.count + (v.count ? " · " + opsMoney(v.by_currency) : "");
+    if (key === "sos_incidents") return v.open + " open · " + v.acknowledged + " acknowledged · " + v.today + " today";
+    if (Array.isArray(v)) return opsMoney(v);
+    return String(v);
+  }
+  function pageOpsDashboard(root) {
+    loading(root);
+    var stamp = h("span", { class: "muted" });
+    var body = h("div");
+    var refreshBtn = h("button", { class: "ghost small", text: "Refresh", on: { click: function () { load(); } } });
+    root.textContent = "";
+    root.appendChild(head("Command center", "Live figures from the database. Today starts at midnight Lagos time. Refreshes every 15 seconds.", h("div", { class: "acts" }, stamp, refreshBtn)));
+    root.appendChild(body);
+    function load() {
+      Promise.all([api("GET", "/admin/ops/metrics"), can("ops_ride list") ? api("GET", "/admin/ops/attention") : Promise.resolve(null)]).then(function (res) {
+        var r = res[0], a = res[1];
+        body.textContent = "";
+        if (!r.ok) { body.appendChild(h("div", { class: "card" }, h("div", { class: "empty", text: errText(r) }))); return; }
+        stamp.textContent = "Updated " + opsTime(r.body.generated_at);
+        var grid = h("div", { class: "tiles" });
+        OPS_TILES.forEach(function (t) {
+          var m = r.body.metrics[t[0]], val = opsTileValue(t[0], m);
+          var tile = h("div", { class: "tile" + (t[2] ? " link" : "") },
+            h("div", { class: "tl", text: t[1] }),
+            val === null ? h("div", { class: "tv off", text: "Not available" }) : h("div", { class: "tv", text: val }),
+            m && !m.available ? h("div", { class: "tn", text: m.reason }) : (m && m.note ? h("div", { class: "tn", text: m.note }) : null));
+          if (t[2]) tile.addEventListener("click", function () { location.hash = "#/" + t[2]; });
+          grid.appendChild(tile);
+        });
+        body.appendChild(grid);
+        if (a && a.ok) {
+          var att = h("div", { class: "card" }, h("h3", { text: "Needs attention" }));
+          var d = a.body.delays || [];
+          if (!d.length) att.appendChild(h("div", { class: "empty", text: "No delayed rides right now." }));
+          d.forEach(function (x) {
+            att.appendChild(h("div", { class: "item" },
+              h("div", { class: "main" }, h("div", { class: "t", text: "Ride #" + x.ride_id + " · " + (OPS_DELAY[x.kind] || x.kind) }),
+                h("div", { class: "s", text: [x.passenger, x.pickup, x.minutes >= 0 ? x.minutes + " min" : "no location ever received"].filter(Boolean).join(" · ") })),
+              h("button", { class: "ghost small", text: "Open", on: { click: function () { opsGoRide(x.ride_id); } } })));
+          });
+          att.appendChild(h("div", { class: "hint", text: "Rules: unassigned after " + a.body.rules.unassigned_after_seconds + " s, slow pickup after " + a.body.rules.slow_pickup_minutes + " min, location out of date after " + a.body.rules.stale_minutes + " min. A trip is overlong past 1.5× its quoted time." }));
+          body.appendChild(att);
+          var esc = h("div", { class: "card" }, h("h3", { text: "Open escalations" }));
+          if (!a.body.escalations.length) esc.appendChild(h("div", { class: "empty", text: "Nothing escalated." }));
+          a.body.escalations.forEach(function (e) {
+            var acts = h("div", { class: "acts" }, h("button", { class: "ghost small", text: "Open ride", on: { click: function () { opsGoRide(e.ride_id); } } }));
+            if (can("ops_ride escalate")) acts.appendChild(h("button", { class: "small", text: "Resolve", on: { click: function () {
+              var note = window.prompt("Resolution note (optional)"); if (note === null) return;
+              api("POST", "/admin/ops/escalations/" + e.id + "/resolve", { note: note || undefined }).then(function (x) { toast(x.ok ? "Resolved" : errText(x), !x.ok); if (x.ok) load(); });
+            } } }));
+            esc.appendChild(h("div", { class: "item" }, h("div", { class: "main" }, h("div", { class: "t", text: "Ride #" + e.ride_id + " · " + e.category.replace(/_/g, " ") }), h("div", { class: "s", text: e.reason })),
+              h("span", { class: "pill " + (e.severity === "normal" ? "" : "warn"), text: e.severity }), acts));
+          });
+          body.appendChild(esc);
+        }
+      });
+    }
+    load();
+    opsEvery(root, 15000, load);
+  }
+
+  // ---- Fleet map ----
+  function pageOpsFleet(root) {
+    var map = null, layer = null, first = true, selected = null, data = null, L = null;
+    var stamp = h("span", { class: "muted" });
+    var chipsHost = h("div"), listHost = h("div"), detailHost = h("div"), mapHost = h("div", { class: "borderbox", text: "Loading map…" });
+    var regionHost = h("div");
+    root.appendChild(head("Fleet map", "Where drivers are right now. Positions come from each driver's phone; old or missing positions are labelled, never guessed. Refreshes every 10 seconds.", stamp));
+    root.appendChild(h("div", { class: "card" }, regionHost, chipsHost));
+    root.appendChild(h("div", { class: "card" }, mapHost));
+    root.appendChild(detailHost);
+    root.appendChild(listHost);
+    if (can("region list")) api("GET", "/admin/regions").then(function (r) {
+      var regs = (r.body && r.body.data) || [];
+      var sel = select([["", "All regions"]].concat(regs.map(function (g) { return [g.id, g.name || ("Region " + g.id)]; })), OPS.region);
+      sel.addEventListener("change", function () { OPS.region = sel.value; load(); });
+      regionHost.appendChild(field("Region", sel));
+    });
+    loadLeaflet().then(function (l) { L = l; mapHost.textContent = ""; mapHost.className = "borderbox"; map = L.map(mapHost, { zoomControl: true }).setView([9.0765, 7.3986], 11); L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(map); layer = L.layerGroup().addTo(map); map.invalidateSize(); if (data) draw(); }).catch(function () { mapHost.textContent = "The map could not load. The driver list below still works."; });
+
+    var FILTERS = [["all", "All online"], ["available", "Available"], ["busy", "Busy"], ["approaching_pickup", "Approaching pickup"], ["arrived", "Arrived"], ["on_trip", "On a trip"], ["multi_stop", "Multi-stop"], ["airport", "Airport bookings"], ["unavailable", "Unavailable"], ["no_live_location", "No live location"]];
+    function match(d) {
+      var f = OPS.fleetFilter;
+      if (f === "all") return true;
+      if (f === "busy") return d.busy;
+      if (f === "airport") return !!(d.ride && d.ride.airport);
+      if (f === "no_live_location") return d.freshness.state === "stale" || d.freshness.state === "unknown";
+      return d.state === f;
+    }
+    function draw() {
+      if (!data) return;
+      chipsHost.textContent = "";
+      chipsHost.appendChild(opsChips(FILTERS.map(function (f) { var n = f[0] === "all" ? data.counts.online : f[0] === "busy" ? data.drivers.filter(function (d) { return d.busy; }).length : data.counts[f[0]]; return [f[0], f[1] + " (" + (n || 0) + ")"]; }), OPS.fleetFilter, function (v) { OPS.fleetFilter = v; draw(); }));
+      var shown = data.drivers.filter(match);
+      if (layer) {
+        layer.clearLayers();
+        var pts = [];
+        shown.forEach(function (d) {
+          if (!d.location) return;
+          var st = OPS_STATES[d.state] || OPS_STATES.unavailable, old = d.freshness.state === "stale" || d.freshness.state === "unknown" || d.freshness.state === "delayed";
+          var m = L.circleMarker([d.location.lat, d.location.lng], { radius: d.id === selected ? 12 : 9, color: d.ride && d.ride.airport ? "#111" : st[1], weight: d.ride && d.ride.airport ? 3 : 2, fillColor: st[1], fillOpacity: old ? 0.25 : 0.9, dashArray: old ? "3 3" : null });
+          m.bindTooltip(d.name + " · " + st[0] + (old ? " · location " + d.freshness.state : ""));
+          m.on("click", function () { selected = d.id; draw(); showDriver(d.id); });
+          m.addTo(layer); pts.push([d.location.lat, d.location.lng]);
+        });
+        if (first && pts.length && map) { map.fitBounds(pts, { padding: [30, 30], maxZoom: 14 }); first = false; }
+      }
+      listHost.textContent = "";
+      var card = h("div", { class: "card" }, h("h3", { text: shown.length + " driver" + (shown.length === 1 ? "" : "s") }));
+      if (!shown.length) card.appendChild(h("div", { class: "empty", text: "No drivers match." }));
+      shown.forEach(function (d) {
+        var st = OPS_STATES[d.state] || OPS_STATES.unavailable;
+        var sub = [d.vehicle.description, d.vehicle.plate, d.ride_type].filter(Boolean).join(" · ");
+        var ride = d.ride ? "Ride #" + d.ride.id + (d.ride.stops ? " · stop " + d.ride.stops.done + "/" + d.ride.stops.total : "") + (d.ride.airport ? " · " + d.ride.airport.name + " (" + d.ride.airport.direction + ")" : "") : "";
+        card.appendChild(h("div", { class: "item", style: "cursor:pointer", on: { click: function () { selected = d.id; draw(); showDriver(d.id); if (d.location && map) map.setView([d.location.lat, d.location.lng], Math.max(map.getZoom(), 14)); } } },
+          h("span", { style: "width:12px;height:12px;border-radius:50%;flex:none;background:" + st[1] }),
+          h("div", { class: "main" }, h("div", { class: "t", text: d.name }), h("div", { class: "s", text: st[0] + (d.offline_with_ride ? " · phone offline but ride still open" : "") + (sub ? " · " + sub : "") }), ride ? h("div", { class: "s", text: ride }) : null),
+          opsFresh(d.freshness)));
+      });
+      listHost.appendChild(card);
+    }
+    function showDriver(id) {
+      detailHost.textContent = "";
+      detailHost.appendChild(h("div", { class: "card" }, h("div", { class: "empty", text: "Loading driver…" })));
+      api("GET", "/admin/ops/drivers/" + id).then(function (r) {
+        detailHost.textContent = "";
+        if (!r.ok) { detailHost.appendChild(h("div", { class: "card" }, h("div", { class: "empty", text: errText(r) }))); return; }
+        var d = r.body.data, v = d.vehicle, p = d.performance;
+        var card = h("div", { class: "card" }, h("div", { class: "bar" }, h("div", { class: "grow" }, h("h3", { text: d.name }), h("div", { class: "muted", text: "Driver #" + d.id + (d.username ? " · @" + d.username : "") })),
+          h("button", { class: "ghost small", text: "Close", on: { click: function () { selected = null; detailHost.textContent = ""; draw(); } } })));
+        card.appendChild(opsKv("Status", (d.online ? (d.available ? "Online, available" : "Online, not available") : "Offline") + " · profile " + d.profile_status + " · account " + d.account_status + " · " + d.mode + " mode"));
+        card.appendChild(opsKv("Vehicle", [v.colour, v.make, v.model, v.year].filter(Boolean).join(" ") || "Not on file"));
+        card.appendChild(opsKv("Plate / seats", [v.plate || "no plate on file", v.seats ? v.seats + " seats" : "seats not on file"].join(" · ")));
+        card.appendChild(opsKv("Ride type", d.ride_type.name));
+        card.appendChild(opsKv("Last known location", d.location ? d.location.lat.toFixed(5) + ", " + d.location.lng.toFixed(5) : "None received"));
+        card.appendChild(opsKv("Location time", d.location ? opsTime(d.location.at) : "-"));
+        card.appendChild(h("div", { class: "kv" }, h("span", { class: "k", text: "Location freshness" }), opsFresh(d.freshness)));
+        card.appendChild(opsKv("Current ride", d.current_ride ? "#" + d.current_ride.id + " · " + (OPS_RIDE_STATUS[d.current_ride.status] || d.current_ride.status) + (d.current_ride.airport ? " · airport" : "") : "None"));
+        if (d.current_ride) card.appendChild(h("p", {}, h("button", { class: "small", text: "Open ride #" + d.current_ride.id, on: { click: function () { opsGoRide(d.current_ride.id); } } })));
+        card.appendChild(opsKv("Completed", p.completed_today + " today · " + p.completed_30d + " in 30 days · " + p.completed_total + " total"));
+        card.appendChild(opsKv("Rating", p.rating ? p.rating.average + " from " + p.rating.count + " rating" + (p.rating.count === 1 ? "" : "s") : "No ratings yet"));
+        card.appendChild(opsKv("Earnings, last 30 days", opsMoney(p.earnings_30d)));
+        card.appendChild(opsKv("Wallet / documents", (d.wallet_ok ? "Wallet OK" : "Wallet below minimum") + " · " + (d.documents_expired ? "a document has expired" : "documents OK")));
+        p.unavailable.forEach(function (t) { card.appendChild(h("div", { class: "hint", text: t })); });
+        detailHost.appendChild(card);
+      });
+    }
+    function load() {
+      api("GET", "/admin/ops/fleet" + (OPS.region ? "?region_id=" + OPS.region : "")).then(function (r) {
+        if (!r.ok) { listHost.textContent = ""; listHost.appendChild(h("div", { class: "card" }, h("div", { class: "empty", text: errText(r) }))); return; }
+        data = r.body; stamp.textContent = "Updated " + opsTime(r.body.generated_at); draw();
+      });
+    }
+    load();
+    opsEvery(root, 10000, function () { load(); });
+  }
+
+  // ---- Candidate picker: used by the dispatcher and by Reassign ----
+  function opsPicker(host, ride, onDone) {
+    var reasonInput = text("", "Why is the driver being changed? (required)");
+    var list = h("div");
+    host.textContent = "";
+    var mode = ride.status === "searching" ? "assign" : "reassign";
+    host.appendChild(h("h3", { text: mode === "assign" ? "Choose a driver" : "Choose a replacement driver" }));
+    host.appendChild(h("div", { class: "hint", text: "Nearest first. Only drivers who pass every check can be chosen; the server checks again when you confirm." }));
+    if (mode === "reassign") host.appendChild(field("Reason", reasonInput));
+    host.appendChild(list);
+    function load() {
+      list.textContent = ""; list.appendChild(h("div", { class: "empty", text: "Loading drivers…" }));
+      api("GET", "/admin/ops/rides/" + ride.id + "/candidates").then(function (r) {
+        list.textContent = "";
+        if (!r.ok) { list.appendChild(h("div", { class: "empty", text: errText(r) })); return; }
+        var rows = r.body.data;
+        if (!rows.length) list.appendChild(h("div", { class: "empty", text: "No drivers are online." }));
+        var ok = rows.filter(function (d) { return d.eligible; }).length;
+        if (rows.length) list.appendChild(h("div", { class: "muted", text: ok + " eligible of " + rows.length + " online driver" + (rows.length === 1 ? "" : "s") }));
+        rows.forEach(function (d) {
+          var v = d.vehicle, st = OPS_STATES[d.on_ride_id ? "on_trip" : d.status] || OPS_STATES.unavailable;
+          var sub = [d.ride_type.name + (d.ride_type_matches ? "" : " (different type)"), v.description, v.plate, v.seats ? v.seats + " seats" : null].filter(Boolean).join(" · ");
+          var work = d.workload.on_ride ? "On ride #" + d.on_ride_id : d.workload.completed_24h + " completed and " + d.workload.taken_24h + " taken in 24 h";
+          var btn = h("button", { class: "small", text: mode === "assign" ? "Assign" : "Reassign", disabled: !d.eligible, on: { click: function () {
+            if (mode === "reassign" && reasonInput.value.trim().length < 3) { toast("Enter a reason first.", true); return; }
+            confirmDo((mode === "assign" ? "Assign " : "Reassign this ride to ") + d.name + "?", function () {
+              btn.disabled = true;
+              var body = mode === "assign" ? { driver_id: d.id } : { driver_id: d.id, expected_driver_id: r.body.current_driver_id, reason: reasonInput.value.trim() };
+              api("POST", "/admin/ops/rides/" + ride.id + "/" + mode, body).then(function (x) {
+                toast(x.ok ? (mode === "assign" ? "Driver assigned" : "Driver changed") : errText(x), !x.ok);
+                if (x.ok) onDone(); else load();
+              });
+            });
+          } } });
+          list.appendChild(h("div", { class: "item" },
+            h("span", { style: "width:12px;height:12px;border-radius:50%;flex:none;background:" + st[1] }),
+            h("div", { class: "main" },
+              h("div", { class: "t", text: d.name + (d.distance_km != null ? " · " + d.distance_km + " km away" : " · distance unknown") }),
+              h("div", { class: "s", text: sub }), h("div", { class: "s", text: work }),
+              d.eligible ? null : h("div", { class: "s", style: "color:var(--bad)", text: d.reasons.map(function (x) { return x.message; }).join(" ") }),
+              d.warnings.length ? h("div", { class: "s", text: d.warnings.map(function (x) { return x.message; }).join(" ") }) : null),
+            h("div", {}, opsFresh(d.location), h("div", { style: "margin-top:6px;text-align:right" }, btn))));
+        });
+      });
+    }
+    load();
+    host.appendChild(h("p", {}, h("button", { class: "ghost small", text: "Refresh drivers", on: { click: load } })));
+  }
+
+  // ---- Ride detail with every intervention ----
+  function opsRideDetail(host, id, opts) {
+    opts = opts || {};
+    host.textContent = "";
+    host.appendChild(h("div", { class: "card" }, h("div", { class: "empty", text: "Loading ride…" })));
+    api("GET", "/admin/ops/rides/" + id).then(function (r) {
+      host.textContent = "";
+      if (!r.ok) { host.appendChild(h("div", { class: "card" }, h("div", { class: "empty", text: errText(r) }))); return; }
+      var d = r.body.data, act = d.actions;
+      var again = function () { opsRideDetail(host, id, opts); if (opts.onChange) opts.onChange(); };
+      var card = h("div", { class: "card" });
+      card.appendChild(h("div", { class: "bar" }, h("div", { class: "grow" }, h("h3", { text: "Ride #" + d.id }), h("div", { class: "muted", text: (OPS_RIDE_STATUS[d.status] || d.status) + (d.waited_seconds != null ? " · waiting " + opsDur(d.waited_seconds) : "") })),
+        h("button", { class: "ghost small", text: "Refresh", on: { click: again } })));
+      var delays = d.delays || [];
+      if (delays.length) card.appendChild(h("div", { class: "msg err", style: "display:block", text: delays.map(function (x) { return (OPS_DELAY[x.kind] || x.kind) + (x.minutes >= 0 ? " (" + x.minutes + " min)" : ""); }).join(" · ") }));
+      card.appendChild(opsKv("Passenger", d.passenger.name + " (#" + d.passenger.id + ")"));
+      card.appendChild(opsKv("Driver", d.driver ? d.driver.name + " (#" + d.driver.id + ")" : "Not assigned"));
+      if (d.driver) {
+        var v = d.driver.vehicle;
+        card.appendChild(opsKv("Vehicle", [v.colour, v.description, v.plate].filter(Boolean).join(" · ") || "Not on file"));
+        card.appendChild(h("div", { class: "kv" }, h("span", { class: "k", text: "Driver location" }), h("span", {}, d.driver.location ? d.driver.location.lat.toFixed(5) + ", " + d.driver.location.lng.toFixed(5) + " " : "none ", opsFresh(d.driver.freshness))));
+      }
+      var bc = d.booking_category;
+      card.appendChild(opsKv("Booking", [bc.ride_type, bc.category, d.booking_source === "admin" ? "booked by Support" + (d.booked_by ? " (" + d.booked_by + ")" : "") : "passenger booked", bc.airport ? "airport" : null, bc.multi_stop ? "multi-stop" : null, bc.negotiated_fare ? "negotiated fare" : null].filter(Boolean).join(" · ")));
+      card.appendChild(opsKv("Pickup", d.pickup.address));
+      d.stops.forEach(function (s) { card.appendChild(opsKv("Stop " + s.sequence, (s.address || s.lat + ", " + s.lng) + " · " + s.status)); });
+      card.appendChild(opsKv("Destination", d.dropoff.address));
+      if (d.airport) {
+        var a = d.airport;
+        var fl = a.flight || {};
+        card.appendChild(opsKv("Airport", [a.name, a.iata_code, a.label].filter(Boolean).join(" · ")));
+        Object.keys(fl).filter(function (k) { return fl[k] !== null && fl[k] !== "" && typeof fl[k] !== "object"; }).forEach(function (k) { card.appendChild(opsKv(k.replace(/_/g, " "), fl[k])); });
+        card.appendChild(h("div", { class: "hint", text: "Live flight tracking is off; flight details are what the passenger entered." }));
+      }
+      card.appendChild(opsKv("Estimated arrival", d.eta ? d.eta.minutes + " min to " + d.eta.target + " (" + d.eta.distance + " " + d.eta.distance_unit + ")" + (d.eta.stale ? " · driver location out of date" : "") : "Not available"));
+      card.appendChild(h("div", { class: "hint", text: d.eta_note }));
+      card.appendChild(opsKv("Fare", (d.fare.currency === "NGN" ? "₦" : d.fare.currency + " ") + Number(d.fare.amount).toLocaleString("en-NG") + (d.fare.cancellation_fee ? " · cancellation fee " + d.fare.cancellation_fee : "")));
+      card.appendChild(opsKv("Payment", d.payment.label + " (" + d.payment.method.replace("_", " ") + ")"));
+      if (d.payment.note) card.appendChild(h("div", { class: "hint", text: d.payment.note }));
+      if (d.cancel) card.appendChild(opsKv("Cancelled", d.cancel.by + (d.cancel.reason ? " · " + d.cancel.reason : "")));
+
+      // ---- actions
+      var panel = h("div"), acts = h("div", { class: "acts", style: "margin:14px 0 6px" });
+      function openPanel(build) { panel.textContent = ""; var box = h("div", { class: "card" }); build(box); panel.appendChild(box); }
+      function why(a) { return a.allowed ? null : a.why; }
+      function btn(label, a, fn, cls) { var b = h("button", { class: cls || "small", text: label, disabled: !a.allowed, title: why(a) || "", on: { click: fn } }); return b; }
+      acts.appendChild(btn("Assign driver", act.assign, function () { openPanel(function (box) { opsPicker(box, { id: d.id, status: d.status }, again); }); }));
+      acts.appendChild(btn("Reassign driver", act.reassign, function () { openPanel(function (box) { opsPicker(box, { id: d.id, status: d.status }, again); }); }, "small ghost"));
+      acts.appendChild(btn("Cancel ride", act.cancel, function () {
+        openPanel(function (box) {
+          var cat = select(OPS_CANCEL, "operational_issue"), reason = text("", "What happened?");
+          var m = h("div", { class: "msg" });
+          box.appendChild(h("h3", { text: "Cancel ride #" + d.id }));
+          box.appendChild(field("Category", cat, "The ride type's cancellation fee is charged only when the passenger asked to cancel."));
+          box.appendChild(field("Reason", reason));
+          box.appendChild(m);
+          box.appendChild(h("button", { class: "danger", text: "Cancel this ride", on: { click: function () {
+            if (reason.value.trim().length < 3) { msg(m, "Enter a reason.", false); return; }
+            confirmDo("Cancel ride #" + d.id + "? This cannot be undone.", function () {
+              api("POST", "/admin/ops/rides/" + d.id + "/cancel", { category: cat.value, reason: reason.value.trim() }).then(function (x) { if (x.ok) { toast("Ride cancelled" + (x.body.cancellation_fee ? " · fee charged " + x.body.cancellation_fee : "")); again(); } else msg(m, errText(x), false); });
+            });
+          } } }));
+        });
+      }, "small danger"));
+      acts.appendChild(btn("Escalate", act.escalate, function () {
+        openPanel(function (box) {
+          var cat = select(OPS_ESC, "delay"), sev = select([["normal", "Normal"], ["high", "High"], ["urgent", "Urgent"]], "normal"), reason = text("", "Describe the problem");
+          var m = h("div", { class: "msg" });
+          box.appendChild(h("h3", { text: "Escalate ride #" + d.id }));
+          box.appendChild(h("div", { class: "grid2" }, field("Problem", cat), field("Severity", sev)));
+          box.appendChild(field("Details", reason)); box.appendChild(m);
+          box.appendChild(h("button", { text: "Escalate", on: { click: function () {
+            api("POST", "/admin/ops/rides/" + d.id + "/escalate", { category: cat.value, severity: sev.value, reason: reason.value.trim() }).then(function (x) { if (x.ok) { toast("Escalated"); again(); } else msg(m, errText(x), false); });
+          } } }));
+        });
+      }, "small ghost"));
+      acts.appendChild(btn("Contact", act.contact, function () {
+        openPanel(function (box) {
+          box.appendChild(h("h3", { text: "Contact" }));
+          box.appendChild(h("div", { class: "hint", text: "Phone numbers are shown on request and each view is recorded. Messages arrive as a notification in the app." }));
+          [["passenger", d.passenger.name], d.driver ? ["driver", d.driver.name] : null].forEach(function (p) {
+            if (!p) return;
+            var out = h("div", { class: "muted" }), msgIn = text("", "Message to " + p[0] + " (160 characters)"), m = h("div", { class: "msg" });
+            box.appendChild(h("h4", { text: p[0].charAt(0).toUpperCase() + p[0].slice(1) + ": " + p[1] }));
+            box.appendChild(h("div", { class: "acts" }, h("button", { class: "ghost small", text: "Show phone number", on: { click: function () {
+              api("POST", "/admin/ops/rides/" + d.id + "/contact", { party: p[0] }).then(function (x) {
+                out.textContent = "";
+                if (!x.ok) { out.textContent = errText(x); return; }
+                out.appendChild(x.body.phone ? h("a", { href: "tel:" + x.body.phone, text: x.body.phone }) : document.createTextNode("No phone number on file."));
+                out.appendChild(document.createTextNode(" · " + x.body.note));
+              });
+            } } })));
+            box.appendChild(out);
+            box.appendChild(field("Send a message", msgIn)); box.appendChild(m);
+            box.appendChild(h("button", { class: "small", text: "Send message", on: { click: function () {
+              api("POST", "/admin/ops/rides/" + d.id + "/message", { party: p[0], message: msgIn.value.trim() }).then(function (x) { msg(m, x.ok ? "Message sent." : errText(x), x.ok); if (x.ok) msgIn.value = ""; });
+            } } }));
+          });
+        });
+      }, "small ghost"));
+      card.appendChild(acts);
+      var blocked = ["assign", "reassign", "cancel"].filter(function (k) { return !act[k].allowed && act[k].why && act[k].why !== "No permission."; }).map(function (k) { return act[k].why; });
+      if (blocked.length) card.appendChild(h("div", { class: "hint", text: blocked.filter(function (x, i, a) { return a.indexOf(x) === i; }).join(" ") }));
+      card.appendChild(panel);
+
+      if (d.escalations.length) {
+        card.appendChild(h("h4", { text: "Escalations" }));
+        d.escalations.forEach(function (e) { card.appendChild(opsKv(e.category.replace(/_/g, " ") + " · " + e.severity + " · " + e.status, e.reason + (e.resolution_note ? " → " + e.resolution_note : ""))); });
+      }
+      card.appendChild(h("h4", { text: "Status timeline" }));
+      d.timeline.forEach(function (t) { card.appendChild(h("div", { class: "kv" }, h("span", { text: t.label + (t.actor ? " (" + t.actor + ")" : "") }), h("span", { class: "k", text: opsTime(t.at) }))); });
+      host.appendChild(card);
+      if (opts.autoPicker && act.assign.allowed) { openPanel(function (box) { opsPicker(box, { id: d.id, status: d.status }, again); }); }
+    });
+  }
+
+  // ---- Live rides ----
+  function pageOpsRides(root) {
+    var q = text("", "Search by ride number or name"), list = h("div"), detail = h("div"), stamp = h("span", { class: "muted" }), chips = h("div"), page = 1, focus = OPS.focusRide;
+    OPS.focusRide = null;
+    root.appendChild(head("Live rides", "Every ride as it moves. Refreshes every 10 seconds.", stamp));
+    root.appendChild(h("div", { class: "card" }, chips, h("div", { class: "hint", id: "opsFilterHelp" }), field("Search", q)));
+    root.appendChild(detail);
+    root.appendChild(list);
+    q.addEventListener("keydown", function (e) { if (e.key === "Enter") { page = 1; load(); } });
+    function drawChips() { chips.textContent = ""; chips.appendChild(opsChips(OPS_FILTERS, OPS.ridesFilter, function (v) { OPS.ridesFilter = v; page = 1; drawChips(); load(); })); var hp = document.getElementById("opsFilterHelp"); if (hp) hp.textContent = OPS_FILTER_HELP[OPS.ridesFilter] || "Pending, assigned and in-progress rides."; }
+    function load() {
+      api("GET", "/admin/ops/rides?filter=" + OPS.ridesFilter + "&page=" + page + (q.value.trim() ? "&q=" + encodeURIComponent(q.value.trim()) : "") + (OPS.region ? "&region_id=" + OPS.region : "")).then(function (r) {
+        list.textContent = "";
+        if (!r.ok) { list.appendChild(h("div", { class: "card" }, h("div", { class: "empty", text: errText(r) }))); return; }
+        stamp.textContent = "Updated " + opsTime(r.body.generated_at);
+        var card = h("div", { class: "card" }, h("h3", { text: r.body.pagination.total + " ride" + (r.body.pagination.total === 1 ? "" : "s") }));
+        if (!r.body.data.length) card.appendChild(h("div", { class: "empty", text: "No rides match." }));
+        r.body.data.forEach(function (x) {
+          var sub = [x.passenger, x.driver ? "driver " + x.driver.name : "no driver", x.service, x.airport ? "airport " + x.airport.direction : null, x.stops ? "stop " + x.stops.done + "/" + x.stops.total : null].filter(Boolean).join(" · ");
+          card.appendChild(h("div", { class: "item", style: "cursor:pointer", on: { click: function () { opsRideDetail(detail, x.id, { onChange: load }); detail.scrollIntoView({ behavior: "smooth", block: "start" }); } } },
+            h("div", { class: "main" }, h("div", { class: "t", text: "#" + x.id + " · " + (OPS_RIDE_STATUS[x.status] || x.status) + (x.waited_seconds != null ? " · waiting " + opsDur(x.waited_seconds) : "") }),
+              h("div", { class: "s", text: sub }), h("div", { class: "s", text: (x.pickup || "?") + " → " + (x.dropoff || "?") })),
+            h("div", { style: "text-align:right" }, h("div", { class: "t", text: (x.currency === "NGN" ? "₦" : x.currency + " ") + Number(x.fare).toLocaleString("en-NG") }), x.driver ? opsFresh(x.driver.freshness) : null)));
+        });
+        var pg = r.body.pagination;
+        if (pg.total_pages > 1) card.appendChild(h("div", { class: "acts", style: "justify-content:center;margin-top:10px" },
+          h("button", { class: "ghost small", text: "Previous", disabled: page <= 1, on: { click: function () { page--; load(); } } }), h("span", { class: "muted", text: "Page " + pg.page + " of " + pg.total_pages }),
+          h("button", { class: "ghost small", text: "Next", disabled: page >= pg.total_pages, on: { click: function () { page++; load(); } } })));
+        list.appendChild(card);
+      });
+    }
+    drawChips(); load();
+    if (focus) opsRideDetail(detail, focus, { onChange: load });
+    opsEvery(root, 10000, load);
+  }
+
+  // ---- Dispatcher console ----
+  function pageOpsDispatch(root) {
+    var queue = h("div"), detail = h("div"), stamp = h("span", { class: "muted" }), selected = null;
+    root.appendChild(head("Dispatch", "Rides still waiting for a driver, oldest first. Choose a ride, then a driver. Drivers who are offline, suspended, busy, in another region or ride type, or without a live location cannot be chosen.", stamp));
+    root.appendChild(h("div", { class: "card" }, h("h3", { text: "Waiting for a driver" }), queue));
+    root.appendChild(detail);
+    function load() {
+      api("GET", "/admin/ops/rides?filter=pending&sort=oldest").then(function (r) {
+        queue.textContent = "";
+        if (!r.ok) { queue.appendChild(h("div", { class: "empty", text: errText(r) })); return; }
+        stamp.textContent = "Updated " + opsTime(r.body.generated_at);
+        if (!r.body.data.length) queue.appendChild(h("div", { class: "empty", text: "No rides are waiting for a driver." }));
+        r.body.data.forEach(function (x) {
+          var late = x.waited_seconds >= r.body.unassigned_after_seconds;
+          queue.appendChild(h("div", { class: "item", style: "cursor:pointer" + (x.id === selected ? ";background:var(--active-bg)" : ""), on: { click: function () { selected = x.id; load(); opsRideDetail(detail, x.id, { autoPicker: true, onChange: load }); detail.scrollIntoView({ behavior: "smooth", block: "start" }); } } },
+            h("div", { class: "main" }, h("div", { class: "t", text: "#" + x.id + " · " + x.service + (x.airport ? " · airport " + x.airport.direction : "") + (x.stops ? " · " + x.stops.total + " stop" + (x.stops.total === 1 ? "" : "s") : "") }),
+              h("div", { class: "s", text: (x.pickup || "?") + " → " + (x.dropoff || "?") }), h("div", { class: "s", text: x.passenger + " · " + (x.payment_method || "").replace("_", " ") })),
+            h("span", { class: "pill " + (late ? "warn" : ""), text: "Waiting " + opsDur(x.waited_seconds) })));
+        });
+        queue.appendChild(h("div", { class: "hint", text: "A request expires on its own if no driver accepts it. Expired rides cannot be assigned; the passenger must request again." }));
+      });
+    }
+    load();
+    opsEvery(root, 8000, load);
   }
 
   // ---------- Airports: every detail is entered and verified here; nothing is built in ----------

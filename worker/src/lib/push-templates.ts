@@ -95,7 +95,8 @@ export const EVENTS: EventDef[] = [
   E("passenger.wallet_credited", "Wallet credited", "passenger", "wallet", "Wallet credited", "{{amount}} {{reason}}"),
   E("passenger.promotion", "Promotion", "passenger", "promotion", "A gift from DROP", "{{note}}", false, { note: "Not connected: promotions are not built yet." }),
   E("passenger.referral", "Referral event", "passenger", "promotion", "Your referral joined DROP", "Thanks for spreading the word.", false, { note: "Not connected: referrals are not built yet." }),
-  E("passenger.support_update", "Support update", "passenger", "support", "Update from DROP Support", "{{note}}", false, { note: NOT_YET }),
+  E("passenger.support_update", "Support update", "passenger", "support", "Update from DROP Support", "{{note}}", true, { fresh: true }),
+  E("driver.support_update", "Support update", "driver", "support", "Update from DROP Support", "{{note}}", true, { fresh: true }),
   E("passenger.safety_alert", "Safety alert", "passenger", "safety", "Safety alert", "{{note}}", false, { note: NOT_YET }),
   E("passenger.bid_driver_accepted", "Bid: a driver accepted", "passenger", "bidding", "A driver accepted your offer", "{{amount}}. Open DROP to choose your driver."),
   E("passenger.bid_counteroffer", "Bid: a driver counteroffered", "passenger", "bidding", "A driver sent a counteroffer", "{{amount}}. Open DROP to answer."),
@@ -104,7 +105,7 @@ export const EVENTS: EventDef[] = [
 
   // ---- Driver ----
   E("driver.new_ride_request", "New ride request", "driver", "booking", "New ride request", "{{fare}} · {{pickup_location}}"),
-  E("driver.ride_assigned", "Ride assigned by dispatch", "driver", "booking", "A ride was assigned to you", "Pickup: {{pickup_location}}.", false, { note: NOT_YET + " Dispatch assignment arrives with the Operations Command Center." }),
+  E("driver.ride_assigned", "Ride assigned by dispatch", "driver", "booking", "A ride was assigned to you", "Pickup: {{pickup_location}}.", true, { fresh: true }),
   E("driver.airport_booking_assigned", "Airport booking accepted", "driver", "airport", "Airport booking confirmed", "{{airport_name}} {{terminal}}. Pickup: {{pickup_location}}.", true, { fresh: true }),
   E("driver.ride_cancelled_by_passenger", "Ride cancelled by passenger", "driver", "ride", "Ride cancelled", "The passenger cancelled this ride."),
   E("driver.ride_cancelled_by_admin", "Ride cancelled by DROP Support", "driver", "ride", "Ride cancelled by Drop Support", "Drop Support cancelled this booking. You can accept other requests."),

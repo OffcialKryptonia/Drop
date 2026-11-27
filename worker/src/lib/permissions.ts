@@ -30,6 +30,9 @@ export const MODULES: { key: string; label: string; actions: string[] }[] = [
   { key: "push_settings", label: "Push notifications", actions: ["list", "edit"] },
   { key: "push_template", label: "Push templates and delivery log", actions: ["list", "add", "edit", "delete", "send"] },
   { key: "email_template", label: "Email templates and delivery log", actions: ["list", "add", "edit", "delete", "send"] },
+  { key: "ops_dashboard", label: "Operations dashboard", actions: ["list"] },
+  { key: "fleet", label: "Live fleet map", actions: ["list"] },
+  { key: "ops_ride", label: "Live rides and dispatch", actions: ["list", "contact", "assign", "cancel", "escalate"] },
   { key: "role", label: "Roles", actions: ["list", "add", "edit", "delete"] },
   { key: "subadmin", label: "Sub-admins", actions: ["list", "add", "edit", "delete"] },
 ];
