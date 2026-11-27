@@ -235,11 +235,11 @@ adminOpsRoutes.get("/admin/ops/rides", ...guard("ops_ride list"), async (c) => {
     : ((await db.query("select (date_trunc('day', now() at time zone 'Africa/Lagos') at time zone 'Africa/Lagos') as s")).rows[0].s as Date);
   const threshold = (await delaySettings(db)).unassigned_after_seconds;
   const oldest = c.req.query("sort") === "oldest";
-  const where = `(${filterSql(filter)}) and ($3 = '' or r.id::text = $3 or rider.display_name ilike $4 or rider.username ilike $4 or du.display_name ilike $4)
-       and ($5::bigint is null or r.region_id = $5)`;
+  const where = `(${filterSql(filter)}) and ($3::text = '' or r.id::text = $3::text or rider.display_name ilike $4::text or rider.username ilike $4::text or du.display_name ilike $4::text)
+       and ($5::bigint is null or r.region_id = $5::bigint) and $1::int is not null and $2::timestamptz is not null`;
   const args = [threshold, windowStart, q, `%${q.replace(/[%_]/g, "")}%`, Number.isSafeInteger(region) && region > 0 ? region : null];
   const total = Number((await db.query(`select count(*)::int n from app.ride_requests r join app.users rider on rider.id = r.rider_id left join app.users du on du.id = r.driver_id where ${where}`, args)).rows[0].n);
-  const rows = (await db.query(`${LIST_SELECT} where ${where} order by r.id ${oldest ? "asc" : "desc"} limit 50 offset $6`, [...args, (page - 1) * 50])).rows;
+  const rows = (await db.query(`${LIST_SELECT} where ${where} order by r.id ${oldest ? "asc" : "desc"} limit 50 offset $6::int`, [...args, (page - 1) * 50])).rows;
   const stale = await STALE(db), now = Date.now();
   return c.json({
     status: true, generated_at: new Date().toISOString(), filter, window_started_at: windowStart.toISOString(), unassigned_after_seconds: threshold,
