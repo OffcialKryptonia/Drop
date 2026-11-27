@@ -144,7 +144,7 @@ try {
   await db.query("update app.users set is_online = false where id = $1", [d3.id]);
   ok("assigning an offline driver is refused", await refuse(d3, "offline"));
   await db.query("update app.users set is_online = true where id = $1", [d3.id]);
-  ok("an unknown driver is refused", (await call("POST", `/admin/ops/rides/${rid1}/assign`, A, { driver_id: 99999999 })).status === 409);
+  ok("an unknown driver is not found", (await call("POST", `/admin/ops/rides/${rid1}/assign`, A, { driver_id: 99999999 })).status === 404);
   ok("a bad body is a validation error", (await call("POST", `/admin/ops/rides/${rid1}/assign`, A, {})).status === 422);
   ok("nothing changed after the refusals", (await ride(rid1)).status === "searching" && (await ride(rid1)).driver_id === null && (await events(rid1, "assign")) === 0);
 
@@ -191,7 +191,7 @@ try {
 
   // ---- reassign
   const ex = Number(winner.id);
-  const rs1 = await call("POST", `/admin/ops/rides/${rid1}/reassign`, A, { driver_id: dOther.id, expected_driver_id: ex, reason: "ok" });
+  const rs1 = await call("POST", `/admin/ops/rides/${rid1}/reassign`, A, { driver_id: dOther.id, expected_driver_id: ex, reason: "Wrong ride type test" });
   ok("a reason of at least 3 characters is required", (await call("POST", `/admin/ops/rides/${rid1}/reassign`, A, { driver_id: d3.id, expected_driver_id: ex, reason: "x" })).status === 422);
   ok("reassigning to an ineligible driver is refused", rs1.status === 409 && rs1.json.code === "driver_not_eligible");
   ok("reassigning with an out-of-date driver is refused", (await call("POST", `/admin/ops/rides/${rid1}/reassign`, A, { driver_id: d3.id, expected_driver_id: 99999999, reason: "stale screen" })).json.code === "driver_changed");
@@ -224,7 +224,7 @@ try {
   await db.query("update app.ride_requests set status = 'accepted', started_at = null where id = $1", [rid1]);
 
   // ---- airport filter (a ride tagged to an airport; the airport row is test data created here)
-  const ap = (await db.query("insert into app.airports (region_id, name, iata_code, latitude, longitude, radius_m, status) values ($1,'OPS Test Airport','OPS',9.0,7.3,2000,true) returning id", [region])).rows[0]?.id;
+  const ap = (await db.query("insert into app.airports (region_id, name, iata_code, latitude, longitude, location, radius_m, status) values ($1,'OPS Test Airport','OPS',9.0,7.3,extensions.st_geogfromtext('POINT(7.3 9.0)'),2000,true) returning id", [region])).rows[0]?.id;
   if (ap) {
     await db.query("update app.ride_requests set airport_id = $2, airport_direction = 'pickup' where id = $1", [rid1, ap]);
     ok("Airport Pickup filter lists it, with the airport", (await call("GET", "/admin/ops/rides?filter=airport_pickup", A)).json.data.some((r) => r.id === rid1 && r.airport?.name === "OPS Test Airport") && !(await call("GET", "/admin/ops/rides?filter=airport_drop", A)).json.data.some((r) => r.id === rid1));
