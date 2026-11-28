@@ -2,12 +2,13 @@ name: Backend ride-flow integration
 
 on:
   push:
-    branches: [feat/flutter-multi-stop-routes, feat/ride-chat, feat/ride-calls, feat/optional-fare-bidding, feat/airport-infrastructure, feat/airport-booking-driver, feat/push-templates, feat/email-templates, feat/ops-command-center]
+    branches: [feat/flutter-multi-stop-routes, feat/ride-chat, feat/ride-calls, feat/optional-fare-bidding, feat/airport-infrastructure, feat/airport-booking-driver, feat/push-templates, feat/email-templates, feat/ops-command-center, feat/safety-analytics-finance]
   pull_request:
     branches: [main]
     paths:
       - "worker/**"
       - "supabase/migrations/**"
+      - "supabase/rollback/**"
       - ".github/workflows/backend-ride-integration.yml"
   workflow_dispatch:
 
@@ -70,6 +71,12 @@ jobs:
             psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$migration"
           done
 
+      - name: Prove the Phase 7 migration is reversible (down, then up again)
+        run: |
+          set -euo pipefail
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/rollback/20261212000001_safety_analytics_finance.down.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261212000001_safety_analytics_finance.sql
+
       - name: Start local Worker
         working-directory: worker
         run: |
@@ -126,6 +133,10 @@ jobs:
       - name: Run operations command center integration test
         working-directory: worker
         run: node test/ops-smoke.mjs
+
+      - name: Run safety, analytics and finance integration test
+        working-directory: worker
+        run: node test/safety-analytics-smoke.mjs
 
       - name: Worker logs on failure
         if: failure()

@@ -89,7 +89,8 @@ adminOpsRoutes.get("/admin/ops/metrics", ...guard("ops_dashboard list"), async (
   });
   await run("sos_incidents", async () => {
     const r = (await db.query(
-      `select count(*) filter (where status = 'open')::int open, count(*) filter (where status = 'acknowledged')::int acknowledged,
+      `select count(*) filter (where status = 'open')::int open,
+              count(*) filter (where status in ('acknowledged', 'investigating', 'escalated'))::int acknowledged,
               count(*) filter (where created_at >= $1)::int today from app.sos_alerts`, [start])).rows[0];
     return { value: { open: Number(r.open), acknowledged: Number(r.acknowledged), today: Number(r.today) } };
   });

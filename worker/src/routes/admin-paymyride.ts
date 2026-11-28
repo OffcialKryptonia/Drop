@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../env";
-import { guard } from "../lib/permissions";
+import { audit, guard } from "../lib/permissions";
 import { readBody, validationFailed } from "../lib/legacy";
 import { getPayLinkSettings } from "../lib/paymyride";
 
@@ -22,5 +22,6 @@ adminPayMyRideRoutes.put("/admin/paymyride/settings", ...guard("paymyride edit")
   const hours = Number(b.link_hours);
   if (!Number.isFinite(hours) || hours < 1 || hours > 72) return validationFailed(c, { link_hours: ["Enter hours between 1 and 72."] });
   await c.get("db").query("insert into app.settings (key, value) values ('paymyride', $1::jsonb) on conflict (key) do update set value = excluded.value", [JSON.stringify({ enabled: b.enabled !== false, link_hours: Math.round(hours) })]);
+  await audit(c, "paymyride_settings", "paymyride", { enabled: b.enabled !== false, link_hours: Math.round(hours) });
   return c.json({ message: "Saved" });
 });

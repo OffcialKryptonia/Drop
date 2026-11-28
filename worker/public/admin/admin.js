@@ -118,7 +118,11 @@
     { id: "bidding", label: "Fare bidding", group: "Operations", perm: "ride_bid list", render: pageBidding },
     { id: "pickup", label: "Pickup codes", group: "Operations", perm: "pickup_code list", render: pagePickup },
     { id: "extras", label: "Extra charges", group: "Operations", perm: "ride_extra list", render: pageExtras },
-    { id: "sos", label: "SOS alerts", group: "Safety", perm: "sos list", render: pageSos },
+    { id: "sos", label: "Safety Center", group: "Safety", perm: "sos list", render: pageSos },
+    { id: "driver-analytics", label: "Driver performance", group: "Insights", perm: "driver_analytics list", render: pageDriverAnalytics },
+    { id: "passenger-analytics", label: "Passenger analytics", group: "Insights", perm: "passenger_analytics list", render: pagePassengerAnalytics },
+    { id: "finance", label: "Financial intelligence", group: "Financial", perm: "finance list", render: pageFinance },
+    { id: "audit-logs", label: "Audit logs", group: "System", perm: "audit_log list", render: pageAuditLogs },
     { id: "complaints", label: "Complaints", group: "Safety", perm: "complaint list", render: pageComplaints },
     { id: "banks", label: "Banks", group: "Financial", perm: "bank list", render: pageBanks },
     { id: "driver-wallets", label: "Driver wallets", group: "Financial", perm: "driver_wallet list", render: pageDriverWallets },
@@ -1157,7 +1161,7 @@
     if (!m || !m.available) return null;
     var v = m.value;
     if (key === "pending_payouts") return v.count + (v.count ? " · " + opsMoney(v.by_currency) : "");
-    if (key === "sos_incidents") return v.open + " open · " + v.acknowledged + " acknowledged · " + v.today + " today";
+    if (key === "sos_incidents") return v.open + " new · " + v.acknowledged + " being handled · " + v.today + " today";
     if (Array.isArray(v)) return opsMoney(v);
     return String(v);
   }
@@ -2519,65 +2523,405 @@
     });
   }
 
-  var so = { status: "open", page: 1 };
+  // ==================== Safety, analytics, finance and audit ====================
+  function insVal(v) {
+    if (v === null || v === undefined) return "-";
+    if (Array.isArray(v)) return v.length && v[0] && v[0].currency !== undefined ? opsMoney(v) : v.join(", ");
+    if (typeof v === "number") return v.toLocaleString("en-NG", { maximumFractionDigits: 2 });
+    return String(v);
+  }
+  /** A figure that is either a measured value or an honest "not available" with the reason. */
+  function insTile(label, m, fmt) {
+    var ok = m && m.available !== false && (m.value !== undefined);
+    var tv = ok ? h("div", { class: "tv", text: fmt ? fmt(m.value) : insVal(m.value) }) : h("div", { class: "tv off", text: "Not available" });
+    return h("div", { class: "tile" }, h("div", { class: "tl", text: label }), tv, (ok ? m.note : (m && m.reason)) ? h("div", { class: "tn", text: ok ? m.note : m.reason }) : null);
+  }
+  var pct = function (v) { return v + "%"; };
+  function insDay(d) { return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2); }
+  var INS = { from: insDay(new Date(Date.now() - 29 * 86400000)), to: insDay(new Date()) };
+  function insQs(extra) {
+    var q = ["from=" + encodeURIComponent(INS.from), "to=" + encodeURIComponent(INS.to)];
+    Object.keys(extra || {}).forEach(function (k) { if (extra[k] !== "" && extra[k] != null) q.push(k + "=" + encodeURIComponent(extra[k])); });
+    return q.join("&");
+  }
+  /** Date range with quick choices. Calls onApply() when the person applies it. */
+  function insPeriodBar(onApply) {
+    var from = h("input", { type: "date", value: INS.from }), to = h("input", { type: "date", value: INS.to });
+    var apply = h("button", { text: "Apply", class: "small" });
+    function set(days) { INS.to = insDay(new Date()); INS.from = insDay(new Date(Date.now() - (days - 1) * 86400000)); from.value = INS.from; to.value = INS.to; onApply(); }
+    apply.addEventListener("click", function () { INS.from = from.value; INS.to = to.value; onApply(); });
+    return h("div", { class: "card" },
+      h("div", { class: "grid2" }, field("From", from), field("To", to)),
+      h("div", { class: "tabs wrap", style: "margin-top:10px" },
+        h("button", { class: "ghost small", text: "Last 7 days", on: { click: function () { set(7); } } }),
+        h("button", { class: "ghost small", text: "Last 30 days", on: { click: function () { set(30); } } }),
+        h("button", { class: "ghost small", text: "Last 90 days", on: { click: function () { set(90); } } }), apply),
+      h("div", { class: "hint", text: "Whole days, both ends included, in Africa/Lagos time." }));
+  }
+  function insFail(root, r) { root.appendChild(h("div", { class: "card" }, h("div", { class: "empty", text: errText(r) }))); }
+  function insPager(pg, go) {
+    if (!pg || pg.total_pages <= 1) return null;
+    var prev = h("button", { text: "Previous", class: "small secondary" }), next = h("button", { text: "Next", class: "small secondary" });
+    prev.disabled = pg.page <= 1; next.disabled = pg.page >= pg.total_pages;
+    prev.addEventListener("click", function () { go(pg.page - 1); }); next.addEventListener("click", function () { go(pg.page + 1); });
+    return h("div", { style: "display:flex;gap:8px;margin-top:12px" }, prev, next, h("span", { class: "muted", text: "Page " + pg.page + " of " + pg.total_pages }));
+  }
+  function insWhen(iso) { return iso ? new Date(iso).toLocaleString("en-NG", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "-"; }
+  function insSecs(s) { return s == null ? "-" : opsDur(s); }
+  /** Only refresh while the tab is visible and the person is still on this page. */
+  function insAuto(key, hash, root, fn, ms) {
+    clearTimeout(insAuto[key]);
+    insAuto[key] = setTimeout(function () {
+      if (location.hash.indexOf(hash) === 0 && root.isConnected) { if (document.visibilityState === "visible") fn(); else insAuto(key, hash, root, fn, ms); }
+    }, ms);
+  }
+
+  // ---------- Safety Center ----------
+  var SC = { status: "active", severity: "", category: "", assigned: "", q: "", page: 1, open: null };
+  var SC_STATUS = [["active", "Active"], ["open", "New"], ["acknowledged", "Acknowledged"], ["investigating", "Investigating"], ["escalated", "Escalated"], ["resolved", "Resolved"], ["closed", "Closed"], ["all", "All"]];
+  var SC_CAT = [["", "Any category"], ["sos", "SOS"], ["accident", "Accident"], ["harassment", "Harassment"], ["unsafe_driving", "Unsafe driving"], ["route_deviation", "Route deviation"], ["vehicle_issue", "Vehicle issue"], ["theft", "Theft"], ["medical", "Medical"], ["other", "Other"]];
+  var SC_SEV = [["", "Any severity"], ["low", "Low"], ["medium", "Medium"], ["high", "High"], ["critical", "Critical"]];
+  function scLabel(opts, v) { var f = opts.filter(function (o) { return o[0] === v; })[0]; return f ? f[1] : v; }
+  function scStatusPill(x) { return h("span", { class: "pill " + (x.status === "open" || x.status === "escalated" ? "warn" : x.status === "resolved" || x.status === "closed" ? "on" : ""), text: x.status_label }); }
+
   function pageSos(root) {
-    loading(root);
-    api("GET", "/admin/sos?status=" + so.status + "&page=" + so.page).then(function (r) {
-      var b = r.body || {}, list = b.data || [], pg = b.pagination || { page: 1, total_pages: 1, total: 0 };
-      root.textContent = "";
-      root.appendChild(head("SOS alerts", "When a rider or driver presses SOS, it appears here with their location, phone and trip. Call them, then mark it acknowledged and finally resolved. This page refreshes itself every 20 seconds."));
-      if (can("sos edit")) {
-        var em = text((b.settings || {}).notify_emails, "e.g. ops@yourdomain.com, safety@yourdomain.com"), out = h("p", { class: "msg" });
-        var sv = h("button", { text: "Save", class: "small", style: "margin-top:10px" });
-        sv.addEventListener("click", function () {
-          sv.disabled = true;
-          api("PUT", "/admin/sos/settings", { notify_emails: em.value }).then(function (x) { sv.disabled = false; if (x.ok) toast("Saved"); else msg(out, errText(x)); });
+    var detail = h("div"), list = h("div"), stamp = h("span", { class: "muted" });
+    root.textContent = "";
+    root.appendChild(head("Safety Center", "SOS alerts and incidents raised by your team. Names, phone numbers and exact places stay hidden until someone with permission reveals them, and every reveal is recorded.", stamp));
+    var chips = h("div"), q = text(SC.q, "Incident or trip number");
+    var sev = select(SC_SEV, SC.severity), cat = select(SC_CAT, SC.category), asg = select([["", "Anyone"], ["me", "Assigned to me"], ["unassigned", "Unassigned"]], SC.assigned);
+    [sev, cat, asg].forEach(function (el) { el.addEventListener("change", function () { SC.severity = sev.value; SC.category = cat.value; SC.assigned = asg.value; SC.page = 1; load(); }); });
+    q.addEventListener("keydown", function (e) { if (e.key === "Enter") { SC.q = q.value.trim(); SC.page = 1; load(); } });
+    root.appendChild(h("div", { class: "card" }, chips, h("div", { class: "grid2", style: "margin-top:10px" }, field("Severity", sev), field("Category", cat)), h("div", { class: "grid2" }, field("Assigned", asg), field("Search (press Enter)", q))));
+    if (can("sos edit")) root.appendChild(scRaise(function () { load(); }));
+    root.appendChild(detail); root.appendChild(list);
+    var notify = h("div"); root.appendChild(notify);
+    function drawChips(counts) {
+      chips.textContent = "";
+      chips.appendChild(opsChips(SC_STATUS.map(function (s) { return [s[0], s[1] + (counts && counts[s[0]] != null ? " (" + counts[s[0]] + ")" : "")]; }), SC.status, function (v) { SC.status = v; SC.page = 1; load(); }));
+    }
+    drawChips();
+    function load() {
+      var qs = "status=" + SC.status + "&page=" + SC.page + (SC.severity ? "&severity=" + SC.severity : "") + (SC.category ? "&category=" + SC.category : "") + (SC.assigned ? "&assigned=" + SC.assigned : "") + (SC.q ? "&q=" + encodeURIComponent(SC.q) : "");
+      api("GET", "/admin/safety/incidents?" + qs).then(function (r) {
+        list.textContent = "";
+        if (!r.ok) { insFail(list, r); return; }
+        var b = r.body; drawChips(b.counts); stamp.textContent = "Updated " + opsTime(new Date().toISOString());
+        var card = h("div", { class: "card" }, h("h3", { text: b.pagination.total + " incident" + (b.pagination.total === 1 ? "" : "s") }));
+        if (!b.data.length) card.appendChild(h("div", { class: "empty", text: "Nothing here." }));
+        b.data.forEach(function (x) {
+          var sub = [scLabel(SC_CAT, x.category), x.person.name + " (" + x.person.role + ")", x.ride_request_id ? "trip #" + x.ride_request_id : "no trip", x.assigned_to ? "assigned to " + x.assigned_to.name : "unassigned", opsDur(x.age_seconds) + " old"].join(" · ");
+          card.appendChild(h("div", { class: "item", style: "cursor:pointer", on: { click: function () { SC.open = x.id; scDetail(detail, x.id, load); detail.scrollIntoView({ behavior: "smooth", block: "start" }); } } },
+            h("div", { class: "main" }, h("div", { class: "t", text: "#" + x.id + " · " + scLabel(SC_SEV, x.severity) + " severity" }), h("div", { class: "s", text: sub })), scStatusPill(x)));
         });
-        root.appendChild(h("div", { class: "card" }, field("Email me when someone presses SOS", em, "Separate several with commas. Left empty, every active admin is emailed. Needs the Resend keys under Payment methods; the alert always shows here either way."), sv, out));
-      }
-      var tabs = h("div", { style: "display:flex;gap:8px;margin:12px 0" });
-      [["open", "Open"], ["acknowledged", "Acknowledged"], ["resolved", "Resolved"]].forEach(function (t) {
-        var bt = h("button", { text: t[1], class: "small" + (so.status === t[0] ? "" : " secondary") });
-        bt.addEventListener("click", function () { so.status = t[0]; so.page = 1; pageSos(root); });
-        tabs.appendChild(bt);
-      });
-      root.appendChild(tabs);
-      var card = h("div", { class: "card" }, h("div", { class: "t", text: pg.total + " alert" + (pg.total === 1 ? "" : "s") }));
-      if (!list.length) card.appendChild(h("div", { class: "empty", text: "Nothing here." }));
-      list.forEach(function (a) {
-        var c = a.context || {}, who = c.person || {}, other = c.other_party, ride = c.ride, veh = c.vehicle;
-        var row = h("div", { class: "row", style: "padding:10px 0;border-top:1px solid var(--line)" },
-          h("div", { class: "t", text: "#" + a.id + " · " + (who.name || "Unknown") + " (" + a.role + ") · " + (who.phone || "no phone") }),
-          h("div", { class: "s", text: String(a.created_at).slice(0, 16).replace("T", " ") + " UTC" }));
-        if (ride) row.appendChild(h("div", { class: "s", text: "Trip #" + ride.id + " (" + ride.status + "): " + ride.pickup + " → " + ride.dropoff }));
-        if (other) row.appendChild(h("div", { class: "s", text: (a.role === "driver" ? "Passenger: " : "Driver: ") + (other.name || "") + " " + (other.phone || "") }));
-        if (veh) row.appendChild(h("div", { class: "s", text: "Vehicle: " + (veh.description || "") + " " + (veh.plate || "") }));
-        if (a.message) row.appendChild(h("div", { class: "s", text: "Message: " + a.message }));
-        if (a.admin_note) row.appendChild(h("div", { class: "s", text: "Note: " + a.admin_note }));
-        if (a.latitude != null && a.longitude != null) {
-          var map = h("a", { href: "https://www.google.com/maps?q=" + a.latitude + "," + a.longitude, target: "_blank", rel: "noopener", text: "Open location on the map" });
-          row.appendChild(h("div", { class: "s" }, map));
-        } else row.appendChild(h("div", { class: "s", text: "No location was shared." }));
-        if (a.status !== "resolved" && can("sos edit")) {
-          if (a.status === "open") {
-            var ack = h("button", { text: "Acknowledge", class: "small", style: "margin-top:8px" });
-            ack.addEventListener("click", function () { api("PUT", "/admin/sos/" + a.id, { status: "acknowledged" }).then(function (x) { toast(x.ok ? x.body.message : errText(x), !x.ok); if (x.ok) { pageSos(root); sosBadge(); } }); });
-            row.appendChild(ack);
-          }
-          var res = h("button", { text: "Mark resolved", class: "small secondary", style: "margin:8px 0 0 8px" });
-          res.addEventListener("click", function () {
-            var note = window.prompt("Add a short note about what happened (optional).") || "";
-            api("PUT", "/admin/sos/" + a.id, { status: "resolved", note: note }).then(function (x) { toast(x.ok ? x.body.message : errText(x), !x.ok); if (x.ok) { pageSos(root); sosBadge(); } });
-          });
-          row.appendChild(res);
+        list.appendChild(card);
+        var pg = insPager(b.pagination, function (p) { SC.page = p; load(); }); if (pg) list.appendChild(pg);
+        if (notify.childNodes.length === 0 && can("sos edit")) {
+          var em = text(b.settings && b.settings.notify_emails, "e.g. ops@yourdomain.com, safety@yourdomain.com"), out = h("p", { class: "msg" });
+          var sv = h("button", { text: "Save", class: "small", style: "margin-top:10px" });
+          sv.addEventListener("click", function () { sv.disabled = true; api("PUT", "/admin/sos/settings", { notify_emails: em.value }).then(function (x) { sv.disabled = false; if (x.ok) toast("Saved"); else msg(out, errText(x)); }); });
+          notify.appendChild(h("div", { class: "card" }, field("Email when someone presses SOS or an incident is escalated", em, "Separate several with commas. Left empty, every active admin is emailed. The email carries the incident number and category only, never names, phones or places."), sv, out));
         }
-        card.appendChild(row);
+        if (SC.open && !detail.childNodes.length) scDetail(detail, SC.open, load);
+        insAuto("sc", "#/sos", root, load, 30000);
       });
-      root.appendChild(card);
-      // Keep the open alerts fresh while this page is on screen.
-      clearTimeout(pageSos.timer);
-      pageSos.timer = setTimeout(function () { if (location.hash.indexOf("#/sos") === 0 && root.isConnected) pageSos(root); }, 20000);
+    }
+    load();
+  }
+  function scRaise(done) {
+    var ride = num("", "Trip number"), party = select([["rider", "Passenger"], ["driver", "Driver"]], "rider"), cat = select(SC_CAT.slice(1), "other"), sev = select(SC_SEV.slice(1), "medium");
+    var note = h("textarea", { rows: "2", placeholder: "What was reported (at least 3 characters)", style: "width:100%" }), out = h("p", { class: "msg" });
+    var go = h("button", { text: "Raise incident", class: "small" });
+    go.addEventListener("click", function () {
+      go.disabled = true;
+      api("POST", "/admin/safety/incidents", { ride_request_id: Number(ride.value), party: party.value, category: cat.value, severity: sev.value, note: note.value }).then(function (x) {
+        go.disabled = false; if (x.ok) { toast("Incident #" + x.body.id + " raised"); ride.value = ""; note.value = ""; msg(out, ""); SC.open = x.body.id; done(); } else msg(out, errText(x));
+      });
     });
+    var box = h("details", { class: "card" }, h("summary", { text: "Raise an incident from a trip", style: "cursor:pointer;font-weight:700" }),
+      h("div", { class: "grid2", style: "margin-top:10px" }, field("Trip", ride), field("Concerns", party)), h("div", { class: "grid2" }, field("Category", cat), field("Severity", sev)), field("Note", note), h("div", { style: "margin-top:10px" }, go), out);
+    return box;
+  }
+  function scDetail(host, id, onChange) {
+    host.textContent = ""; host.appendChild(h("div", { class: "card" }, h("div", { class: "empty", text: "Loading…" })));
+    Promise.all([api("GET", "/admin/safety/incidents/" + id), can("sos assign") ? api("GET", "/admin/safety/assignees") : Promise.resolve(null)]).then(function (rs) {
+      var r = rs[0]; host.textContent = "";
+      if (!r.ok) { insFail(host, r); return; }
+      var d = r.body.data, a = d.actions, card = h("div", { class: "card" });
+      card.appendChild(h("div", { class: "bar" }, h("div", { class: "grow" }, h("h3", { text: "Incident #" + d.id }), h("div", { class: "muted", text: scLabel(SC_CAT, d.category) + " · " + scLabel(SC_SEV, d.severity) + " severity · " + (d.source === "admin" ? "raised by an administrator" : "raised from the app") })), scStatusPill(d),
+        h("button", { class: "ghost small", text: "Close", style: "margin-left:8px", on: { click: function () { SC.open = null; host.textContent = ""; } } })));
+      card.appendChild(opsKv("Person", d.person.name + " (" + d.person.role + ")"));
+      if (d.other_party) card.appendChild(opsKv("Other party", d.other_party.name + " (" + d.other_party.role + ")"));
+      card.appendChild(opsKv("Trip", d.ride ? "#" + d.ride.id + " · " + d.ride.status + (d.ride.ride_type ? " · " + d.ride.ride_type : "") : "None linked"));
+      card.appendChild(opsKv("Area", d.location ? "About " + d.location.lat + ", " + d.location.lng + " (approximate)" : "No location was shared"));
+      card.appendChild(opsKv("Raised", insWhen(d.created_at) + " · " + opsDur(d.age_seconds) + " ago"));
+      card.appendChild(opsKv("Assigned to", d.assigned_to ? d.assigned_to.name : "Nobody"));
+      if (d.message) card.appendChild(opsKv("Message", d.message));
+      var reveal = h("div");
+      if (a.reveal) {
+        var rb = h("button", { text: "Reveal names, phone numbers and exact location", class: "small secondary", style: "margin-top:10px" });
+        rb.addEventListener("click", function () {
+          confirmDo("This shows personal details and is recorded against your name. Continue?", function () {
+            rb.disabled = true;
+            api("POST", "/admin/safety/incidents/" + id + "/reveal", {}).then(function (x) {
+              rb.disabled = false; if (!x.ok) { toast(errText(x), true); return; }
+              var p = x.body.data; reveal.textContent = "";
+              var box = h("div", { class: "inbox", style: "margin-top:10px" }, h("div", { class: "hint", text: x.body.note }));
+              box.appendChild(opsKv("Person", (p.person.name || "-") + " · " + (p.person.phone || "no phone")));
+              if (p.other_party) box.appendChild(opsKv("Other party", (p.other_party.name || "-") + " · " + (p.other_party.phone || "no phone")));
+              if (p.ride) box.appendChild(opsKv("Route", (p.ride.pickup || "-") + " → " + (p.ride.dropoff || "-")));
+              if (p.vehicle) box.appendChild(opsKv("Vehicle", (p.vehicle.description || "") + " " + (p.vehicle.plate || "")));
+              if (p.location) box.appendChild(h("div", { class: "s" }, h("a", { href: p.location.map_url, target: "_blank", rel: "noopener", text: "Open exact location on the map" })));
+              reveal.appendChild(box); scDetailHistory(host, id);
+            });
+          });
+        });
+        card.appendChild(rb);
+      }
+      card.appendChild(reveal);
+      // Actions
+      if (a.change_status.length) {
+        var st = select(a.change_status.map(function (s) { return [s, { open: "New", acknowledged: "Acknowledged", investigating: "Investigating", escalated: "Escalated", resolved: "Resolved", closed: "Closed" }[s]]; }), a.change_status[0]);
+        var sn = h("textarea", { rows: "2", placeholder: "Note (required to resolve or escalate)", style: "width:100%" }), so2 = h("p", { class: "msg" }), sb = h("button", { text: "Update status", class: "small" });
+        sb.addEventListener("click", function () {
+          if (st.value === "escalated" && !window.confirm("Escalating emails the safety list. Continue?")) return;
+          sb.disabled = true;
+          api("PUT", "/admin/safety/incidents/" + id + "/status", { status: st.value, note: sn.value }).then(function (x) { sb.disabled = false; if (x.ok) { toast(x.body.message); onChange(); scDetail(host, id, onChange); } else msg(so2, errText(x)); });
+        });
+        card.appendChild(h("div", { class: "inbox", style: "margin-top:12px" }, h("h3", { text: "Move forward" }), field("Status", st), field("Note", sn), h("div", { style: "margin-top:8px" }, sb), so2));
+      }
+      if (a.assign_self || a.assign_others) {
+        var who = h("select"); who.appendChild(h("option", { value: "", text: "Nobody" }));
+        var staff = rs[1] && rs[1].ok ? rs[1].body.data : [];
+        if (a.assign_others) staff.forEach(function (s) { who.appendChild(h("option", { value: s.id, text: s.name })); });
+        var mine = h("button", { text: "Assign to me", class: "small", style: "margin-right:8px" }), setb = h("button", { text: "Assign", class: "small secondary" }), ao = h("p", { class: "msg" });
+        function assign(aid) { api("PUT", "/admin/safety/incidents/" + id + "/assign", { admin_id: aid }).then(function (x) { if (x.ok) { toast(x.body.message); onChange(); scDetail(host, id, onChange); } else msg(ao, errText(x)); }); }
+        mine.addEventListener("click", function () { assign(ME.id); });
+        setb.addEventListener("click", function () { assign(who.value ? Number(who.value) : null); });
+        var abox = h("div", { class: "inbox", style: "margin-top:12px" }, h("h3", { text: "Assignment" }), h("div", { style: "margin-top:8px" }, mine));
+        if (a.assign_others) { abox.appendChild(field("Assign to", who)); abox.appendChild(h("div", { style: "margin-top:8px" }, setb)); }
+        abox.appendChild(ao); card.appendChild(abox);
+      }
+      if (can("sos edit") && d.status !== "closed") {
+        var nt = h("textarea", { rows: "2", placeholder: "Add a note to the history", style: "width:100%" }), no = h("p", { class: "msg" }), nb = h("button", { text: "Add note", class: "small" });
+        nb.addEventListener("click", function () { nb.disabled = true; api("POST", "/admin/safety/incidents/" + id + "/notes", { note: nt.value }).then(function (x) { nb.disabled = false; if (x.ok) { toast("Note added"); scDetail(host, id, onChange); } else msg(no, errText(x)); }); });
+        var cc = select(SC_CAT.slice(1), d.category), cs = select(SC_SEV.slice(1), d.severity), cb = h("button", { text: "Save classification", class: "small secondary" }), co = h("p", { class: "msg" });
+        cb.addEventListener("click", function () { api("PUT", "/admin/safety/incidents/" + id + "/classify", { category: cc.value, severity: cs.value }).then(function (x) { if (x.ok) { toast("Updated"); onChange(); scDetail(host, id, onChange); } else msg(co, errText(x)); }); });
+        card.appendChild(h("div", { class: "inbox", style: "margin-top:12px" }, h("h3", { text: "Notes and classification" }), nt, h("div", { style: "margin-top:8px" }, nb), no, h("div", { class: "grid2", style: "margin-top:10px" }, field("Category", cc), field("Severity", cs)), h("div", { style: "margin-top:8px" }, cb), co));
+      }
+      var hist = h("div", { id: "scHist" }); card.appendChild(h("h3", { text: "History", style: "margin-top:14px" })); card.appendChild(hist); scHistoryDraw(hist, d.history);
+      host.appendChild(card);
+    });
+  }
+  function scHistoryDraw(box, rows) {
+    var T = { created: "Raised", status: "Status", assigned: "Assignment", note: "Note", severity: "Severity", category: "Category", escalated: "Escalated", reveal: "Personal details revealed" };
+    box.textContent = "";
+    rows.forEach(function (e) {
+      var line = (e.from || e.to ? (e.from ? e.from + " → " : "") + (e.to || "none") : "") + (e.detail && e.detail.fields ? " (" + e.detail.fields.join(", ") + ")" : "");
+      box.appendChild(h("div", { class: "item" }, h("div", { class: "main" }, h("div", { class: "t", text: (T[e.action] || e.action) + (line ? " · " + line : "") }), e.note ? h("div", { class: "s", text: e.note, style: "white-space:pre-wrap" }) : null,
+        h("div", { class: "s", text: insWhen(e.at) + (e.admin ? " · " + e.admin.name : "") }))));
+    });
+  }
+  function scDetailHistory(host, id) { api("GET", "/admin/safety/incidents/" + id).then(function (r) { var b = host.querySelector("#scHist"); if (r.ok && b) scHistoryDraw(b, r.body.data.history); }); }
+
+  // ---------- Driver analytics ----------
+  var DA = { q: "", sort: "total_rides", open: null };
+  function pageDriverAnalytics(root) {
+    var body = h("div"), q = text(DA.q, "Name or plate"), sort = select([["total_rides", "Completed trips"], ["earnings", "Earnings"], ["commission", "Commission"], ["completion_rate", "Completion rate"], ["cancellation_rate", "Cancellation rate"], ["acceptance_rate", "Acceptance rate"], ["average_rating", "Rating"], ["online_seconds", "Online time"]], DA.sort);
+    root.textContent = ""; root.appendChild(head("Driver performance", "Measured from real trips, ratings and the new activity records. Where something was not recorded, it says so instead of showing a zero."));
+    root.appendChild(insPeriodBar(function () { load(); }));
+    var go = function () { DA.q = q.value.trim(); DA.sort = sort.value; DA.open = null; load(); };
+    q.addEventListener("keydown", function (e) { if (e.key === "Enter") go(); }); sort.addEventListener("change", go);
+    root.appendChild(h("div", { class: "card" }, h("div", { class: "grid2" }, field("Search (press Enter)", q), field("Sort by", sort))));
+    root.appendChild(body);
+    function load() {
+      body.textContent = ""; body.appendChild(h("div", { class: "empty", text: "Loading…" }));
+      api("GET", "/admin/analytics/drivers?" + insQs({ q: DA.q, sort: DA.sort })).then(function (r) {
+        body.textContent = ""; if (!r.ok) { insFail(body, r); return; }
+        var b = r.body;
+        body.appendChild(h("div", { class: "card" }, h("div", { class: "hint", text: b.tracking.note }),
+          h("div", { class: "s", text: "Offers and backing out recorded since " + (b.tracking.offers_and_backing_out_since ? insWhen(b.tracking.offers_and_backing_out_since) : "-") + " · Online time since " + (b.tracking.online_time_since ? insWhen(b.tracking.online_time_since) : "-") })));
+        body.appendChild(h("div", { class: "tiles" }, insTile("Drivers", { value: b.totals.drivers }), insTile("Completed trips", { value: b.totals.completed_rides }), insTile("Online now", { value: b.totals.online_now })));
+        var card = h("div", { class: "card" }, h("h3", { text: "Drivers" })); if (!b.data.length) card.appendChild(h("div", { class: "empty", text: "No drivers match." }));
+        function m(x, f) { return x && x.available ? (f ? f(x.value) : insVal(x.value)) : "n/a"; }
+        b.data.forEach(function (d) {
+          var sub = ["trips " + m(d.total_rides), "completion " + m(d.completion_rate, pct), "cancelled " + m(d.cancellation_rate, pct), "accepted " + m(d.acceptance_rate, pct), "rating " + m(d.average_rating), "earned " + m(d.earnings), "online " + (d.online_seconds.available ? insSecs(d.online_seconds.value) : "n/a")].join(" · ");
+          card.appendChild(h("div", { class: "item", style: "cursor:pointer", on: { click: function () { DA.open = d.id; drawDetail(d.id); } } },
+            h("div", { class: "main" }, h("div", { class: "t", text: d.name + (d.vehicle_plate ? " · " + d.vehicle_plate : "") }), h("div", { class: "s", text: sub })), h("span", { class: "pill " + (d.online_now ? "on" : ""), text: d.status === "suspended" ? "Suspended" : d.online_now ? "Online" : "Offline" })));
+        });
+        if (b.truncated) card.appendChild(h("div", { class: "hint", text: "Showing the first 500 drivers. Narrow with search." }));
+        body.appendChild(card); body.appendChild(detail);
+        if (DA.open) drawDetail(DA.open);
+      });
+    }
+    var detail = h("div");
+    function drawDetail(id) {
+      detail.textContent = ""; detail.appendChild(h("div", { class: "card" }, h("div", { class: "empty", text: "Loading…" })));
+      api("GET", "/admin/analytics/drivers/" + id + "?" + insQs()).then(function (r) {
+        detail.textContent = ""; if (!r.ok) { insFail(detail, r); return; }
+        var d = r.body.data, tiles = h("div", { class: "tiles" });
+        [["Completed trips", d.total_rides], ["Accepted and held", d.rides_accepted], ["Completion rate", d.completion_rate, pct], ["Cancellation rate", d.cancellation_rate, pct], ["Rejection rate", d.rejection_rate, pct], ["Acceptance rate", d.acceptance_rate, pct],
+          ["Backed out after accepting", d.backed_out], ["Average rating", d.average_rating], ["Fares", d.gross_fares], ["Commission", d.commission], ["Earnings", d.earnings], ["Online time", d.online_seconds, insSecs], ["Cancelled by", d.cancelled_by, function (v) { return "driver " + v.driver + " · rider " + v.rider + " · admin/system " + v.admin_or_system; }],
+          ["Airport trips", d.airport, function (v) { return v.rides + " trips · earned " + insVal(v.earnings); }]].forEach(function (t) { tiles.appendChild(insTile(t[0], t[1], t[2])); });
+        var hrs = r.body.activity.completed_by_hour, mx = Math.max.apply(null, hrs.concat([1])), bars = h("div", { style: "display:flex;align-items:flex-end;gap:2px;height:70px;margin-top:8px" });
+        hrs.forEach(function (n, i) { bars.appendChild(h("div", { title: i + ":00 · " + n + " trip" + (n === 1 ? "" : "s"), style: "flex:1;min-height:2px;border-radius:2px;background:var(--orange);height:" + Math.round((n / mx) * 100) + "%" })); });
+        var card = h("div", { class: "card" }, h("div", { class: "bar" }, h("div", { class: "grow" }, h("h3", { text: d.name }), h("div", { class: "muted", text: "Last completed trip: " + (d.last_completed_at ? insWhen(d.last_completed_at) : "none in the records") })),
+          h("button", { class: "ghost small", text: "Close", on: { click: function () { DA.open = null; detail.textContent = ""; } } })), tiles, h("h3", { text: "Completed trips by hour of day" }), bars, h("div", { class: "hint", text: r.body.activity.note }));
+        var stars = r.body.rating_counts.map(function (x) { return x.stars + "★ " + x.count; }).join(" · "); card.appendChild(h("div", { class: "s", style: "margin-top:10px", text: "Ratings in the period: " + stars }));
+        detail.appendChild(card); detail.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    }
+    load();
+  }
+
+  // ---------- Passenger analytics ----------
+  var PA = { region: "" };
+  function pagePassengerAnalytics(root) {
+    var body = h("div"), reg = h("select"); reg.appendChild(h("option", { value: "", text: "All regions" }));
+    root.textContent = ""; root.appendChild(head("Passenger analytics", "How many people ride, how often, and who has gone quiet. Every definition is shown at the bottom."));
+    root.appendChild(insPeriodBar(function () { load(); }));
+    if (can("region list")) api("GET", "/admin/regions").then(function (r) { if (r.ok) (r.body.data || []).forEach(function (x) { reg.appendChild(h("option", { value: x.id, text: x.name })); reg.value = PA.region; }); });
+    reg.addEventListener("change", function () { PA.region = reg.value; load(); });
+    root.appendChild(h("div", { class: "card" }, field("Region", reg))); root.appendChild(body);
+    function load() {
+      body.textContent = ""; body.appendChild(h("div", { class: "empty", text: "Loading…" }));
+      api("GET", "/admin/analytics/passengers?" + insQs({ region_id: PA.region })).then(function (r) {
+        body.textContent = ""; if (!r.ok) { insFail(body, r); return; }
+        var b = r.body, t = h("div", { class: "tiles" }), rq = b.requests;
+        [["Total passengers", b.total_passengers], ["New passengers", b.new_passengers], ["Active passengers", b.active_passengers], ["First-time riders", b.first_time_riders], ["Returning riders", b.returning_riders],
+          ["Booking completion", b.booking_completion, pct], ["Passenger cancel rate", b.cancellation_behaviour.passenger_cancel_rate, pct], ["Repeat cancellers", b.cancellation_behaviour.repeat_cancellers], ["Trips per passenger", b.ride_frequency.completed_rides_per_passenger],
+          ["Average spend per trip", b.average_spend, function (v) { return insVal(v.per_completed_ride); }], ["Average spend per passenger", b.average_spend, function (v) { return insVal(v.per_paying_passenger); }]].forEach(function (x) { t.appendChild(insTile(x[0], x[1], x[2])); });
+        body.appendChild(t);
+        var c1 = h("div", { class: "card" }, h("h3", { text: "Requests" }));
+        c1.appendChild(opsKv("Requested", rq.requested)); c1.appendChild(opsKv("Completed", rq.completed)); c1.appendChild(opsKv("Cancelled", rq.cancelled)); c1.appendChild(opsKv("Expired with no driver", rq.expired)); c1.appendChild(opsKv("Still in progress", rq.in_flight));
+        var cb = b.cancellation_behaviour; c1.appendChild(h("h3", { text: "Who cancelled", style: "margin-top:12px" }));
+        c1.appendChild(opsKv("Passenger, before a driver accepted", cb.by_passenger_before_driver)); c1.appendChild(opsKv("Passenger, after a driver accepted", cb.by_passenger_after_driver)); c1.appendChild(opsKv("Driver", cb.by_driver)); c1.appendChild(opsKv("Admin or system", cb.by_admin_or_system));
+        body.appendChild(c1);
+        var c2 = h("div", { class: "card" }, h("h3", { text: "Completed trips per passenger" })); b.ride_frequency.distribution.forEach(function (x) { c2.appendChild(opsKv(x.rides + " trip" + (x.rides === "1" ? "" : "s"), x.passengers + " passenger" + (x.passengers === 1 ? "" : "s"))); }); body.appendChild(c2);
+        var c3 = h("div", { class: "card" }, h("h3", { text: "30-day retention by first-trip month" }));
+        if (!b.retention.length) c3.appendChild(h("div", { class: "empty", text: "No first trips in the last 12 months." }));
+        b.retention.forEach(function (x) { c3.appendChild(opsKv(x.month + " · " + x.size + " new rider" + (x.size === 1 ? "" : "s"), x.measurable ? x.retained + " rode again (" + x.rate + "%)" : "Not yet measurable: not everyone has had 30 days")); });
+        body.appendChild(c3);
+        var dm = b.dormant, c4 = h("div", { class: "card" }, h("h3", { text: "Dormant passengers" }), h("div", { class: "s", text: dm.passengers + " of " + dm.of_riders_who_ever_completed + " passengers who have ridden before have not completed a trip in " + dm.days + " days." }));
+        dm.lapsed_for.forEach(function (x) { c4.appendChild(opsKv("Quiet for " + x.label, x.passengers)); }); body.appendChild(c4);
+        var c5 = h("div", { class: "card" }, h("h3", { text: "Trend (" + b.trend.granularity + ")" }));
+        b.trend.points.forEach(function (x) { c5.appendChild(opsKv(x.bucket, x.requested + " requested · " + x.completed + " completed · " + x.active_passengers + " active" + (x.new_accounts != null ? " · " + x.new_accounts + " new" : ""))); }); body.appendChild(c5);
+        var c6 = h("div", { class: "card" }, h("h3", { text: "Definitions" })); Object.keys(b.definitions).forEach(function (k) { c6.appendChild(h("div", { class: "s", style: "margin:6px 0" }, h("b", { text: k.replace(/_/g, " ") + ": " }), document.createTextNode(b.definitions[k]))); }); body.appendChild(c6);
+      });
+    }
+    load();
+  }
+
+  // ---------- Financial intelligence ----------
+  var FI = { region: "", category: "", method: "", tab: "summary" };
+  function insDownload(path, name) {
+    return fetch("/api" + path, { headers: Object.assign({ Accept: "text/csv" }, TOKEN ? { Authorization: "Bearer " + TOKEN } : {}) }).then(function (r) {
+      if (!r.ok) return r.json().catch(function () { return {}; }).then(function (j) { throw new Error(j.message || "Could not export."); });
+      var trunc = r.headers.get("X-Truncated") === "yes";
+      return r.blob().then(function (bl) { var a = document.createElement("a"); a.href = URL.createObjectURL(bl); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(a.href); }, 5000); return trunc; });
+    });
+  }
+  function pageFinance(root) {
+    var body = h("div"), reg = h("select"), cat = select([["", "All trip types"], ["standard", "Standard"], ["airport_pickup", "Airport pickup"], ["airport_drop", "Airport drop-off"]], FI.category), mth = select([["", "All payment methods"], ["cash", "Cash"], ["wallet", "Wallet"], ["card", "Card"]], FI.method);
+    reg.appendChild(h("option", { value: "", text: "All regions" }));
+    root.textContent = ""; root.appendChild(head("Financial intelligence", "Worked out from the trip records and the wallet ledger, not from stored totals. The reconciliation tab shows where the two disagree."));
+    root.appendChild(insPeriodBar(function () { load(); }));
+    if (can("region list")) api("GET", "/admin/regions").then(function (r) { if (r.ok) (r.body.data || []).forEach(function (x) { reg.appendChild(h("option", { value: x.id, text: x.name })); reg.value = FI.region; }); });
+    [reg, cat, mth].forEach(function (e) { e.addEventListener("change", function () { FI.region = reg.value; FI.category = cat.value; FI.method = mth.value; load(); }); });
+    root.appendChild(h("div", { class: "card" }, h("div", { class: "grid2" }, field("Region", reg), field("Trip type", cat)), field("Payment method", mth)));
+    var tabs = h("div"); root.appendChild(tabs); root.appendChild(body);
+    function filters() { return { region_id: FI.region, category: FI.category, payment_method: FI.method }; }
+    function load() {
+      tabs.textContent = ""; tabs.appendChild(opsChips([["summary", "Summary"], ["reconciliation", "Reconciliation"], ["export", "Export"]], FI.tab, function (v) { FI.tab = v; load(); }));
+      body.textContent = ""; body.appendChild(h("div", { class: "empty", text: "Loading…" }));
+      if (FI.tab === "export") { drawExport(); return; }
+      if (FI.tab === "reconciliation") { api("GET", "/admin/finance/reconciliation?" + insQs()).then(drawRecon); return; }
+      api("GET", "/admin/finance/summary?" + insQs(filters())).then(drawSummary);
+    }
+    function drawSummary(r) {
+      body.textContent = ""; if (!r.ok) { insFail(body, r); return; }
+      var b = r.body, t = h("div", { class: "tiles" });
+      [["Completed trips", { value: b.rides.completed }], ["Gross ride value", { value: b.rides.gross_ride_value }], ["Platform commission (trips)", { value: b.rides.platform_commission }], ["Platform revenue", { value: b.platform_revenue.total }], ["Driver earnings", { value: b.driver_earnings }],
+        ["Extra charges paid", { value: b.extra_charges.paid, note: b.extra_charges.count + " charge(s)" }], ["Cancellation fees charged", { value: b.cancellation_fees.charged, note: b.cancellation_fees.count + " fee(s)" }]].forEach(function (x) { t.appendChild(insTile(x[0], x[1])); });
+      body.appendChild(t);
+      (b.notes || []).forEach(function (n) { body.appendChild(h("div", { class: "card" }, h("div", { class: "hint", text: n }))); });
+      if (b.rides.stored_commission_mismatches) body.appendChild(h("div", { class: "card" }, h("span", { class: "pill warn", text: b.rides.stored_commission_mismatches + " trip(s) have a stored commission that differs from the ledger. See Reconciliation." })));
+      var pm = h("div", { class: "card" }, h("h3", { text: "By payment method" })); if (!b.payment_method_breakdown.length) pm.appendChild(h("div", { class: "empty", text: "No trips in the period." }));
+      b.payment_method_breakdown.forEach(function (x) { pm.appendChild(opsKv(x.method + " · " + x.rides + " trip(s)", "gross " + insVal(x.gross) + " · commission " + insVal(x.commission) + (x.extras.length ? " · extras " + insVal(x.extras) : ""))); }); body.appendChild(pm);
+      var sv = h("div", { class: "card" }, h("h3", { text: "By ride type" })); if (!b.rides.by_service.length) sv.appendChild(h("div", { class: "empty", text: "No trips in the period." }));
+      b.rides.by_service.forEach(function (x) { sv.appendChild(opsKv(x.ride_type + " · " + x.category.replace("_", " ") + " · " + x.rides, opsMoney([{ currency: x.currency, amount: x.gross }]) + " gross · " + opsMoney([{ currency: x.currency, amount: x.commission }]) + " commission")); }); body.appendChild(sv);
+      var rv = h("div", { class: "card" }, h("h3", { text: "Revenue sources" })); rv.appendChild(opsKv("Trip commission", insVal(b.platform_revenue.from_trips))); rv.appendChild(opsKv("Extra-charge commission", insVal(b.platform_revenue.from_extras))); rv.appendChild(opsKv("Cancellation-fee share", insVal(b.platform_revenue.from_cancellation_fees))); body.appendChild(rv);
+      var cash = h("div", { class: "card" }, h("h3", { text: "Cash" }), opsKv("Trip fares paid in cash", insVal(b.cash_payments.trip_fares_paid_in_cash)), opsKv("Extras paid in cash", insVal(b.cash_payments.extras_paid_in_cash)), h("div", { class: "hint", text: b.cash_payments.note })); body.appendChild(cash);
+      var rf = h("div", { class: "card" }, h("h3", { text: "Refunds and reversals" })); if (!b.refunds.length) rf.appendChild(h("div", { class: "empty", text: "None in the period." }));
+      b.refunds.forEach(function (x) { rf.appendChild(opsKv(x.what.replace(/_/g, " ") + " · " + x.count, opsMoney([{ currency: x.currency, amount: x.amount }]))); }); body.appendChild(rf);
+      var wt = h("div", { class: "card" }, h("h3", { text: "Wallet movements" })); if (!b.wallet_transactions.length) wt.appendChild(h("div", { class: "empty", text: "None in the period." }));
+      b.wallet_transactions.forEach(function (x) { wt.appendChild(opsKv(x.wallet + " wallet · " + x.kind + " · " + x.direction + " · " + x.count, opsMoney([{ currency: x.currency, amount: x.amount }]))); }); body.appendChild(wt);
+      if (Array.isArray(b.online_payments)) { var op = h("div", { class: "card" }, h("h3", { text: "Online payments" })); if (!b.online_payments.length) op.appendChild(h("div", { class: "empty", text: "None in the period." })); b.online_payments.forEach(function (x) { op.appendChild(opsKv(x.provider + " · " + x.status + " · " + x.count, insVal(x.amount) + (x.fee ? " · fees " + insVal(x.fee) : ""))); }); body.appendChild(op); }
+      if (Array.isArray(b.payouts)) { var po = h("div", { class: "card" }, h("h3", { text: "Driver payouts requested" })); if (!b.payouts.length) po.appendChild(h("div", { class: "empty", text: "None in the period." })); b.payouts.forEach(function (x) { po.appendChild(opsKv(x.status + " · " + x.count, opsMoney([{ currency: x.currency, amount: x.amount }]))); }); body.appendChild(po); }
+      var L = b.outstanding_liabilities;
+      if (L && L.available !== false) {
+        var lc = h("div", { class: "card" }, h("h3", { text: "Outstanding right now" }), opsKv("Pending payouts (" + L.pending_payout_count + ")", insVal(L.pending_payouts)), opsKv("Owed to drivers (wallet balances)", insVal(L.driver_wallet_balances_owed_to_drivers)), opsKv("Owed by drivers (negative balances)", insVal(L.driver_wallet_balances_owed_by_drivers)), opsKv("Passenger wallet balances", insVal(L.rider_wallet_balances)), h("div", { class: "hint", text: "As of " + insWhen(L.as_of) }));
+        body.appendChild(lc);
+      }
+      var df = h("div", { class: "card" }, h("h3", { text: "Definitions" })); Object.keys(b.definitions).forEach(function (k) { df.appendChild(h("div", { class: "s", style: "margin:6px 0" }, h("b", { text: k.replace(/_/g, " ") + ": " }), document.createTextNode(b.definitions[k]))); }); body.appendChild(df);
+    }
+    function drawRecon(r) {
+      body.textContent = ""; if (!r.ok) { insFail(body, r); return; }
+      var b = r.body;
+      body.appendChild(h("div", { class: "card" }, h("span", { class: "pill " + (b.clean ? "on" : "warn"), text: b.clean ? "Clean: the records agree" : b.issue_count + " difference(s) found" }), h("div", { class: "hint", text: b.note + " Generated " + insWhen(b.generated_at) + "." })));
+      b.checks.forEach(function (k) {
+        var c = h("div", { class: "card" }, h("div", { class: "bar" }, h("div", { class: "grow" }, h("h3", { text: k.title }), h("div", { class: "muted", text: k.why })), h("span", { class: "pill " + (k.count ? "warn" : "on"), text: k.count ? k.count + " found" : "OK" })));
+        if (k.scope === "now") c.appendChild(h("div", { class: "hint", text: "Checked as of now, whatever the period." }));
+        (k.sample || []).forEach(function (s) { c.appendChild(h("div", { class: "s", style: "overflow-wrap:anywhere;margin:4px 0", text: Object.keys(s).map(function (x) { return x + ": " + (s[x] == null ? "-" : s[x]); }).join(" · ") })); });
+        if (k.count > (k.sample || []).length) c.appendChild(h("div", { class: "hint", text: "Showing the first " + k.sample.length + ". The reconciliation export lists more." }));
+        body.appendChild(c);
+      });
+    }
+    function drawExport() {
+      body.textContent = "";
+      if (!can("finance export")) { body.appendChild(h("div", { class: "card" }, h("div", { class: "empty", text: "You do not have permission to export." }))); return; }
+      var out = h("p", { class: "msg" }), card = h("div", { class: "card" }, h("h3", { text: "Download CSV" }), h("div", { class: "hint", text: "Uses the dates and filters above. Files hold ids and amounts only, with no names, phone numbers or bank accounts. Every download is recorded in the audit log. Large exports stop at 20,000 rows." }));
+      [["rides", "Completed trips"], ["ledger", "Wallet ledger"], ["payouts", "Payout requests"], ["reconciliation", "Reconciliation differences"]].forEach(function (x) {
+        var bt = h("button", { text: "Download " + x[1].toLowerCase(), class: "small secondary", style: "margin:8px 8px 0 0" });
+        bt.addEventListener("click", function () {
+          bt.disabled = true; msg(out, "Preparing…", true);
+          var f = filters(), path = "/admin/finance/export?" + insQs({ report: x[0], region_id: f.region_id, category: f.category, payment_method: f.payment_method });
+          insDownload(path, "drop-" + x[0] + "-" + INS.from + "_to_" + INS.to + ".csv").then(function (trunc) { bt.disabled = false; msg(out, trunc ? "Downloaded, but the export was cut at the row limit. Narrow the dates." : "Downloaded.", !trunc); }).catch(function (e) { bt.disabled = false; msg(out, e.message); });
+        });
+        card.appendChild(bt);
+      });
+      card.appendChild(out); body.appendChild(card);
+    }
+    load();
+  }
+
+  // ---------- Audit logs ----------
+  var AU = { action: "", admin: "", q: "", page: 1 };
+  function pageAuditLogs(root) {
+    var body = h("div"), act = h("select"), adm = h("select"), q = text(AU.q, "Action, target or detail");
+    act.appendChild(h("option", { value: "", text: "Any action" })); adm.appendChild(h("option", { value: "", text: "Any administrator" }));
+    root.textContent = ""; root.appendChild(head("Audit logs", "Who did what in Admin, newest first. Entries cannot be edited or deleted. Passwords, tokens and keys are never stored here."));
+    root.appendChild(insPeriodBar(function () { AU.page = 1; load(); }));
+    api("GET", "/admin/audit-logs/filters").then(function (r) { if (!r.ok) return; r.body.actions.forEach(function (x) { act.appendChild(h("option", { value: x.action, text: x.action + " (" + x.count + ")" })); }); r.body.admins.forEach(function (x) { adm.appendChild(h("option", { value: x.id, text: x.name })); }); act.value = AU.action; adm.value = AU.admin; });
+    var go = function () { AU.action = act.value; AU.admin = adm.value; AU.q = q.value.trim(); AU.page = 1; load(); };
+    act.addEventListener("change", go); adm.addEventListener("change", go); q.addEventListener("keydown", function (e) { if (e.key === "Enter") go(); });
+    root.appendChild(h("div", { class: "card" }, h("div", { class: "grid2" }, field("Action", act), field("Administrator", adm)), field("Search (press Enter)", q)));
+    root.appendChild(body);
+    function load() {
+      body.textContent = ""; body.appendChild(h("div", { class: "empty", text: "Loading…" }));
+      api("GET", "/admin/audit-logs?" + insQs({ action: AU.action, admin_id: AU.admin, q: AU.q, page: AU.page })).then(function (r) {
+        body.textContent = ""; if (!r.ok) { insFail(body, r); return; }
+        var b = r.body, card = h("div", { class: "card" }, h("h3", { text: b.pagination.total + " entr" + (b.pagination.total === 1 ? "y" : "ies") }));
+        if (!b.data.length) card.appendChild(h("div", { class: "empty", text: "Nothing in this period." }));
+        b.data.forEach(function (x) {
+          var d = x.detail && Object.keys(x.detail).length ? JSON.stringify(x.detail) : "";
+          card.appendChild(h("div", { class: "item" }, h("div", { class: "main" }, h("div", { class: "t", text: x.action + (x.target ? " · " + x.target : "") }), d ? h("div", { class: "s", style: "overflow-wrap:anywhere", text: d }) : null,
+            h("div", { class: "s", text: insWhen(x.at) + " · " + (x.admin ? x.admin.name : "system or removed account") }))));
+        });
+        body.appendChild(card); var pg = insPager(b.pagination, function (p) { AU.page = p; load(); }); if (pg) body.appendChild(pg);
+      });
+    }
+    load();
   }
 
   // A red bar at the top of every admin page while an SOS alert is open.

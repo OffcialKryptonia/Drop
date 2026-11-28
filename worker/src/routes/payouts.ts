@@ -85,6 +85,7 @@ adminPayoutRoutes.put("/admin/payouts/settings", ...guard("payout edit"), async 
   const min = Number(b.min_amount);
   if (!Number.isFinite(min) || min <= 0) return validationFailed(c, { min_amount: ["Enter an amount above zero."] });
   await c.get("db").query("insert into app.settings (key, value) values ('payouts', $1::jsonb) on conflict (key) do update set value = excluded.value", [JSON.stringify({ enabled: b.enabled !== false, min_amount: min })]);
+  await audit(c, "payout_settings", "payouts", { enabled: b.enabled !== false, min_amount: min });
   return c.json({ message: "Saved" });
 });
 
