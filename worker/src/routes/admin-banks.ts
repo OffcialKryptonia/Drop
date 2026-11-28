@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../env";
-import { guard } from "../lib/permissions";
+import { audit, guard } from "../lib/permissions";
 import { readBody, validationFailed } from "../lib/legacy";
 
 export const adminBankRoutes = new Hono<AppEnv>();
@@ -19,6 +19,7 @@ adminBankRoutes.post("/admin/banks", ...guard("bank edit"), async (c) => {
   const r = await c.get("db").query(
     "insert into app.banks (code, name, kind, logo_url) values ($1,$2,$3,$4) on conflict (code) do nothing returning id", [code, name, kind, logo]);
   if (!r.rowCount) return validationFailed(c, { code: ["A bank with this code already exists."] });
+  await audit(c, "bank_add", String(r.rows[0].id), { code, name, kind });
   return c.json({ message: "Bank added" });
 });
 
@@ -37,6 +38,7 @@ adminBankRoutes.put("/admin/banks/:id", ...guard("bank edit"), async (c) => {
   } catch {
     return validationFailed(c, { code: ["Another bank already uses this code."] });
   }
+  await audit(c, "bank_edit", c.req.param("id"), { fields: sets.map((x) => x.split(" ")[0]) });
   return c.json({ message: "Saved" });
 });
 
@@ -56,5 +58,6 @@ adminBankRoutes.post("/admin/banks/sync-logos", ...guard("bank edit"), async (c)
     const r = await c.get("db").query("update app.banks set logo_url = $2, updated_at = now() where code = $1 and (logo_url is null or logo_url <> $2)", [b.code, b.logo]);
     updated += r.rowCount ?? 0;
   }
+  await audit(c, "bank_logos_sync", "banks", { updated });
   return c.json({ message: `Updated logos for ${updated} bank${updated === 1 ? "" : "s"}.` });
 });

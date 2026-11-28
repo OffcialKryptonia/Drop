@@ -48,5 +48,6 @@ pushRoutes.post("/admin/push-settings/test", ...guard("push_settings edit"), asy
   if (!cfg.appId || !cfg.restKey) return c.json({ message: "Save the App ID and REST key first.", status: 409 }, 409);
   if (!u.player_id) return c.json({ message: "That person has not allowed notifications on a phone with the new app yet.", status: 409 }, 409);
   const r = await sendPushDetailed(db, c.env, [Number(u.id)], { title: "DROP", body: "Test notification from the DROP admin." });
+  await audit(c, "push_test_send", String(u.id), { delivered: r.sent > 0 });
   return r.sent ? c.json({ message: "Sent. It should arrive in a few seconds." }) : c.json({ message: r.error || "OneSignal did not accept it.", status: 502 }, 502);
 });

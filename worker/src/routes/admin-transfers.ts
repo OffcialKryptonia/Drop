@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../env";
-import { guard } from "../lib/permissions";
+import { audit, guard } from "../lib/permissions";
 import { readBody, validationFailed } from "../lib/legacy";
 import { getTransferSettings } from "./wallet-transfer";
 
@@ -24,5 +24,6 @@ adminTransferRoutes.put("/admin/wallet-transfers/settings", ...guard("wallet_tra
   if (min > max || max > daily) return validationFailed(c, { max: ["Smallest must not exceed largest, and largest must not exceed the daily limit."] });
   const value = { enabled: b.enabled !== false, min, max, daily_limit: daily };
   await c.get("db").query("insert into app.settings (key, value) values ('wallet_transfer', $1::jsonb) on conflict (key) do update set value = excluded.value", [JSON.stringify(value)]);
+  await audit(c, "wallet_transfer_settings", "wallet_transfer", value);
   return c.json({ message: "Saved" });
 });

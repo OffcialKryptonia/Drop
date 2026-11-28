@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../env";
-import { guard } from "../lib/permissions";
+import { audit, guard } from "../lib/permissions";
 import { readBody, validationFailed } from "../lib/legacy";
 
 export const adminDocumentRoutes = new Hono<AppEnv>();
@@ -34,6 +34,7 @@ adminDocumentRoutes.post("/admin/documents", ...guard("document edit"), async (c
     for (const sid of d.ids) await db.query("insert into app.document_requirements (document_id, service_id) values ($1,$2) on conflict do nothing", [id, sid]);
     await db.query("commit");
   } catch (e) { await db.query("rollback").catch(() => undefined); throw e; }
+  await audit(c, "document_add", "documents", { name: d.name, required: d.required, expiry: d.expiry, active: d.status, ride_types: d.ids.length });
   return c.json({ message: "Document type added" });
 });
 
@@ -50,6 +51,7 @@ adminDocumentRoutes.put("/admin/documents/:id", ...guard("document edit"), async
     for (const sid of d.ids) await db.query("insert into app.document_requirements (document_id, service_id) values ($1,$2) on conflict do nothing", [id, sid]);
     await db.query("commit");
   } catch (e) { await db.query("rollback").catch(() => undefined); throw e; }
+  await audit(c, "document_edit", String(id), { name: d.name, required: d.required, expiry: d.expiry, active: d.status, ride_types: d.ids.length });
   return c.json({ message: "Saved" });
 });
 
@@ -60,9 +62,11 @@ adminDocumentRoutes.delete("/admin/documents/:id", ...guard("document edit"), as
   const used = (await db.query("select 1 from app.driver_documents where document_id = $1 limit 1", [id])).rowCount;
   if (used) {
     await db.query("update app.documents set status = false, updated_at = now() where id = $1", [id]);
+    await audit(c, "document_switch_off", String(id), { reason: "has uploads" });
     return c.json({ message: "Drivers already uploaded this document, so it was switched off instead of deleted." });
   }
   await db.query("delete from app.documents where id = $1 and type = 'driver'", [id]);
+  await audit(c, "document_delete", String(id));
   return c.json({ message: "Deleted" });
 });
 
@@ -74,5 +78,6 @@ adminDocumentRoutes.put("/admin/driver-rules", ...guard("document edit"), async 
   const db = c.get("db");
   for (const [k, v] of [["driver_min_age", age], ["driver_min_licence_years", years]] as const)
     await db.query("insert into app.settings (key, value) values ($1, $2::jsonb) on conflict (key) do update set value = excluded.value", [k, JSON.stringify(v)]);
+  await audit(c, "driver_rules_edit", "driver_rules", { min_age: age, min_licence_years: years });
   return c.json({ message: "Saved" });
 });

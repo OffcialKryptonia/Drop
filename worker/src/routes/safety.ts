@@ -30,9 +30,10 @@ async function raiseSos(c: Context<AppEnv>, b: Record<string, unknown>) {
   if (dup) return c.json({ status: true, message: "Your alert has been sent. Help is being arranged.", id: Number(dup.id) });
 
   const rideId = /^\d{1,15}$/.test(String(b.ride_request_id ?? "")) ? Number(b.ride_request_id) : null;
+  // The trip the person named, or else the trip they are on right now, so the incident is tied to it without the app having to say.
   const ride = rideId
     ? (await db.query("select r.id, r.status, r.pickup_address, r.dropoff_address, r.rider_id, r.driver_id from app.ride_requests r where r.id = $1 and (r.rider_id = $2 or r.driver_id = $2)", [rideId, me.id])).rows[0]
-    : undefined;
+    : (await db.query("select r.id, r.status, r.pickup_address, r.dropoff_address, r.rider_id, r.driver_id from app.ride_requests r where (r.rider_id = $1 or r.driver_id = $1) and r.status in ('searching', 'accepted', 'arrived', 'in_progress') order by r.id desc limit 1", [me.id])).rows[0];
   const role = ride ? (Number(ride.driver_id) === Number(me.id) ? "driver" : "rider") : me.active_mode === "driver" ? "driver" : "rider";
   const otherId = ride ? (role === "driver" ? ride.rider_id : ride.driver_id) : null;
   const other = otherId ? (await db.query("select first_name, last_name, display_name, username, country_code, contact_number from app.users where id = $1", [otherId])).rows[0] : undefined;
@@ -47,6 +48,7 @@ async function raiseSos(c: Context<AppEnv>, b: Record<string, unknown>) {
   const id = Number((await db.query(
     "insert into app.sos_alerts (user_id, role, ride_request_id, latitude, longitude, message, context) values ($1,$2,$3,$4,$5,$6,$7::jsonb) returning id",
     [me.id, role, ride ? Number(ride.id) : null, lat, lng, txt(b.message, 500), JSON.stringify(context)])).rows[0].id);
+  await db.query("insert into app.safety_incident_events (incident_id, action, to_value, detail) values ($1, 'created', 'open', $2)", [id, JSON.stringify({ source: "app" })]);
 
   // Tell the admins by email right away (best effort: the alert is already saved and shows in the admin panel).
   const work = (async () => {
@@ -64,7 +66,7 @@ async function raiseSos(c: Context<AppEnv>, b: Record<string, unknown>) {
   return c.json({ status: true, message: "Your alert has been sent. Help is being arranged.", id });
 }
 
-async function adminEmails(db: Client): Promise<string[]> {
+export async function adminEmails(db: Client): Promise<string[]> {
   const s = (await db.query("select value from app.settings where key = 'safety'")).rows[0]?.value ?? {};
   const listed = String(s.notify_emails ?? "").split(/[,;\s]+/).filter((e) => /^\S+@\S+\.\S+$/.test(e));
   if (listed.length) return listed.slice(0, 5);
@@ -134,20 +136,6 @@ safetyRoutes.post("/complaints/:id/comments", withDb, requireAuth, async (c) => 
 
 // ---------------------------------------------------------------- Admin
 
-adminSafetyRoutes.get("/admin/sos", ...guard("sos list"), async (c) => {
-  const db = c.get("db");
-  const status = ["open", "acknowledged", "resolved"].includes(String(c.req.query("status"))) ? String(c.req.query("status")) : "open";
-  const page = Math.max(Number(c.req.query("page")) || 1, 1);
-  const total = (await db.query("select count(*)::int n from app.sos_alerts where status = $1", [status])).rows[0].n;
-  const rows = (await db.query("select * from app.sos_alerts where status = $1 order by id desc limit 30 offset $2", [status, (page - 1) * 30])).rows;
-  const s = (await db.query("select value from app.settings where key = 'safety'")).rows[0]?.value ?? {};
-  return c.json({
-    settings: { notify_emails: String(s.notify_emails ?? "") },
-    data: rows.map((r) => ({ ...r, id: Number(r.id), created_at: iso(r.created_at), handled_at: iso(r.handled_at), latitude: r.latitude == null ? null : Number(r.latitude), longitude: r.longitude == null ? null : Number(r.longitude) })),
-    pagination: { page, total_pages: Math.max(Math.ceil(total / 30), 1), total },
-  });
-});
-
 /** Cheap poll for the admin badge. */
 adminSafetyRoutes.get("/admin/sos/open-count", ...guard("sos list"), async (c) =>
   c.json({ open: (await c.get("db").query("select count(*)::int n from app.sos_alerts where status = 'open'")).rows[0].n }));
@@ -155,18 +143,8 @@ adminSafetyRoutes.get("/admin/sos/open-count", ...guard("sos list"), async (c) =
 adminSafetyRoutes.put("/admin/sos/settings", ...guard("sos edit"), async (c) => {
   const emails = String((await readBody(c)).notify_emails ?? "").trim().slice(0, 300);
   await c.get("db").query("insert into app.settings (key, value) values ('safety', $1::jsonb) on conflict (key) do update set value = app.settings.value || excluded.value", [JSON.stringify({ notify_emails: emails })]);
+  await audit(c, "safety_settings_edit", "safety", { notify_email_count: emails ? emails.split(/[,;\s]+/).filter(Boolean).length : 0 });
   return c.json({ message: "Saved" });
-});
-
-adminSafetyRoutes.put("/admin/sos/:id", ...guard("sos edit"), async (c) => {
-  const id = Number(c.req.param("id"));
-  const b = await readBody(c);
-  const status = String(b.status);
-  if (status !== "acknowledged" && status !== "resolved") return validationFailed(c, { status: ["Choose acknowledged or resolved."] });
-  const r = await c.get("db").query("update app.sos_alerts set status = $2, admin_note = coalesce($3, admin_note), handled_by = $4, handled_at = now() where id = $1", [id, status, txt(b.note, 500), c.get("user").id]);
-  if (!r.rowCount) return c.json({ message: "Not found" }, 404);
-  await audit(c, "sos", String(id), { status });
-  return c.json({ message: status === "resolved" ? "Marked as resolved" : "Marked as acknowledged" });
 });
 
 adminSafetyRoutes.get("/admin/complaints", ...guard("complaint list"), async (c) => {
